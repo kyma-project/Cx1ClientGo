@@ -58,19 +58,30 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
 	scanFilter := ScanFilter{
 		Statuses: status,
+		Sort:     "+created_at",
 	}
-	return c.GetLastScansFiltered(scanFilter)
+	return c.GetScansFiltered(scanFilter)
+}
+
+func (c Cx1Client) GetScansByStatus(status []string) ([]Scan, error) {
+	scanFilter := ScanFilter{
+		Statuses: status,
+	}
+	return c.GetScansFiltered(scanFilter)
 }
 
 func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
+	filter.Sort = "+created_at"
+	return c.GetScansFiltered(filter)
+}
+
+func (c Cx1Client) GetScansFiltered(filter ScanFilter) ([]Scan, error) {
+	query := url.Values{}
+
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
 		Scans              []Scan
-	}
-
-	query := url.Values{
-		"sort": {"+created_at"},
 	}
 
 	filter.AddURLValues(&query)
