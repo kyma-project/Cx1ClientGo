@@ -392,8 +392,9 @@ func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error)
 	scanFilter := ScanFilter{
 		ProjectID: projectID,
 		Limit:     limit,
+		Sort:      "+created_at",
 	}
-	return c.GetLastScansFiltered(scanFilter)
+	return c.GetScansFiltered(scanFilter)
 }
 
 func (f ScanFilter) AddURLValues(params *url.Values) {
@@ -406,7 +407,9 @@ func (f ScanFilter) AddURLValues(params *url.Values) {
 	if f.ProjectID != "" {
 		params.Add("project-id", f.ProjectID)
 	}
-
+	if f.Sort != "" {
+		params.Add("sort", f.Sort)
+	}
 	for _, b := range f.Branches {
 		params.Add("branches", b)
 	}

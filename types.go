@@ -318,6 +318,7 @@ type ScanFilter struct {
 	ProjectID string   `json:"project-id"`
 	Limit     int      `json:"limit"`
 	Offset    int      `json:"offset"`
+	Sort      string   `json:"sort"`
 	TagKeys   []string `json:"tags-keys"`
 	TagValues []string `json:"tags-values"`
 	Statuses  []string `json:"statuses"`

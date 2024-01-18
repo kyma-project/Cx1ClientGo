@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -58,19 +59,30 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
 	scanFilter := ScanFilter{
 		Statuses: status,
+		Sort:     "+created_at",
 	}
-	return c.GetLastScansFiltered(scanFilter)
+	return c.GetScansFiltered(scanFilter)
+}
+
+func (c Cx1Client) GetScansByStatus(status []string) ([]Scan, error) {
+	scanFilter := ScanFilter{
+		Statuses: status,
+	}
+	return c.GetScansFiltered(scanFilter)
 }
 
 func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
+	filter.Sort = "+created_at"
+	return c.GetScansFiltered(filter)
+}
+
+func (c Cx1Client) GetScansFiltered(filter ScanFilter) ([]Scan, error) {
+	query := url.Values{}
+
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
 		Scans              []Scan
-	}
-
-	query := url.Values{
-		"sort": {"+created_at"},
 	}
 
 	filter.AddURLValues(&query)
@@ -130,13 +142,26 @@ func (c Cx1Client) GetScansSummary() (ScanStatusSummary, error) {
 }
 
 func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
+	summaries, err := c.GetScanSummariesByID([]string{scanID})
+	if err != nil {
+		return ScanSummary{}, err
+	}
+	if len(summaries) != 1 {
+		return ScanSummary{}, fmt.Errorf("error getting scan summaries")
+	}
+	return summaries[0], nil
+}
+
+func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error) {
 	var ScansSummaries struct {
 		ScanSum    []ScanSummary `json:"scansSummaries"`
 		TotalCount uint64
 	}
 
+	scanIdsString := strings.Join(scanIDs, ",")
+
 	params := url.Values{
-		"scan-ids":                {scanID},
+		"scan-ids":                {scanIdsString},
 		"include-queries":         {"false"},
 		"include-status-counters": {"true"},
 		"include-files":           {"false"},
@@ -144,25 +169,25 @@ func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode()), nil, http.Header{})
 	if err != nil {
-		c.logger.Tracef("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
-		return ScanSummary{}, fmt.Errorf("failed to fetch metadata for scan with ID %v: %s", scanID, err)
+		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
+		return []ScanSummary{}, fmt.Errorf("failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
 	}
 
 	err = json.Unmarshal(data, &ScansSummaries)
 
 	if err != nil {
-		return ScanSummary{}, err
+		return []ScanSummary{}, err
 	}
 	if ScansSummaries.TotalCount == 0 {
-		return ScanSummary{}, fmt.Errorf("failed to retrieve scan summary for scan ID %v", scanID)
+		return []ScanSummary{}, fmt.Errorf("failed to retrieve scan summaries for scans with IDs: %v", scanIdsString)
 	}
 
 	if len(ScansSummaries.ScanSum) == 0 {
 		c.logger.Tracef("Failed to parse data, 0-len ScanSum.\n%v", string(data))
-		return ScanSummary{}, fmt.Errorf("Fail")
+		return []ScanSummary{}, fmt.Errorf("Failed to parse data")
 	}
 
-	return ScansSummaries.ScanSum[0], nil
+	return ScansSummaries.ScanSum, nil
 }
 
 func (c Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {

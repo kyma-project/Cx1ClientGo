@@ -64,7 +64,12 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 		return q, err
 	}
 	q.ParsePath()
-	q.LevelID = level
+
+	if strings.EqualFold(q.Level, "corp") || strings.EqualFold(q.Level, "cx") {
+		q.LevelID = q.Level
+	} else { // team or project-level override, so store the ID
+		q.LevelID = level
+	}
 	return q, nil
 }
 
