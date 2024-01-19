@@ -94,6 +94,11 @@ func main() {
 	projOverride := newProjectOverride(cx1client, logger, session, project.ProjectID)
 	corpQuery := newCorpQuery(cx1client, logger, session)
 
+	err = cx1client.AuditDeleteSessionByID(session)
+	if err != nil {
+		logger.Errorf("Failed to delete audit session: %s", err)
+	}
+
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
 	queries, err := cx1client.GetQueriesByLevelID("Project", project.ProjectID)
 	if err != nil {
