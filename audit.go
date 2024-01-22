@@ -330,18 +330,34 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 		if fastInit { // reuse existing
 			c.logger.Debugf("FastInit: re-using the last session %v", sessions[lastSession])
 		} else { // !available
-			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
+			c.logger.Debugf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
 		}
 		session = sessions[lastSession]
-		reusedSession = true
-	} else {
+		err = c.AuditSessionKeepAlive(session)
+		if err != nil {
+			c.logger.Debugf("Reused session couldn't be pinged: %s", err)
+			err = c.AuditDeleteSessionByID(session)
+			if err != nil {
+				return "", err
+			}
+			session = ""
+		} else {
+			reusedSession = true
+		}
+	}
+
+	if session == "" {
 		session, err = c.AuditCreateSessionByID(projectId, scanId)
 		if err != nil {
 			c.logger.Errorf("Error creating cxaudit session: %s", err)
 			return "", err
 		}
 	}
-	c.AuditSessionKeepAlive(session)
+
+	err = c.AuditSessionKeepAlive(session)
+	if err != nil {
+		return "", err
+	}
 
 	err = c.AuditEnginePollingByID(session)
 	if err != nil {
