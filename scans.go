@@ -37,6 +37,22 @@ func (c Cx1Client) DeleteScanByID(scanID string) error {
 
 	return nil
 }
+func (c Cx1Client) CancelScanByID(scanID string) error {
+	var body struct {
+		Status string `json:"status"`
+	}
+	body.Status = "Canceled"
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	_, err = c.sendRequest(http.MethodPatch, fmt.Sprintf("/scans/%v", scanID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete scan with ID %v: %s", scanID, err)
+	}
+
+	return nil
+}
 
 func (c Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 	c.depwarn("GetScanMetadata", "GetScanMetadataByID")
