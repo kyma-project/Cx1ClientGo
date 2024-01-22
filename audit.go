@@ -58,6 +58,15 @@ func (c Cx1Client) AuditCreateSessionByID(projectId, scanId string) (string, err
 	return "", fmt.Errorf("failed to allocate audit session: %v", responseStruct)
 }
 
+func (c Cx1Client) AuditDeleteSessionByID(sessionId string) error {
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/sessions/%v", sessionId), nil, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c Cx1Client) AuditFindSessionsByID(projectId, scanId string) (bool, []string, error) {
 	c.logger.Tracef("Checking for audit session for project %v scan %v", projectId, scanId)
 
@@ -317,12 +326,13 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 	session := ""
 	reusedSession := false
 	if len(sessions) > 0 && (fastInit || !available) {
+		lastSession := len(sessions) - 1
 		if fastInit { // reuse existing
-			c.logger.Debugf("FastInit: re-using the first session %v", sessions[0])
+			c.logger.Debugf("FastInit: re-using the last session %v", sessions[lastSession])
 		} else { // !available
-			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the first session %v", len(sessions), sessions[0])
+			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
 		}
-		session = sessions[0]
+		session = sessions[lastSession]
 		reusedSession = true
 	} else {
 		session, err = c.AuditCreateSessionByID(projectId, scanId)
