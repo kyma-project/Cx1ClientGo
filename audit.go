@@ -89,7 +89,18 @@ func (c Cx1Client) AuditFindSessionsByID(projectId, scanId string) (bool, []stri
 
 	sessions := []string{}
 	for _, s := range responseStruct.Metadata {
-		sessions = append(sessions, s.Session)
+		err = c.AuditSessionKeepAlive(s.Session)
+		if err != nil {
+			c.logger.Tracef("Found an expired session %v, deleting", s.Session)
+			err = c.AuditDeleteSessionByID(s.Session)
+			if err != nil {
+				c.logger.Errorf("Failed to delete expired session %v: %s", s.Session, err)
+			} else {
+				responseStruct.Available = true
+			}
+		} else {
+			sessions = append(sessions, s.Session)
+		}
 	}
 
 	return responseStruct.Available, sessions, nil
@@ -330,7 +341,7 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 		if fastInit { // reuse existing
 			c.logger.Debugf("FastInit: re-using the last session %v", sessions[lastSession])
 		} else { // !available
-			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
+			c.logger.Debugf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
 		}
 		session = sessions[lastSession]
 		reusedSession = true
@@ -341,7 +352,11 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 			return "", err
 		}
 	}
-	c.AuditSessionKeepAlive(session)
+
+	err = c.AuditSessionKeepAlive(session)
+	if err != nil {
+		return "", err
+	}
 
 	err = c.AuditEnginePollingByID(session)
 	if err != nil {
