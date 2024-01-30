@@ -537,14 +537,16 @@ type Status struct {
 }
 
 type User struct {
-	Enabled   bool    `json:"enabled"`
-	UserID    string  `json:"id,omitempty"`
-	FirstName string  `json:"firstName"`
-	LastName  string  `json:"lastName"`
-	UserName  string  `json:"username"`
-	Email     string  `json:"email"`
-	Groups    []Group `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
-	Roles     []Role  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	Enabled      bool    `json:"enabled"`
+	UserID       string  `json:"id,omitempty"`
+	FirstName    string  `json:"firstName"`
+	LastName     string  `json:"lastName"`
+	UserName     string  `json:"username"`
+	Email        string  `json:"email"`
+	Groups       []Group `json:"-"` // only returned from /users/{id}/groups. Use GetUserGroups to fill.
+	FilledGroups bool    `json:"-"` // indicates if the user object has had the Groups array filled.
+	Roles        []Role  `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
+	FilledRoles  bool    `json:"-"` // indicates if the user object has had the Roles array filled.
 }
 
 type WhoAmI struct {

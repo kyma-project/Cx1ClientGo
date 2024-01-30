@@ -200,7 +200,7 @@ func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error)
 
 	if len(ScansSummaries.ScanSum) == 0 {
 		c.logger.Tracef("Failed to parse data, 0-len ScanSum.\n%v", string(data))
-		return []ScanSummary{}, fmt.Errorf("Failed to parse data")
+		return []ScanSummary{}, fmt.Errorf("failed to parse data")
 	}
 
 	return ScansSummaries.ScanSum, nil
