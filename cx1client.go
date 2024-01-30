@@ -254,22 +254,22 @@ func (c *Cx1Client) InitializeClient() {
 	}
 
 	c.consts.MigrationPollingMaxSeconds = 300 // 5 min
-	c.consts.MigrationPollingDelaySeconds = 15
+	c.consts.MigrationPollingDelaySeconds = 30
 
 	c.consts.AuditEnginePollingMaxSeconds = 300 // 5 min
-	c.consts.AuditEnginePollingDelaySeconds = 15
+	c.consts.AuditEnginePollingDelaySeconds = 30
 
 	c.consts.AuditScanPollingMaxSeconds = 600 // 10 min
-	c.consts.AuditScanPollingDelaySeconds = 15
+	c.consts.AuditScanPollingDelaySeconds = 30
 
 	c.consts.AuditLanguagePollingMaxSeconds = 300 // 5 min
-	c.consts.AuditLanguagePollingDelaySeconds = 15
+	c.consts.AuditLanguagePollingDelaySeconds = 30
 
 	c.consts.AuditCompilePollingMaxSeconds = 600 // 10 min
-	c.consts.AuditCompilePollingDelaySeconds = 15
+	c.consts.AuditCompilePollingDelaySeconds = 30
 
 	c.consts.ScanPollingMaxSeconds = 0
-	c.consts.ScanPollingDelaySeconds = 15
+	c.consts.ScanPollingDelaySeconds = 30
 
 	c.consts.ProjectApplicationLinkPollingDelaySeconds = 5
 	c.consts.ProjectApplicationLinkPollingMaxSeconds = 300 // 5 min

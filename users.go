@@ -189,6 +189,7 @@ func (c Cx1Client) GetUserGroups(user *User) ([]Group, error) {
 	}
 
 	user.Groups = usergroups
+	user.FilledGroups = true
 
 	return user.Groups, nil
 }
@@ -199,7 +200,12 @@ func (c Cx1Client) AssignUserToGroup(user *User, groupId string) error {
 }
 
 func (c Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
-	if !user.IsInGroupByID(groupId) {
+	inGroup, err := user.IsInGroupByID(groupId)
+	if err != nil {
+		return err
+	}
+
+	if !inGroup {
 		params := map[string]string{
 			"realm":   c.tenant,
 			"userId":  user.UserID,
@@ -235,7 +241,12 @@ func (c Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
 }
 
 func (c Cx1Client) RemoveUserFromGroupByID(user *User, groupId string) error {
-	if user.IsInGroupByID(groupId) {
+	inGroup, err := user.IsInGroupByID(groupId)
+	if err != nil {
+		return err
+	}
+
+	if !inGroup {
 		params := map[string]string{
 			"realm":   c.tenant,
 			"userId":  user.UserID,
@@ -282,6 +293,7 @@ func (c Cx1Client) GetUserRoles(user *User) ([]Role, error) {
 	}
 
 	user.Roles = append(appRoles, iamRoles...)
+	user.FilledRoles = true
 
 	return user.Roles, nil
 }
