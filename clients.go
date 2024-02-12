@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,6 +13,7 @@ import (
 // Clients
 func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 	c.logger.Debug("Getting OIDC Clients")
+	var json_clients []map[string]interface{}
 	var clients []OIDCClient
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true", nil, nil)
@@ -19,7 +21,19 @@ func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 		return clients, err
 	}
 
-	err = json.Unmarshal(response, &clients)
+	err = json.Unmarshal(response, &json_clients)
+	if err != nil {
+		return clients, err
+	}
+
+	clients = make([]OIDCClient, len(json_clients))
+	for id, client := range json_clients {
+		clients[id], err = clientFromMap(client)
+		if err != nil {
+			return clients, err
+		}
+	}
+
 	c.logger.Tracef("Got %d clients", len(clients))
 	return clients, err
 }
@@ -33,8 +47,13 @@ func (c Cx1Client) GetClientByID(id string) (OIDCClient, error) {
 		return client, err
 	}
 
-	err = json.Unmarshal(response, &client)
-	return client, err
+	var json_client map[string]interface{}
+	err = json.Unmarshal(response, &json_client)
+	if err != nil {
+		return client, err
+	}
+
+	return clientFromMap(json_client)
 }
 
 func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
@@ -59,13 +78,16 @@ func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
 func (c Cx1Client) CreateClient(name string, notificationEmails []string, secretExpiration int) (OIDCClient, error) {
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
+	notificationEmailsStr := "[\\\"" + strings.Join(notificationEmails, "\\\",\\\"") + "\\\"]"
+	c.logger.Infof("Setting emails: %v", notificationEmailsStr)
+
 	body := map[string]interface{}{
 		"enabled": true,
 		"attributes": map[string]interface{}{
 			"lastUpdate":                    time.Now().UnixMilli(),
 			"client.secret.creation.time":   time.Now().Unix(),
 			"client.secret.expiration.time": time.Now().AddDate(0, 0, secretExpiration).Unix(),
-			"notificationEmail":             notificationEmails,
+			"notificationEmail":             notificationEmailsStr,
 			"secretExpiration":              fmt.Sprintf("%d", secretExpiration),
 		},
 		"redirectUris":           []string{},
@@ -95,7 +117,52 @@ func (c Cx1Client) CreateClient(name string, notificationEmails []string, secret
 	}
 
 	err = c.AddClientScopeByID(newClient.ID, groupScope.ID)
+	if err != nil {
+		return newClient, fmt.Errorf("failed to add 'groups' client scope to new client: %s", err)
+	}
+
+	err = c.saveClient(newClient)
 	return newClient, err
+}
+
+func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
+	var client OIDCClient
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return client, fmt.Errorf("failed to marshal unmarshaled json: %s", err)
+	}
+
+	err = json.Unmarshal(jsonData, &client)
+	if err != nil {
+		return client, fmt.Errorf("failed to re-unmarshal json: %s", err)
+	}
+
+	client.OIDCClientRaw = data
+	if client.OIDCClientRaw["attributes"] != nil {
+		if client.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"] != nil {
+			timestamp := client.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"].(string)
+			client.ClientSecretExpiry, _ = strconv.ParseUint(timestamp, 10, 64)
+		}
+		if client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"] != nil {
+			client.Creator = client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"].(string)
+		}
+	}
+
+	return client, nil
+}
+
+func (c Cx1Client) saveClient(client OIDCClient) error {
+	c.logger.Debugf("Updating OIDC client with name %v", client.ClientID)
+
+	jsonBody, _ := json.Marshal(client.OIDCClientRaw)
+
+	_, err := c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/clients/%v", client.ID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c Cx1Client) AddClientScopeByID(oidcId, clientScopeId string) error {
@@ -234,4 +301,8 @@ func (c Cx1Client) RegenerateClientSecret(client OIDCClient) (string, error) {
 	}
 
 	return secretResponse.Value, nil
+}
+
+func (client OIDCClient) String() string {
+	return fmt.Sprintf("[%v] %v", ShortenGUID(client.ID), client.ClientID)
 }

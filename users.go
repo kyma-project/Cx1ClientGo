@@ -92,6 +92,23 @@ func (c Cx1Client) GetUserByUserName(name string) (User, error) {
 	return users[0], err
 }
 
+func (c Cx1Client) GetUsersByUserName(search string) ([]User, error) {
+	var users []User
+	c.logger.Debugf("Get Cx1 Users matching search: %v", search)
+
+	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?exact=false&username=%v", url.QueryEscape(search)), nil, nil)
+	if err != nil {
+		return users, err
+	}
+
+	err = json.Unmarshal(response, &users)
+	if err != nil {
+		return users, err
+	}
+	return users, err
+}
+
 func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 	c.logger.Debugf("Get Cx1 User by email: %v", email)
 
