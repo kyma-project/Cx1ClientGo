@@ -152,11 +152,13 @@ type Group struct {
 }
 
 type OIDCClient struct {
-	ID           string `json:"id"`
-	ClientID     string `json:"clientId"`
-	Enabled      bool   `json:"enabled"`
-	ClientSecret string `json:"secret"`
-	Creator      string `json:"-"`
+	ID                 string                 `json:"id"`
+	ClientID           string                 `json:"clientId"`
+	Enabled            bool                   `json:"enabled"`
+	ClientSecret       string                 `json:"secret"`
+	ClientSecretExpiry uint64                 `json:"-"`
+	Creator            string                 `json:"-"`
+	OIDCClientRaw      map[string]interface{} `json:"-"`
 }
 
 type OIDCClientScope struct {
