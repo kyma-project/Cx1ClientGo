@@ -37,6 +37,7 @@ func (c *Cx1Cache) ProjectSummary() string {
 }
 
 func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
+	client.logger.Info("Refreshing projects in cache")
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
@@ -47,6 +48,7 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
+	client.logger.Info("Refreshing groups in cache")
 	var err error
 	if !c.GroupRefresh {
 		c.GroupRefresh = true
@@ -57,6 +59,7 @@ func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
+	client.logger.Info("Refreshing users in cache")
 	var err error
 	if !c.UserRefresh {
 		c.UserRefresh = true
@@ -67,6 +70,7 @@ func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
+	client.logger.Info("Refreshing queries in cache")
 	var err error
 	if !c.QueryRefresh {
 		c.QueryRefresh = true
@@ -77,6 +81,7 @@ func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
+	client.logger.Info("Refreshing presets in cache")
 	var err error
 	if !c.PresetRefresh {
 		c.PresetRefresh = true
@@ -98,6 +103,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
+	client.logger.Info("Refreshing roles in cache")
 	var err error
 	if !c.RoleRefresh {
 		c.RoleRefresh = true
@@ -122,40 +128,40 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 	return err
 }
 
-func (c *Cx1Cache) Refresh(client *Cx1Client) error {
-	var err error
+func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
+	var errs []error
 
-	err = c.RefreshProjects(client)
+	err := c.RefreshProjects(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshGroups(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshUsers(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshQueries(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshPresets(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshRoles(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
-	return nil
+	return errs
 }
 
 func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {
