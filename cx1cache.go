@@ -5,18 +5,20 @@ import (
 )
 
 type Cx1Cache struct {
-	ProjectRefresh bool
-	Projects       []Project
-	GroupRefresh   bool
-	Groups         []Group
-	UserRefresh    bool
-	Users          []User
-	QueryRefresh   bool
-	Queries        QueryCollection
-	PresetRefresh  bool
-	Presets        []Preset
-	RoleRefresh    bool
-	Roles          []Role
+	ProjectRefresh     bool
+	Projects           []Project
+	GroupRefresh       bool
+	Groups             []Group
+	UserRefresh        bool
+	Users              []User
+	QueryRefresh       bool
+	Queries            QueryCollection
+	PresetRefresh      bool
+	Presets            []Preset
+	RoleRefresh        bool
+	Roles              []Role
+	Applications       []Application
+	ApplicationRefresh bool
 }
 
 func (c *Cx1Cache) PresetSummary() string {
@@ -35,8 +37,12 @@ func (c *Cx1Cache) GroupSummary() string {
 func (c *Cx1Cache) ProjectSummary() string {
 	return fmt.Sprintf("%d projects", len(c.Projects))
 }
+func (c *Cx1Cache) ApplicationSummary() string {
+	return fmt.Sprintf("%d applications", len(c.Applications))
+}
 
 func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
+	client.logger.Info("Refreshing projects in cache")
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
@@ -46,7 +52,19 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 	return err
 }
 
+func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
+	client.logger.Info("Refreshing applications in cache")
+	var err error
+	if !c.ApplicationRefresh {
+		c.ApplicationRefresh = true
+		c.Applications, err = client.GetApplications(0)
+		c.ApplicationRefresh = false
+	}
+	return err
+}
+
 func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
+	client.logger.Info("Refreshing groups in cache")
 	var err error
 	if !c.GroupRefresh {
 		c.GroupRefresh = true
@@ -57,6 +75,7 @@ func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
+	client.logger.Info("Refreshing users in cache")
 	var err error
 	if !c.UserRefresh {
 		c.UserRefresh = true
@@ -67,6 +86,7 @@ func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
+	client.logger.Info("Refreshing queries in cache")
 	var err error
 	if !c.QueryRefresh {
 		c.QueryRefresh = true
@@ -77,6 +97,7 @@ func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
+	client.logger.Info("Refreshing presets in cache")
 	var err error
 	if !c.PresetRefresh {
 		c.PresetRefresh = true
@@ -98,6 +119,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
+	client.logger.Info("Refreshing roles in cache")
 	var err error
 	if !c.RoleRefresh {
 		c.RoleRefresh = true
@@ -122,40 +144,45 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 	return err
 }
 
-func (c *Cx1Cache) Refresh(client *Cx1Client) error {
-	var err error
+func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
+	var errs []error
 
-	err = c.RefreshProjects(client)
+	err := c.RefreshProjects(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
+	}
+
+	err = c.RefreshApplications(client)
+	if err != nil {
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshGroups(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshUsers(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshQueries(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshPresets(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
 	err = c.RefreshRoles(client)
 	if err != nil {
-		return err
+		errs = append(errs, err)
 	}
 
-	return nil
+	return errs
 }
 
 func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {
@@ -215,6 +242,23 @@ func (c *Cx1Cache) GetProjectByName(name string) (*Project, error) {
 		}
 	}
 	return nil, fmt.Errorf("no such project %v", name)
+}
+
+func (c *Cx1Cache) GetApplication(applicationID string) (*Application, error) {
+	for id, g := range c.Applications {
+		if g.ApplicationID == applicationID {
+			return &c.Applications[id], nil
+		}
+	}
+	return nil, fmt.Errorf("no such application %v", applicationID)
+}
+func (c *Cx1Cache) GetApplicationByName(name string) (*Application, error) {
+	for id, g := range c.Applications {
+		if g.Name == name {
+			return &c.Applications[id], nil
+		}
+	}
+	return nil, fmt.Errorf("no such application %v", name)
 }
 
 func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {

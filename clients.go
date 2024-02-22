@@ -78,7 +78,7 @@ func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
 func (c Cx1Client) CreateClient(name string, notificationEmails []string, secretExpiration int) (OIDCClient, error) {
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
-	notificationEmailsStr := "[\\\"" + strings.Join(notificationEmails, "\\\",\\\"") + "\\\"]"
+	notificationEmailsStr := "[\"" + strings.Join(notificationEmails, "\",\"") + "\"]"
 	c.logger.Infof("Setting emails: %v", notificationEmailsStr)
 
 	body := map[string]interface{}{
