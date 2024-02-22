@@ -127,6 +127,32 @@ type AuditQueryMetadata struct {
 	Severity           uint
 }
 
+type AuthenticationProvider struct {
+	Alias      string `json:"alias"`
+	ID         string `json:"internalId,omitempty"`
+	ProviderID string `json:"providerId"`
+}
+
+type AuthenticationProviderMapper struct {
+	ID     string                             `json:"id,omitempty"`
+	Name   string                             `json:"name"`
+	Alias  string                             `json:"identityProviderAlias"`
+	Mapper string                             `json:"identityProviderMapper"`
+	Config AuthenticationProviderMapperConfig `json:"config"`
+}
+
+type AuthenticationProviderMapperConfig struct {
+	SyncMode      string `json:"syncMode"`
+	UserAttribute string `json:"user.attribute,omitempty"`
+	FriendlyName  string `json:"attribute.friendly.name,omitempty"`
+	Format        string `json:"attribute.name.format,omitempty"`
+	Name          string `json:"attribute.name,omitempty"`
+	Role          string `json:"attribute.role,omitempty"`
+	Value         string `json:"attribute.value,omitempty"`
+	Target        string `json:"target,omitempty"`
+	Template      string `json:"template,omitempty"`
+}
+
 type DataImport struct {
 	MigrationId string             `json:"migrationId"`
 	Status      string             `json:"status"`
