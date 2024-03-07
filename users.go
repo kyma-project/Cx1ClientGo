@@ -196,6 +196,15 @@ func (c Cx1Client) UserLink(u *User) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID)
 }
 
+func (c Cx1Client) UserIsTenantOwner(u *User) (bool, error) {
+	owner, err := c.GetTenantOwner()
+	if err != nil {
+		return false, err
+	}
+
+	return (u.UserID == owner.UserID), nil
+}
+
 func (c Cx1Client) GetUserGroups(user *User) ([]Group, error) {
 	var usergroups []Group
 

@@ -359,3 +359,15 @@ func (c Cx1Client) GetClientVars() ClientVars {
 func (c *Cx1Client) SetClientVars(clientvars ClientVars) {
 	c.consts = clientvars
 }
+
+func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
+	var owner TenantOwner
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/flags?filter=%v", tenantID), nil, nil)
+	if err != nil {
+		return owner, err
+	}
+
+	err = json.Unmarshal(response, &owner)
+	return owner, err
+}

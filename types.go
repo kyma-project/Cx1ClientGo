@@ -43,6 +43,14 @@ type ASTLicense struct {
 	}
 }
 
+type TenantOwner struct {
+	Username  string
+	Firstname string
+	Lastname  string
+	Email     string
+	UserID    string `json:"id"`
+}
+
 type ClientVars struct {
 	MigrationPollingMaxSeconds                int
 	MigrationPollingDelaySeconds              int
