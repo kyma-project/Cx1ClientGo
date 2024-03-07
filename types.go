@@ -18,6 +18,7 @@ type Cx1Client struct {
 	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
 	consts  ClientVars
 	claims  Cx1Claims
+	user    *User
 }
 
 type Cx1Claims struct {

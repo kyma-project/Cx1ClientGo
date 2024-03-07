@@ -55,6 +55,9 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		cli.parseJWT(token.AccessToken)
 	}
 
+	user, _ := cli.GetServiceAccountByID(client_id)
+	cli.user = &user
+
 	return &cli, nil
 }
 
@@ -94,6 +97,8 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	cli.InitializeClient()
 	cli.parseJWT(token.AccessToken)
 
+	_, _ = cli.GetCurrentUser()
+
 	return &cli, nil
 }
 
@@ -116,6 +121,10 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 
 	if request.Header.Get("Content-Type") == "" {
 		request.Header.Set("Content-Type", "application/json")
+	}
+
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
 	}
 
 	return request, nil

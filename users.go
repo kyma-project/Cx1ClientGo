@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-func (c Cx1Client) GetCurrentUser() (User, error) {
+func (c *Cx1Client) GetCurrentUser() (User, error) {
+	if c.user != nil {
+		return *c.user, nil
+	}
+
 	var whoami struct {
 		UserID string
 	}
@@ -25,7 +29,10 @@ func (c Cx1Client) GetCurrentUser() (User, error) {
 		return user, err
 	}
 
-	return c.GetUserByID(whoami.UserID)
+	user, _ = c.GetUserByID(whoami.UserID)
+	c.user = &user
+
+	return *c.user, err
 }
 
 func (c Cx1Client) Whoami() (WhoAmI, error) {
