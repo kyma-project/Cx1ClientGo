@@ -21,6 +21,7 @@ import (
 var cxOrigin = "Cx1-Golang-Client"
 var astAppID string
 var tenantID string
+var tenantOwner *TenantOwner
 
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -256,6 +257,7 @@ func (c Cx1Client) String() string {
 func (c *Cx1Client) InitializeClient() {
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
+	_, _ = c.GetTenantOwner()
 
 	err := c.RefreshFlags()
 	if err != nil {
@@ -361,13 +363,20 @@ func (c *Cx1Client) SetClientVars(clientvars ClientVars) {
 }
 
 func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
+	if tenantOwner != nil {
+		return *tenantOwner, nil
+	}
+
 	var owner TenantOwner
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/flags?filter=%v", tenantID), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/owner", nil, nil)
 	if err != nil {
 		return owner, err
 	}
 
 	err = json.Unmarshal(response, &owner)
+	if err == nil {
+		tenantOwner = &owner
+	}
 	return owner, err
 }
