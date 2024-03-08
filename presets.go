@@ -22,7 +22,7 @@ func (c Cx1Client) GetPresets(count uint64) ([]Preset, error) {
 		Presets    []Preset `json:"presets"`
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?limit=%d", count), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?limit=%d&include_details=true", count), nil, nil)
 	if err != nil {
 		return preset_response.Presets, err
 	}
@@ -233,6 +233,10 @@ func (c Cx1Client) UpdatePreset(preset *Preset) error {
 
 func (c Cx1Client) DeletePreset(preset *Preset) error {
 	c.logger.Debugf("Removing preset %v", preset.Name)
+	if !preset.Custom {
+		return fmt.Errorf("cannot delete preset %v - this is a product-default preset", preset.String())
+	}
+
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/presets/%d", preset.PresetID), nil, nil)
 	return err
 }
