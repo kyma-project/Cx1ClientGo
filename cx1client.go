@@ -391,3 +391,7 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 	err = json.Unmarshal(response, &v)
 	return v, err
 }
+
+func (v VersionInfo) String() string {
+	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
+}
