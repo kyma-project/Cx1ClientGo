@@ -380,3 +380,14 @@ func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
 	}
 	return owner, err
 }
+
+func (c Cx1Client) GetVersion() (VersionInfo, error) {
+	var v VersionInfo
+	response, err := c.sendRequest(http.MethodGet, "/versions", nil, nil)
+	if err != nil {
+		return v, err
+	}
+
+	err = json.Unmarshal(response, &v)
+	return v, err
+}

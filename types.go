@@ -586,6 +586,12 @@ type User struct {
 	FilledRoles  bool    `json:"-"` // indicates if the user object has had the Roles array filled.
 }
 
+type VersionInfo struct {
+	CxOne string
+	KICS  string
+	SAST  string
+}
+
 type WhoAmI struct {
 	UserID string `json:"userId"`
 	Name   string `json:"displayName"`
