@@ -21,6 +21,7 @@ import (
 var cxOrigin = "Cx1-Golang-Client"
 var astAppID string
 var tenantID string
+var tenantOwner *TenantOwner
 
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -54,6 +55,9 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 	} else {
 		cli.parseJWT(token.AccessToken)
 	}
+
+	user, _ := cli.GetServiceAccountByID(client_id)
+	cli.user = &user
 
 	return &cli, nil
 }
@@ -94,6 +98,8 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	cli.InitializeClient()
 	cli.parseJWT(token.AccessToken)
 
+	_, _ = cli.GetCurrentUser()
+
 	return &cli, nil
 }
 
@@ -116,6 +122,10 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 
 	if request.Header.Get("Content-Type") == "" {
 		request.Header.Set("Content-Type", "application/json")
+	}
+
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
 	}
 
 	return request, nil
@@ -247,6 +257,7 @@ func (c Cx1Client) String() string {
 func (c *Cx1Client) InitializeClient() {
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
+	_, _ = c.GetTenantOwner()
 
 	err := c.RefreshFlags()
 	if err != nil {
@@ -349,4 +360,38 @@ func (c Cx1Client) GetClientVars() ClientVars {
 
 func (c *Cx1Client) SetClientVars(clientvars ClientVars) {
 	c.consts = clientvars
+}
+
+func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
+	if tenantOwner != nil {
+		return *tenantOwner, nil
+	}
+
+	var owner TenantOwner
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/owner", nil, nil)
+	if err != nil {
+		return owner, err
+	}
+
+	err = json.Unmarshal(response, &owner)
+	if err == nil {
+		tenantOwner = &owner
+	}
+	return owner, err
+}
+
+func (c Cx1Client) GetVersion() (VersionInfo, error) {
+	var v VersionInfo
+	response, err := c.sendRequest(http.MethodGet, "/versions", nil, nil)
+	if err != nil {
+		return v, err
+	}
+
+	err = json.Unmarshal(response, &v)
+	return v, err
+}
+
+func (v VersionInfo) String() string {
+	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
 }

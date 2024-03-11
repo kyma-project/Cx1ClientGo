@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-func (c Cx1Client) GetCurrentUser() (User, error) {
+func (c *Cx1Client) GetCurrentUser() (User, error) {
+	if c.user != nil {
+		return *c.user, nil
+	}
+
 	var whoami struct {
 		UserID string
 	}
@@ -25,7 +29,10 @@ func (c Cx1Client) GetCurrentUser() (User, error) {
 		return user, err
 	}
 
-	return c.GetUserByID(whoami.UserID)
+	user, _ = c.GetUserByID(whoami.UserID)
+	c.user = &user
+
+	return *c.user, err
 }
 
 func (c Cx1Client) Whoami() (WhoAmI, error) {
@@ -187,6 +194,15 @@ func (c Cx1Client) DeleteUserByID(userid string) error {
 
 func (c Cx1Client) UserLink(u *User) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID)
+}
+
+func (c Cx1Client) UserIsTenantOwner(u *User) (bool, error) {
+	owner, err := c.GetTenantOwner()
+	if err != nil {
+		return false, err
+	}
+
+	return (u.UserID == owner.UserID), nil
 }
 
 func (c Cx1Client) GetUserGroups(user *User) ([]Group, error) {
