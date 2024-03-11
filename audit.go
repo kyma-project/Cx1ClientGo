@@ -449,6 +449,7 @@ func (c Cx1Client) compileQueryFull(auditSessionId string, query AuditQuery, new
 		EditorId:     editorId,
 		Id2:          queryIdStr,
 		Source:       query.Source,
+		NewQuery:     newquery,
 		Data:         descriptionInfo{Cwe: query.Cwe, CxDescriptionID: query.CxDescriptionId, QueryDescriptionID: query.QueryDescriptionId},
 	}
 

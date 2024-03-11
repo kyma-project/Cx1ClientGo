@@ -18,6 +18,7 @@ type Cx1Client struct {
 	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
 	consts  ClientVars
 	claims  Cx1Claims
+	user    *User
 }
 
 type Cx1Claims struct {
@@ -40,6 +41,14 @@ type ASTLicense struct {
 		Services           []string
 		UsersCount         int
 	}
+}
+
+type TenantOwner struct {
+	Username  string
+	Firstname string
+	Lastname  string
+	Email     string
+	UserID    string `json:"id"`
 }
 
 type ClientVars struct {
@@ -575,6 +584,12 @@ type User struct {
 	FilledGroups bool    `json:"-"` // indicates if the user object has had the Groups array filled.
 	Roles        []Role  `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
 	FilledRoles  bool    `json:"-"` // indicates if the user object has had the Roles array filled.
+}
+
+type VersionInfo struct {
+	CxOne string
+	KICS  string
+	SAST  string
 }
 
 type WhoAmI struct {
