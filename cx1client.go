@@ -146,7 +146,7 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 	var requestBody io.Reader
 	var bodyBytes []byte
 
-	c.logger.Debugf("Sending %v request to URL %v", method, url)
+	c.logger.Tracef("Sending %v request to URL %v", method, url)
 
 	if body != nil {
 		closer := io.NopCloser(body)
