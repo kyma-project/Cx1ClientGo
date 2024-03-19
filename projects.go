@@ -344,6 +344,15 @@ func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowOverride bool) error {
+	var setting ConfigurationSetting
+	setting.Key = "scan.handler.git.repository"
+	setting.Value = repository
+	setting.AllowOverride = allowOverride
+
+	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
+}
+
 func (c Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
 	c.depwarn("SetProjectPreset", "SetProjectPresetByID")
 	return c.SetProjectPresetByID(projectID, presetName, allowOverride)
