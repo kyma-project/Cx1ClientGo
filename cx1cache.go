@@ -2,6 +2,7 @@ package Cx1ClientGo
 
 import (
 	"fmt"
+	"strings"
 )
 
 type Cx1Cache struct {
@@ -19,6 +20,8 @@ type Cx1Cache struct {
 	Roles              []Role
 	Applications       []Application
 	ApplicationRefresh bool
+	Clients            []OIDCClient
+	ClientRefresh      bool
 }
 
 func (c *Cx1Cache) PresetSummary() string {
@@ -40,6 +43,9 @@ func (c *Cx1Cache) ProjectSummary() string {
 func (c *Cx1Cache) ApplicationSummary() string {
 	return fmt.Sprintf("%d applications", len(c.Applications))
 }
+func (c *Cx1Cache) ClientSummary() string {
+	return fmt.Sprintf("%d clients", len(c.Clients))
+}
 
 func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 	client.logger.Info("Refreshing projects in cache")
@@ -59,6 +65,17 @@ func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
 		c.ApplicationRefresh = true
 		c.Applications, err = client.GetApplications(0)
 		c.ApplicationRefresh = false
+	}
+	return err
+}
+
+func (c *Cx1Cache) RefreshClients(client *Cx1Client) error {
+	client.logger.Info("Refreshing OIDC Clients in cache")
+	var err error
+	if !c.ClientRefresh {
+		c.ClientRefresh = true
+		c.Clients, err = client.GetClients()
+		c.ClientRefresh = false
 	}
 	return err
 }
@@ -147,38 +164,35 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
 	var errs []error
 
-	err := c.RefreshProjects(client)
-	if err != nil {
+	if err := c.RefreshProjects(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshApplications(client)
-	if err != nil {
+	if err := c.RefreshApplications(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshGroups(client)
-	if err != nil {
+	if err := c.RefreshGroups(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshUsers(client)
-	if err != nil {
+	if err := c.RefreshUsers(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshQueries(client)
-	if err != nil {
+	if err := c.RefreshQueries(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshPresets(client)
-	if err != nil {
+	if err := c.RefreshPresets(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	err = c.RefreshRoles(client)
-	if err != nil {
+	if err := c.RefreshRoles(client); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := c.RefreshClients(client); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -187,7 +201,7 @@ func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
 
 func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {
 	for id, t := range c.Groups {
-		if t.GroupID == groupID {
+		if strings.EqualFold(t.GroupID, groupID) {
 			return &c.Groups[id], nil
 		}
 	}
@@ -195,7 +209,7 @@ func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {
 }
 func (c *Cx1Cache) GetGroupByName(name string) (*Group, error) {
 	for id, t := range c.Groups {
-		if t.Name == name {
+		if strings.EqualFold(t.Name, name) {
 			return &c.Groups[id], nil
 		}
 	}
@@ -204,7 +218,7 @@ func (c *Cx1Cache) GetGroupByName(name string) (*Group, error) {
 
 func (c *Cx1Cache) GetUser(userID string) (*User, error) {
 	for id, g := range c.Users {
-		if g.UserID == userID {
+		if strings.EqualFold(g.UserID, userID) {
 			return &c.Users[id], nil
 		}
 	}
@@ -212,7 +226,7 @@ func (c *Cx1Cache) GetUser(userID string) (*User, error) {
 }
 func (c *Cx1Cache) GetUserByEmail(email string) (*User, error) {
 	for id, g := range c.Users {
-		if g.Email == email {
+		if strings.EqualFold(g.Email, email) {
 			return &c.Users[id], nil
 		}
 	}
@@ -220,7 +234,7 @@ func (c *Cx1Cache) GetUserByEmail(email string) (*User, error) {
 }
 func (c *Cx1Cache) GetUserByString(displaystring string) (*User, error) {
 	for id, g := range c.Users {
-		if g.String() == displaystring {
+		if strings.EqualFold(g.String(), displaystring) {
 			return &c.Users[id], nil
 		}
 	}
@@ -229,7 +243,7 @@ func (c *Cx1Cache) GetUserByString(displaystring string) (*User, error) {
 
 func (c *Cx1Cache) GetProject(projectID string) (*Project, error) {
 	for id, g := range c.Projects {
-		if g.ProjectID == projectID {
+		if strings.EqualFold(g.ProjectID, projectID) {
 			return &c.Projects[id], nil
 		}
 	}
@@ -237,7 +251,7 @@ func (c *Cx1Cache) GetProject(projectID string) (*Project, error) {
 }
 func (c *Cx1Cache) GetProjectByName(name string) (*Project, error) {
 	for id, g := range c.Projects {
-		if g.Name == name {
+		if strings.EqualFold(g.Name, name) {
 			return &c.Projects[id], nil
 		}
 	}
@@ -246,7 +260,7 @@ func (c *Cx1Cache) GetProjectByName(name string) (*Project, error) {
 
 func (c *Cx1Cache) GetApplication(applicationID string) (*Application, error) {
 	for id, g := range c.Applications {
-		if g.ApplicationID == applicationID {
+		if strings.EqualFold(g.ApplicationID, applicationID) {
 			return &c.Applications[id], nil
 		}
 	}
@@ -254,11 +268,28 @@ func (c *Cx1Cache) GetApplication(applicationID string) (*Application, error) {
 }
 func (c *Cx1Cache) GetApplicationByName(name string) (*Application, error) {
 	for id, g := range c.Applications {
-		if g.Name == name {
+		if strings.EqualFold(g.Name, name) {
 			return &c.Applications[id], nil
 		}
 	}
 	return nil, fmt.Errorf("no such application %v", name)
+}
+
+func (c *Cx1Cache) GetClient(ID string) (*OIDCClient, error) {
+	for id, cli := range c.Clients {
+		if strings.EqualFold(cli.ID, ID) {
+			return &c.Clients[id], nil
+		}
+	}
+	return nil, fmt.Errorf("no such Client %v", ID)
+}
+func (c *Cx1Cache) GetClientByID(clientId string) (*OIDCClient, error) {
+	for id, cli := range c.Clients {
+		if strings.EqualFold(cli.ClientID, clientId) {
+			return &c.Clients[id], nil
+		}
+	}
+	return nil, fmt.Errorf("no such Client %v", clientId)
 }
 
 func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {
@@ -271,7 +302,7 @@ func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {
 }
 func (c *Cx1Cache) GetPresetByName(name string) (*Preset, error) {
 	for id, g := range c.Presets {
-		if g.Name == name {
+		if strings.EqualFold(g.Name, name) {
 			return &c.Presets[id], nil
 		}
 	}
@@ -280,7 +311,7 @@ func (c *Cx1Cache) GetPresetByName(name string) (*Preset, error) {
 
 func (c *Cx1Cache) GetRole(roleID string) (*Role, error) {
 	for id, g := range c.Roles {
-		if g.RoleID == roleID {
+		if strings.EqualFold(g.RoleID, roleID) {
 			return &c.Roles[id], nil
 		}
 	}
@@ -288,7 +319,7 @@ func (c *Cx1Cache) GetRole(roleID string) (*Role, error) {
 }
 func (c *Cx1Cache) GetRoleByName(name string) (*Role, error) {
 	for id, g := range c.Roles {
-		if g.Name == name {
+		if strings.EqualFold(g.Name, name) {
 			return &c.Roles[id], nil
 		}
 	}
