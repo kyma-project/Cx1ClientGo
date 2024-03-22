@@ -65,7 +65,7 @@ func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 		"offset":          {"0"},
 		"limit":           {"1"},
 		"exact_match":     {"true"},
-		"include_details": {"false"},
+		"include_details": {"true"},
 		"name":            {name},
 	}
 
@@ -172,6 +172,7 @@ func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Pr
 		"name":        name,
 		"description": description,
 		"queryIDs":    stringIDs,
+		"custom":      true,
 	}
 
 	jsonBody, err := json.Marshal(body)
