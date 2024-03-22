@@ -341,6 +341,9 @@ func (c Cx1Client) IsEngineAllowed(engine string) bool {
 			return true
 		}
 	}
+	if strings.EqualFold(engine, "apisec") {
+		return c.IsEngineAllowed("API Security")
+	}
 	return false
 }
 

@@ -556,11 +556,15 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 
 	project, err = c.GetProjectByName(projectName)
 	if err != nil {
-		project, err = c.CreateProjectInApplication(projectName, []string{}, map[string]string{}, application.ApplicationID)
-		if err != nil {
-			return project, application, fmt.Errorf("attempt to create project %v in application %v failed due to error: %s", projectName, applicationName, err)
+		if err.Error()[:19] == "no project matching" {
+			project, err = c.CreateProjectInApplication(projectName, []string{}, map[string]string{}, application.ApplicationID)
+			if err != nil {
+				return project, application, fmt.Errorf("attempt to create project %v in application %v failed due to error: %s", projectName, applicationName, err)
+			}
+			return project, application, nil
+		} else {
+			return project, application, err
 		}
-		return project, application, nil
 	}
 
 	return project, application, nil
