@@ -375,7 +375,7 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, 
 			}
 			c.logger.Infof(" - scan %v = %v: %v", shortId, scan.Status, status)
 		} else {
-			c.logger.Infof(" - %v", scan.Status)
+			c.logger.Infof(" - %v: %v", shortId, scan.Status)
 		}
 		if scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled" {
 			break
