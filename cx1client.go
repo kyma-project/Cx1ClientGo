@@ -48,13 +48,14 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		tenant:     tenant,
 		logger:     logger}
 
-	cli.InitializeClient()
 	token, err := conf.Token(ctx)
 	if err != nil {
-		logger.Errorf("Error retrieving token data: %s. Will not have some information available regarding the license.", err)
+		return nil, err
 	} else {
 		cli.parseJWT(token.AccessToken)
 	}
+
+	cli.InitializeClient()
 
 	user, _ := cli.GetServiceAccountByID(client_id)
 	cli.user = &user
