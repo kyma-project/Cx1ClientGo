@@ -352,6 +352,7 @@ func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
 
 func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, maxSeconds int) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
+	shortId := ShortenGUID(s.ScanID)
 
 	pollingCounter := 0
 	var err error
@@ -359,29 +360,29 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, 
 	for !(scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled") { // scan is queueing or running
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
-			c.logger.Tracef("Failed to get scan status: %s", err)
+			c.logger.Tracef("Failed to get scan %v status: %s", shortId, err)
 			return scan, err
 		}
 		if detailed {
 			workflow, err := c.GetScanWorkflowByID(scan.ScanID)
 			if err != nil {
-				c.logger.Tracef("Failed to get scan workflow: %s", err)
+				c.logger.Tracef("Failed to get scan %v workflow: %s", shortId, err)
 				return scan, err
 			}
 			status := "no details"
 			if len(workflow) > 0 {
 				status = workflow[len(workflow)-1].Info
 			}
-			c.logger.Infof(" - %v: %v", scan.Status, status)
+			c.logger.Infof(" - scan %v = %v: %v", shortId, scan.Status, status)
 		} else {
-			c.logger.Infof(" - %v", scan.Status)
+			c.logger.Infof(" - %v: %v", shortId, scan.Status)
 		}
 		if scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled" {
 			break
 		}
 
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return scan, fmt.Errorf("scan polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
+			return scan, fmt.Errorf("scan %v polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", shortId, pollingCounter)
 		}
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
 		pollingCounter += delaySeconds
