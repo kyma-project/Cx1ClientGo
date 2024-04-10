@@ -123,25 +123,22 @@ func (c Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 		p.QueryIDs = preset.QueryIDs
 	}
 
-	populate_queries := true
-	if qc == nil {
-		c.logger.Tracef(" - GetPresetContents call was provided with an empty query collection, will not populate the Preset.Queries array")
-		populate_queries = false
-	} else {
-		p.Queries = make([]Query, len(p.QueryIDs))
-	}
-
-	for id, qid := range p.QueryIDs {
-		if populate_queries {
-			q := qc.GetQueryByID(qid)
-			if q != nil {
-				p.Queries[id] = *q
-				c.logger.Tracef(" - linked query: %v", q.String())
-			}
-		}
+	if qc != nil {
+		p.LinkQueries(qc)
 	}
 
 	return nil
+}
+
+func (p *Preset) LinkQueries(qc *QueryCollection) {
+	p.Queries = make([]Query, len(p.QueryIDs))
+
+	for id, qid := range p.QueryIDs {
+		q := qc.GetQueryByID(qid)
+		if q != nil {
+			p.Queries[id] = *q
+		}
+	}
 }
 
 // convenience

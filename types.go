@@ -204,13 +204,13 @@ type OIDCClientScope struct {
 }
 
 type Preset struct {
-	PresetID    uint64   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Custom      bool     `json:"custom"`
-	QueryIDs    []uint64 `json:"-"`
-	Filled      bool     `json:"-"`
-	Queries     []Query
+	PresetID    uint64 `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Custom      bool   `json:"custom"`
+	QueryIDs    []uint64
+	Filled      bool
+	Queries     []Query `json:"-"`
 }
 
 type Project struct {
