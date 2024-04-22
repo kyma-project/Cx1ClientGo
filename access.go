@@ -66,7 +66,7 @@ func (c Cx1Client) GetEntitiesAccessToResourceByID(resourceId, resourceType stri
 	c.logger.Debugf("Getting the entities with access assignment for resourceId %v", resourceId)
 	var aas []AccessAssignment
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/entities-for?resource-id=%v&resource-type=%v", resourceId, resourceId), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/entities-for?resource-id=%v&resource-type=%v", resourceId, resourceType), nil, nil)
 	if err != nil {
 		return aas, err
 	}
