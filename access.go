@@ -75,6 +75,27 @@ func (c Cx1Client) GetEntitiesAccessToResourceByID(resourceId, resourceType stri
 	return aas, err
 }
 
+/*
+This function will return partially-filled structures as returned by Cx1 API. Only the EntityID, EntityType, EntityRoles.ID, ResourceID, and ResourceType values will be filled
+The resulting access assignments will have the following structure:
+
+	AccessAssignment{
+		TenantID:     "",
+		EntityID:     entityId, (provided in function call)
+		EntityType:   entityType, (provided in function call)
+		EntityName:   "",
+		EntityRoles:  []AccessAssignedRole{
+			AccessAssignedRole{
+				Id:   "Cx1-role-ID",
+				Name: "",
+			}
+		},
+		ResourceID:   "resource-id",
+		ResourceType: "resource-type",
+		ResourceName: "",
+		CreatedAt:    "",
+	}
+*/
 func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType string, resourceTypes []string) ([]AccessAssignment, error) {
 	var aas []AccessAssignment
 	c.logger.Debugf("Getting the resources accessible to entity %v", entityId)
