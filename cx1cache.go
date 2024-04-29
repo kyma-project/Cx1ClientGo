@@ -124,7 +124,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 			client.logger.Tracef("Failed while retrieving presets: %s", err)
 		} else {
 			for id := range c.Presets {
-				err := client.GetPresetContents(&c.Presets[id], &c.Queries)
+				err := client.GetPresetContents(&c.Presets[id], nil)
 				if err != nil {
 					client.logger.Tracef("Failed to retrieve preset contents for preset %v: %s", c.Presets[id].String(), err)
 				}
@@ -196,7 +196,15 @@ func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
 		errs = append(errs, err)
 	}
 
+	c.MatchPresetQueries()
+
 	return errs
+}
+
+func (c *Cx1Cache) MatchPresetQueries() {
+	for id := range c.Presets {
+		c.Presets[id].LinkQueries(&c.Queries)
+	}
 }
 
 func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {

@@ -170,6 +170,21 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	return group, err
 }
 
+func (c Cx1Client) GetGroupByPath(path string) (Group, error) {
+	c.logger.Debugf("Getting Group with path %v...", path)
+	var group Group
+
+	data, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/group-by-path/%v", path), nil, http.Header{})
+	if err != nil {
+		c.logger.Tracef("Fetching group %v failed: %s", path, err)
+		return group, err
+	}
+
+	err = json.Unmarshal(data, &group)
+	group.Filled = true
+	return group, err
+}
+
 func (c Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
 }
@@ -390,6 +405,23 @@ func (c Cx1Client) AddRolesToGroup(g *Group, clientRoles map[string][]string) er
 	}
 
 	return nil
+}
+
+func (c Cx1Client) GetGroupMembers(group *Group) ([]User, error) {
+	return c.GetGroupMembersByID(group.GroupID)
+}
+
+func (c Cx1Client) GetGroupMembersByID(groupID string) ([]User, error) {
+	var users []User
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/members", groupID), nil, http.Header{})
+	if err != nil {
+		c.logger.Tracef("Fetching group %v member failed: %s", groupID, err)
+		return users, err
+	}
+
+	err = json.Unmarshal(response, &users)
+	return users, err
 }
 
 // convenience
