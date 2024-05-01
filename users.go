@@ -279,7 +279,7 @@ func (c Cx1Client) RemoveUserFromGroupByID(user *User, groupId string) error {
 		return err
 	}
 
-	if !inGroup {
+	if inGroup {
 		params := map[string]string{
 			"realm":   c.tenant,
 			"userId":  user.UserID,
