@@ -38,7 +38,7 @@ func main() {
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	//httpClient.Transport = transport
+	httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -84,23 +84,23 @@ func main() {
 
 	logger.Infof("Starting Web-Audit session for last successful scan %v", lastscan.String())
 
-	session, err := cx1client.GetAuditSessionByID(project.ProjectID, lastscan.ScanID, false)
+	session, err := cx1client.GetAuditSessionByID("sast", project.ProjectID, lastscan.ScanID)
 	if err != nil {
 		logger.Fatalf("Error getting an audit session: %s", err)
 	}
 
-	corpOverride := newCorpOverride(cx1client, logger, session)
-	appOverride := newApplicationOverride(cx1client, logger, session, application.ApplicationID)
-	projOverride := newProjectOverride(cx1client, logger, session, project.ProjectID)
-	corpQuery := newCorpQuery(cx1client, logger, session)
+	corpOverride := newCorpOverride(cx1client, logger, session.ID)
+	appOverride := newApplicationOverride(cx1client, logger, session.ID, application.ApplicationID)
+	projOverride := newProjectOverride(cx1client, logger, session.ID, project.ProjectID)
+	corpQuery := newCorpQuery(cx1client, logger, session.ID)
 
-	err = cx1client.AuditDeleteSessionByID(session)
+	err = cx1client.AuditDeleteSessionByID(session.ID)
 	if err != nil {
 		logger.Errorf("Failed to delete audit session: %s", err)
 	}
 
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
-	queries, err := cx1client.GetQueriesByLevelID("Project", project.ProjectID)
+	queries, err := cx1client.GetAuditQueriesByLevelID(session.ID, "Project", project.ProjectID)
 	if err != nil {
 		logger.Errorf("Failed to get queries for project: %s", err)
 	} else {
@@ -111,19 +111,19 @@ func main() {
 		}
 	}
 
-	err = cx1client.DeleteQuery(projOverride)
+	err = cx1client.DeleteAuditQuery(session.ID, projOverride)
 	if err != nil {
 		logger.Errorf("Failed to delete project query %v: %s", projOverride.String(), err)
 	}
-	err = cx1client.DeleteQuery(appOverride)
+	err = cx1client.DeleteAuditQuery(session.ID, appOverride)
 	if err != nil {
 		logger.Errorf("Failed to delete application query %v: %s", appOverride.String(), err)
 	}
-	err = cx1client.DeleteQuery(corpOverride)
+	err = cx1client.DeleteAuditQuery(session.ID, corpOverride)
 	if err != nil {
 		logger.Errorf("Failed to delete corp query %v: %s", corpOverride.String(), err)
 	}
-	err = cx1client.DeleteQuery(corpQuery)
+	err = cx1client.DeleteAuditQuery(session.ID, corpQuery)
 	if err != nil {
 		logger.Errorf("Failed to delete corp query %v: %s", corpQuery.String(), err)
 	}
@@ -132,7 +132,7 @@ func main() {
 func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session string) Cx1ClientGo.AuditQuery {
 	logger.Infof("Creating corp override under session %v", session)
 	// First query: Tenant-level override of an existing query
-	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery, err := cx1client.GetAuditQueryByName(session, "Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
@@ -157,7 +157,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 		logger.Infof("Saved new query %v", newCorpOverride.String())
 	}
 
-	nq, err := cx1client.GetQueryByName("Corp", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	nq, err := cx1client.GetAuditQueryByName(session, "Corp", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Failed to get new corp query: %s", err)
 	}
@@ -169,7 +169,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session, applicationId string) Cx1ClientGo.AuditQuery {
 	logger.Infof("Creating application-level override under session %v", session)
 	// First query: Tenant-level override of an existing query
-	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery, err := cx1client.GetAuditQueryByName(session, "Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
@@ -195,7 +195,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 		logger.Infof("Saved new query %v", newApplicationOverride.String())
 	}
 
-	nq, err := cx1client.GetQueryByName(applicationId, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	nq, err := cx1client.GetAuditQueryByName(session, applicationId, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Failed to get new project override: %s", err)
 	}

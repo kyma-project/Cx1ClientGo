@@ -58,8 +58,6 @@ type ClientVars struct {
 	AuditEnginePollingDelaySeconds            int
 	AuditScanPollingMaxSeconds                int
 	AuditScanPollingDelaySeconds              int
-	AuditLanguagePollingMaxSeconds            int
-	AuditLanguagePollingDelaySeconds          int
 	AuditCompilePollingMaxSeconds             int
 	AuditCompilePollingDelaySeconds           int
 	ScanPollingMaxSeconds                     int
@@ -134,6 +132,45 @@ type AuditQueryMetadata struct {
 	Path               string
 	QueryDescriptionID string
 	Severity           uint
+}
+
+type AuditPermissions struct {
+	View   bool `json:"view"`
+	Update bool `json:"update"`
+	Create bool `json:"create"`
+	Delete bool `json:"delete"`
+}
+
+type AuditSession struct {
+	ID   string `json:"id"`
+	Data struct {
+		Status      string `json:"status"`
+		RequestID   string `json:"requestId"`
+		Permissions struct {
+			Tenant      AuditPermissions `json:"tenant"`
+			Project     AuditPermissions `json:"project"`
+			Application AuditPermissions `json:"application"`
+		} `json:"permissions"`
+	} `json:"data"`
+	ProjectName            string   `json:"projectName"`
+	QueryBuilder           bool     `json:"queryBuilder"`
+	ApplicationAssociation bool     `json:"applicationAssociation"`
+	Status                 string   `json:"status"`
+	Value                  []string `json:"value"`
+}
+
+type AuditRequestStatus struct {
+	Completed    bool        `json:"completed"`
+	Value        interface{} `json:"value"`
+	ErrorCode    int         `json:"code"`
+	ErrorMessage string      `json:"message"`
+}
+
+type AuditScanSourceFile struct {
+	IsLeaf   bool                  `json:"isLeaf"`
+	Title    string                `json:"title"`
+	Key      string                `json:"key"`
+	Children []AuditScanSourceFile `json:"children"`
 }
 
 type AuthenticationProvider struct {

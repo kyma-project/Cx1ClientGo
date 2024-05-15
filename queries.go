@@ -13,23 +13,8 @@ import (
 	This file contains the generic query-related functions that do not need a valid audit session.
 */
 
-func (c Cx1Client) GetQueryByID(qid uint64) (Query, error) {
-	return Query{}, fmt.Errorf("this API call no longer exists")
-	/*
-		var q Query
-		// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-		response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/queries/%d", qid), nil, nil)
-		if err != nil {
-			return q, err
-		}
-		err = json.Unmarshal(response, &q)
-		if err != nil {
-			c.logger.Tracef("Failed to parse %v", string(response))
-		}
-		return q, err*/
-}
-
 func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQuery, error) {
+	c.depwarn("GetQueryByName", "GetAuditQueryByName")
 	c.logger.Debugf("Get %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
@@ -51,6 +36,7 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 }
 
 func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
+	c.depwarn("GetQueryByPath", "GetAuditQueryByPath")
 	c.logger.Debugf("Get %v query by path: %v", level, path)
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v", level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
@@ -74,6 +60,7 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 }
 
 func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, error) {
+	c.depwarn("GetQueryByLevelID", "GetAuditQueryByLevelID")
 	c.logger.Debugf("Get all queries for %v", level)
 
 	var url string
@@ -119,6 +106,7 @@ func (c Cx1Client) DeleteQuery(query AuditQuery) error {
 }
 
 func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query string) error {
+	c.depwarn("DeleteQueryByName", "DeleteAuditQueryByName")
 	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
@@ -143,38 +131,8 @@ func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query stri
 	return nil
 }
 
-func (q AuditQuery) CreateTenantOverride() AuditQuery {
-	new_query := q
-	new_query.Level = "Corp"
-	new_query.LevelID = "Corp"
-	return new_query
-}
-func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
-	new_query := q
-	new_query.Level = "Project"
-	new_query.LevelID = projectId
-	return new_query
-}
-func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
-	new_query := q
-	new_query.Level = "Team"
-	new_query.LevelID = applicationId
-	return new_query
-}
-
-/*
-
-	WebAudit use cases:
-		1. Create new Corp/Tenant-level query with no existing Cx (product default) query: AuditNewQuery function + AuditCreateCorpQuery (POST to /cx-audit/queries/:session)
-		2. Create new Corp/Tenant-level over an existing Cx (product default) query: UpdateQuery function (PUT to /cx-audit/queries/Corp)
-		3. Create new override on Project or Application level, where a Corp/Tenant or Cx-level base query already exists: UpdateQuery function (PUT to /cx-audit/queries/ProjectID or AppID)
-		4. Update an existing override on Corp/Tenant, Project, or Application level: UpdateQuery function (PUT to /cx-audit/queries/:level
-
-	Note: Application-level queries are not yet implemented in Cx1.
-
-*/
-
 func (c Cx1Client) AuditNewQuery(language, group, name string) (AuditQuery, error) {
+	c.depwarn("AuditNewQuery", "CreateAuditQuery")
 	newQuery, err := c.GetQueryByName("Corp", language, "CxDefaultQueryGroup", "CxDefaultQuery")
 	if err != nil {
 		return newQuery, err
@@ -189,6 +147,7 @@ func (c Cx1Client) AuditNewQuery(language, group, name string) (AuditQuery, erro
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
 func (c Cx1Client) UpdateQuery(query AuditQuery) error { // level = projectId or "Corp"
+	c.depwarn("UpdateQuery", "UpdateAuditQuery")
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate{
@@ -204,12 +163,12 @@ func (c Cx1Client) UpdateQuery(query AuditQuery) error { // level = projectId or
 }
 
 func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
-	c.depwarn("UpdateQuery/UpdateQueries", "AuditUpdateQuery/AuditUpdateQueries")
+	c.depwarn("UpdateQuery/UpdateQueries", "UpdateAuditQuery/UpdateAuditQueries")
 	jsonBody, _ := json.Marshal(queries)
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		if err.Error()[0:8] == "HTTP 405" {
-			return fmt.Errorf("this endpoint is no longer available - please use AuditUpdateQuery/AuditUpdateQueries instead")
+			return fmt.Errorf("this endpoint is no longer available - please use UpdateAuditQuery/UpdateAuditQueries instead")
 		} else {
 			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)

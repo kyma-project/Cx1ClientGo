@@ -15,51 +15,46 @@ import (
 	This file contains the query-related functions that require an audit session (compiling queries, updating queries, creating overrides)
 */
 
-func (c Cx1Client) AuditCreateSessionByID(projectId, scanId string) (string, error) {
+func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (AuditSession, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
-	available, _, err := c.AuditFindSessionsByID(projectId, scanId)
+	/*available, _, err := c.AuditFindSessionsByID(projectId, scanId)
 	if err != nil {
 		return "", err
 	}
 
 	if !available {
 		return "", fmt.Errorf("audit session not available")
-	}
+	}*/
+
+	var session AuditSession
 
 	body := map[string]interface{}{
 		"projectId": projectId,
 		"scanId":    scanId,
-		"time":      30,
-		"fromZip":   false,
+		"scanner":   engine,
 	}
 
 	jsonBody, _ := json.Marshal(body)
 
-	response, err := c.sendRequest(http.MethodPost, "/cx-audit/sessions", bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPost, "/query-editor/sessions", bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return "", err
+		return session, err
 	}
 
-	var responseStruct struct {
-		Id     string `json:"id"`
-		Status string `json:"status"`
-		ScanId string `json:"scanId"`
-	}
-
-	err = json.Unmarshal(response, &responseStruct)
+	err = json.Unmarshal(response, &session)
 	if err != nil {
-		return "", err
+		return session, err
 	}
 
-	if responseStruct.Status == "ALLOCATED" {
-		return responseStruct.Id, nil
+	if session.Data.Status == "ALLOCATED" {
+		return session, nil
 	}
 
-	return "", fmt.Errorf("failed to allocate audit session: %v", responseStruct)
+	return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
 }
 
 func (c Cx1Client) AuditDeleteSessionByID(sessionId string) error {
-	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/sessions/%v", sessionId), nil, nil)
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v", sessionId), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -67,10 +62,13 @@ func (c Cx1Client) AuditDeleteSessionByID(sessionId string) error {
 	return nil
 }
 
+/*
+// no longer available as of 2024-05-13
+
 func (c Cx1Client) AuditFindSessionsByID(projectId, scanId string) (bool, []string, error) {
 	c.logger.Tracef("Checking for audit session for project %v scan %v", projectId, scanId)
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions?projectId=%v&scanId=%v", projectId, scanId), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions?projectId=%v&scanId=%v", projectId, scanId), nil, nil)
 	if err != nil {
 		return false, []string{}, err
 	}
@@ -105,9 +103,59 @@ func (c Cx1Client) AuditFindSessionsByID(projectId, scanId string) (bool, []stri
 
 	return responseStruct.Available, sessions, nil
 }
+*/
 
+func (c Cx1Client) AuditGetRequestStatusByID(auditSessionId, requestId string) (AuditRequestStatus, error) {
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/requests/%v", auditSessionId, requestId), nil, nil)
+	var status AuditRequestStatus
+	if err != nil {
+		return status, err
+	}
+
+	err = json.Unmarshal(response, &status)
+	if err != nil {
+		return status, err
+	}
+
+	if status.ErrorCode != 0 && status.ErrorMessage != "" {
+		return status, fmt.Errorf("query editor returned error code %d: %v", status.ErrorCode, status.ErrorMessage)
+	}
+	return status, nil
+}
+
+func (c Cx1Client) AuditRequestStatusPollingByID(auditSessionId, requestId string) (AuditRequestStatus, error) {
+	return c.AuditRequestStatusByIDWithTimeout(auditSessionId, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
+}
+
+func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSessionId, requestId string, delaySeconds, maxSeconds int) (AuditRequestStatus, error) {
+	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSessionId)
+	var status AuditRequestStatus
+	var err error
+	pollingCounter := 0
+	for !status.Completed {
+		status, err = c.AuditGetRequestStatusByID(auditSessionId, requestId)
+		if err != nil {
+			return status, err
+		}
+
+		if maxSeconds != 0 && pollingCounter >= maxSeconds {
+			return status, fmt.Errorf("audit request %v polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", requestId, pollingCounter)
+		}
+
+		if status.Completed {
+			break
+		}
+
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
+	}
+
+	return status, nil
+}
+
+/*
 func (c Cx1Client) AuditGetEngineStatusByID(auditSessionId string) (bool, error) {
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/sast-status", auditSessionId), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/sast-status", auditSessionId), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -130,7 +178,7 @@ func (c Cx1Client) AuditGetEngineStatusByID(auditSessionId string) (bool, error)
 		return false, nil
 	}
 
-	return false, fmt.Errorf("unknown cx-audit sast status response: %v", engineResponse.Message)
+	return false, fmt.Errorf("unknown query-editor sast status response: %v", engineResponse.Message)
 }
 
 func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
@@ -138,7 +186,7 @@ func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
 }
 
 func (c Cx1Client) AuditEnginePollingByIDWithTimeout(auditSessionId string, delaySeconds, maxSeconds int) error {
-	c.logger.Debugf("Polling status of cx-audit engine for session %v", auditSessionId)
+	c.logger.Debugf("Polling status of query-editor engine for session %v", auditSessionId)
 	status := false
 	var err error
 	pollingCounter := 0
@@ -164,7 +212,7 @@ func (c Cx1Client) AuditEnginePollingByIDWithTimeout(auditSessionId string, dela
 
 func (c Cx1Client) AuditCheckLanguagesByID(auditSessionId string) error {
 	c.logger.Infof("Triggering language check under audit session %v", auditSessionId)
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/project/languages", auditSessionId), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/project/languages", auditSessionId), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -191,7 +239,7 @@ func (c Cx1Client) AuditGetLanguagesByID(auditSessionId string) ([]string, error
 		Message   string   `json:"message"`
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/request-status?type=%d", auditSessionId, 0), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/request-status?type=%d", auditSessionId, 0), nil, nil)
 	if err != nil {
 		return []string{}, err
 	}
@@ -239,27 +287,31 @@ func (c Cx1Client) AuditLanguagePollingByIDWithTimeout(auditSessionId string, de
 
 	return languages, fmt.Errorf("unknown error")
 }
+*/
 
-func (c Cx1Client) AuditRunScanByID(auditSessionId string) error {
+func (c Cx1Client) AuditRunScanByID(auditSessionId string) (string, error) {
 	c.logger.Infof("Triggering scan under audit session %v", auditSessionId)
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/project/scan", auditSessionId), nil, nil)
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/sources/scan", auditSessionId), nil, nil)
 	if err != nil {
-		return err
-	}
-
-	if string(response) == "1" {
-		return nil
+		return "", err
 	}
 
 	var responseStruct struct {
 		Message string `json:"message"`
+		Code    int    `json:"code"`
+		Id      string `json:"id"`
 	}
 
 	err = json.Unmarshal(response, &responseStruct)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return fmt.Errorf("error: %v", responseStruct.Message)
+
+	if responseStruct.Code != 0 && responseStruct.Message != "" {
+		return "", fmt.Errorf("audit scan returned error %d: %v", responseStruct.Code, responseStruct.Message)
+	}
+
+	return responseStruct.Id, nil
 }
 
 func (c Cx1Client) AuditGetScanStatusByID(auditSessionId string) (bool, error) {
@@ -269,7 +321,7 @@ func (c Cx1Client) AuditGetScanStatusByID(auditSessionId string) (bool, error) {
 		Message   string   `json:"message"`
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/request-status?type=%d", auditSessionId, 1), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/request-status?type=%d", auditSessionId, 1), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -288,6 +340,7 @@ func (c Cx1Client) AuditGetScanStatusByID(auditSessionId string) (bool, error) {
 	return scanResponse.Completed, nil
 }
 
+/*
 func (c Cx1Client) AuditScanPollingByID(auditSessionId string) error {
 	return c.AuditScanPollingByIDWithTimeout(auditSessionId, c.consts.AuditScanPollingDelaySeconds, c.consts.AuditScanPollingMaxSeconds)
 }
@@ -315,9 +368,10 @@ func (c Cx1Client) AuditScanPollingByIDWithTimeout(auditSessionId string, delayS
 
 	return fmt.Errorf("unknown error")
 }
+*/
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSessionId string) error {
-	_, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/cx-audit/sessions/%v", auditSessionId), nil, nil)
+	_, err := c.sendRequest(http.MethodPatch, fmt.Sprintf("/query-editor/sessions/%v", auditSessionId), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -325,76 +379,52 @@ func (c Cx1Client) AuditSessionKeepAlive(auditSessionId string) error {
 }
 
 // Convenience function
-func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) (string, error) {
+func (c Cx1Client) GetAuditSessionByID(engine, projectId, scanId string) (AuditSession, error) {
 	// TODO: convert the audit session to an object that also does the polling/keepalive
 	c.logger.Infof("Creating an audit session for project %v scan %v", projectId, scanId)
 
-	available, sessions, err := c.AuditFindSessionsByID(projectId, scanId)
+	session, err := c.AuditCreateSessionByID(engine, projectId, scanId)
 	if err != nil {
-		c.logger.Errorf("Failed to retrieve sessions: %s", err)
-		return "", err
+		c.logger.Errorf("Error creating cxaudit session: %s", err)
+		return session, err
 	}
-	session := ""
-	reusedSession := false
-	if len(sessions) > 0 && (fastInit || !available) {
-		lastSession := len(sessions) - 1
-		if fastInit { // reuse existing
-			c.logger.Debugf("FastInit: re-using the last session %v", sessions[lastSession])
-		} else { // !available
-			c.logger.Debugf("No additional audit sessions are available, but %d matching sessions exist. Re-using the last session %v", len(sessions), sessions[lastSession])
-		}
-		session = sessions[lastSession]
-		reusedSession = true
-	} else {
-		session, err = c.AuditCreateSessionByID(projectId, scanId)
-		if err != nil {
-			c.logger.Errorf("Error creating cxaudit session: %s", err)
-			return "", err
-		}
+	//}
+
+	err = c.AuditSessionKeepAlive(session.ID)
+	if err != nil {
+		return session, err
 	}
 
-	err = c.AuditSessionKeepAlive(session)
-	if err != nil {
-		return "", err
-	}
+	// check engine status
+	_, err = c.AuditRequestStatusPollingByID(session.ID, session.Data.RequestID)
 
-	err = c.AuditEnginePollingByID(session)
 	if err != nil {
 		c.logger.Errorf("Error while creating audit engine: %s", err)
-		return "", err
+		return session, err
 	}
 
-	if !fastInit || !reusedSession {
-		err = c.AuditCheckLanguagesByID(session)
-		if err != nil {
-			c.logger.Errorf("Error while checking languages: %s", err)
-			return "", err
-		}
-	}
+	//c.logger.Infof("Languages present: %v", status.Value.([]string))
 
-	languages, err := c.AuditLanguagePollingByID(session)
+	_, err = c.AuditGetScanSourcesByID(session.ID)
 	if err != nil {
-		c.logger.Errorf("Error while getting languages: %s", err)
-		return "", err
+		return session, fmt.Errorf("error while getting scan sources: %v", session.ID)
 	}
 
-	c.logger.Infof("Languages present: %v", languages)
-
-	if !fastInit || !reusedSession {
-		err = c.AuditRunScanByID(session)
-		if err != nil {
-			c.logger.Errorf("Error while triggering audit scan: %s", err)
-			return "", err
-		}
+	//if !fastInit { // || !reusedSession {
+	requestID, err := c.AuditRunScanByID(session.ID)
+	if err != nil {
+		c.logger.Errorf("Error while triggering audit scan: %s", err)
+		return session, err
 	}
+	//}
 
-	err = c.AuditScanPollingByID(session)
+	_, err = c.AuditRequestStatusPollingByID(session.ID, requestID)
 	if err != nil {
 		c.logger.Errorf("Error while polling audit scan: %s", err)
-		return "", err
+		return session, err
 	}
 
-	c.AuditSessionKeepAlive(session) // one for the road
+	c.AuditSessionKeepAlive(session.ID) // one for the road
 
 	return session, nil
 }
@@ -454,7 +484,7 @@ func (c Cx1Client) compileQueryFull(auditSessionId string, query AuditQuery, new
 	}
 
 	jsonBody, _ := json.Marshal(queryBody)
-	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/cx-audit/sessions/%v/queries/compile", auditSessionId), bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries/compile", auditSessionId), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		return err
 	}
@@ -476,7 +506,7 @@ func (c Cx1Client) compileQueryFull(auditSessionId string, query AuditQuery, new
 }
 
 func (c Cx1Client) auditGetCompileStatusByID(sessionId string) (bool, error) {
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/request-status?type=%d", sessionId, 2), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/request-status?type=%d", sessionId, 2), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -566,7 +596,7 @@ func (c Cx1Client) AuditCreateCorpQuery(auditSessionId string, query AuditQuery)
 
 	jsonBody, _ := json.Marshal(qc)
 
-	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/cx-audit/queries/%v", auditSessionId), bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries/", auditSessionId), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		return AuditQuery{}, err
 	}
@@ -580,7 +610,7 @@ func (c Cx1Client) AuditCreateCorpQuery(auditSessionId string, query AuditQuery)
 // updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
-func (c Cx1Client) AuditUpdateQuery(auditSessionId string, query AuditQuery) error { // level = projectId or "Corp"
+func (c Cx1Client) UpdateAuditQuery(auditSessionId string, query AuditQuery) error { // level = projectId or "Corp"
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate{
@@ -592,12 +622,12 @@ func (c Cx1Client) AuditUpdateQuery(auditSessionId string, query AuditQuery) err
 		},
 	}
 
-	return c.AuditUpdateQueries(auditSessionId, query.LevelID, []QueryUpdate{q})
+	return c.UpdateAuditQueries(auditSessionId, query.LevelID, []QueryUpdate{q})
 }
 
-func (c Cx1Client) AuditUpdateQueries(auditSessionId, level string, queries []QueryUpdate) error {
+func (c Cx1Client) UpdateAuditQueries(auditSessionId, level string, queries []QueryUpdate) error {
 	jsonBody, _ := json.Marshal(queries)
-	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v/%v", auditSessionId, level), bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/query-editor/sessions/%v/queries/%v", auditSessionId, level), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 		c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
@@ -634,6 +664,20 @@ func (c Cx1Client) AuditUpdateQueries(auditSessionId, level string, queries []Qu
 	}
 }
 
+func (c Cx1Client) AuditGetScanSourcesByID(auditSessionId string) ([]AuditScanSourceFile, error) {
+	c.logger.Debugf("Get %v audit scan sources", auditSessionId)
+
+	var sourcefiles []AuditScanSourceFile
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/sources", auditSessionId), nil, nil)
+	if err != nil {
+		return sourcefiles, err
+	}
+
+	err = json.Unmarshal(response, &sourcefiles)
+	return sourcefiles, err
+}
+
 func (q AuditQuery) String() string {
 	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
 }
@@ -642,4 +686,127 @@ func (q *AuditQuery) ParsePath() {
 	q.Language = s[1]
 	q.Group = s[2]
 	q.Name = s[3]
+}
+
+func (c Cx1Client) GetAuditQueryByName(auditSessionId, level, language, group, query string) (AuditQuery, error) {
+	c.logger.Debugf("Get %v audit query by name: %v -> %v -> %v", level, language, group, query)
+	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/queries/%v/%v.cs", auditSessionId, level, path), nil, nil)
+	if err != nil {
+		return AuditQuery{}, err
+	}
+
+	var q AuditQuery
+	err = json.Unmarshal(response, &q)
+	if err != nil {
+		return q, err
+	}
+	q.ParsePath()
+
+	q.LevelID = level
+
+	return q, nil
+}
+
+func (c Cx1Client) GetAuditQueryByPath(auditSessionId, level, path string) (AuditQuery, error) {
+	c.logger.Debugf("Get %v query by path: %v", level, path)
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/queries/%v/%v", auditSessionId, level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
+	if err != nil {
+		return AuditQuery{}, err
+	}
+
+	var q AuditQuery
+	err = json.Unmarshal(response, &q)
+	if err != nil {
+		return q, err
+	}
+	q.ParsePath()
+
+	if strings.EqualFold(q.Level, "corp") || strings.EqualFold(q.Level, "cx") {
+		q.LevelID = q.Level
+	} else { // team or project-level override, so store the ID
+		q.LevelID = level
+	}
+	return q, nil
+}
+
+func (c Cx1Client) GetAuditQueriesByLevelID(auditSessionId, level, levelId string) ([]AuditQuery, error) {
+	c.logger.Debugf("Get all queries for %v", level)
+
+	var url string
+	var queries []AuditQuery
+	switch level {
+	case "Corp":
+		url = "/query-editor/queries"
+	case "Project":
+		url = fmt.Sprintf("/query-editor/sessions/%v/queries?projectId=%v", auditSessionId, levelId)
+	default:
+		return queries, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
+	}
+
+	response, err := c.sendRequest(http.MethodGet, url, nil, nil)
+	if err != nil {
+		return queries, err
+	}
+
+	err = json.Unmarshal(response, &queries)
+	if err != nil {
+		return queries, err
+	}
+
+	for id := range queries {
+		queries[id].ParsePath()
+	}
+
+	return queries, nil
+}
+
+func (c Cx1Client) DeleteAuditQuery(auditSessionId string, query AuditQuery) error {
+	return c.DeleteAuditQueryByName(auditSessionId, query.Level, query.LevelID, query.Language, query.Group, query.Name)
+}
+
+func (c Cx1Client) DeleteAuditQueryByName(auditSessionId, level, levelID, language, group, query string) error {
+	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
+	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
+
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v/queries/%v/%v.cs", auditSessionId, levelID, path), nil, nil)
+	if err != nil {
+		// currently there's a bug where the response can be error 500 even if it succeeded.
+
+		q, err2 := c.GetQueryByName(levelID, language, group, query)
+		if err2 != nil {
+			c.logger.Warnf("error while deleting query (%s) followed by error while checking if the query was deleted (%s) - assuming the query was deleted", err, err2)
+			return nil
+		}
+
+		if q.Level != level {
+			c.logger.Warnf("While deleting the query an error was returned (%s) but the query was deleted", err)
+			return nil
+		} else {
+			return fmt.Errorf("error while deleting query (%s) and the query %v still exists", err, q)
+		}
+	}
+
+	return nil
+}
+
+func (q AuditQuery) CreateTenantOverride() AuditQuery {
+	new_query := q
+	new_query.Level = "Corp"
+	new_query.LevelID = "Corp"
+	return new_query
+}
+func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
+	new_query := q
+	new_query.Level = "Project"
+	new_query.LevelID = projectId
+	return new_query
+}
+func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
+	new_query := q
+	new_query.Level = "Team"
+	new_query.LevelID = applicationId
+	return new_query
 }
