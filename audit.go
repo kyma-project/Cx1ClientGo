@@ -15,6 +15,11 @@ import (
 	This file contains the query-related functions that require an audit session (compiling queries, updating queries, creating overrides)
 */
 
+var AUDIT_QUERY_PRODUCT = "Cx"
+var AUDIT_QUERY_TENANT = "Corp"
+var AUDIT_QUERY_APPLICATION = "Team"
+var AUDIT_QUERY_PROJECT = "Project"
+
 func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (AuditSession, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
 	/*available, _, err := c.AuditFindSessionsByID(projectId, scanId)
@@ -604,13 +609,13 @@ func (c Cx1Client) AuditCreateCorpQuery(auditSessionId string, query AuditQuery)
 	if string(response) != "" {
 		return AuditQuery{}, fmt.Errorf("creating query returned error: %v", string(response))
 	}
-	return c.GetQueryByName("Corp", query.Language, query.Group, query.Name)
+	return c.GetQueryByName(AUDIT_QUERY_TENANT, query.Language, query.Group, query.Name)
 }
 
 // updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
-func (c Cx1Client) UpdateAuditQuery(auditSessionId string, query AuditQuery) error { // level = projectId or "Corp"
+func (c Cx1Client) UpdateAuditQuery(auditSessionId string, query AuditQuery) error {
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate{
@@ -724,7 +729,7 @@ func (c Cx1Client) GetAuditQueryByPath(auditSessionId, level, path string) (Audi
 	}
 	q.ParsePath()
 
-	if strings.EqualFold(q.Level, "corp") || strings.EqualFold(q.Level, "cx") {
+	if strings.EqualFold(q.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q.Level, AUDIT_QUERY_PRODUCT) {
 		q.LevelID = q.Level
 	} else { // team or project-level override, so store the ID
 		q.LevelID = level
@@ -738,9 +743,9 @@ func (c Cx1Client) GetAuditQueriesByLevelID(auditSessionId, level, levelId strin
 	var url string
 	var queries []AuditQuery
 	switch level {
-	case "Corp":
+	case AUDIT_QUERY_TENANT:
 		url = "/query-editor/queries"
-	case "Project":
+	case AUDIT_QUERY_PROJECT:
 		url = fmt.Sprintf("/query-editor/sessions/%v/queries?projectId=%v", auditSessionId, levelId)
 	default:
 		return queries, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
@@ -794,19 +799,37 @@ func (c Cx1Client) DeleteAuditQueryByName(auditSessionId, level, levelID, langua
 
 func (q AuditQuery) CreateTenantOverride() AuditQuery {
 	new_query := q
-	new_query.Level = "Corp"
-	new_query.LevelID = "Corp"
+	new_query.Level = AUDIT_QUERY_TENANT
+	new_query.LevelID = AUDIT_QUERY_TENANT
 	return new_query
 }
 func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
 	new_query := q
-	new_query.Level = "Project"
+	new_query.Level = AUDIT_QUERY_PROJECT
 	new_query.LevelID = projectId
 	return new_query
 }
 func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
 	new_query := q
-	new_query.Level = "Team"
+	new_query.Level = AUDIT_QUERY_APPLICATION
 	new_query.LevelID = applicationId
 	return new_query
+}
+
+func (q AuditQuery) ToQuery() Query {
+	return Query{
+		QueryID:            q.QueryID,
+		Level:              q.Level,
+		LevelID:            q.LevelID,
+		Path:               q.Path,
+		Name:               q.Name,
+		Group:              q.Group,
+		Language:           q.Language,
+		Severity:           GetSeverity(q.Severity),
+		CweID:              q.Cwe,
+		IsExecutable:       q.IsExecutable,
+		QueryDescriptionId: q.CxDescriptionId,
+		Custom:             q.Level != AUDIT_QUERY_PRODUCT,
+		EditorKey:          q.Key,
+	}
 }

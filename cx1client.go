@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ var cxOrigin = "Cx1-Golang-Client"
 var astAppID string
 var tenantID string
 var tenantOwner *TenantOwner
+var cxVersion VersionInfo
 
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -259,6 +261,11 @@ func (c *Cx1Client) InitializeClient() {
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
 	_, _ = c.GetTenantOwner()
+	cxVersion, _ = c.GetVersion()
+	if cxVersion.CheckCxOne("3.12.7") >= 0 {
+		AUDIT_QUERY_TENANT = "Tenant"
+		AUDIT_QUERY_APPLICATION = "Application"
+	}
 
 	err := c.RefreshFlags()
 	if err != nil {
@@ -395,4 +402,42 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 
 func (v VersionInfo) String() string {
 	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
+}
+
+// version check returns -1 (current cx1 version lower), 0 (equal), 1 (current cx1 version greater)
+func (v VersionInfo) CheckCxOne(version string) int {
+	check := versionStringToInts(version)
+	cx1 := versionStringToInts(v.CxOne)
+
+	if check[0] < cx1[0] {
+		return 1
+	} else if check[0] > cx1[0] {
+		return -1
+	} else {
+		if check[1] < cx1[1] {
+			return 1
+		} else if check[1] > cx1[1] {
+			return -1
+		} else {
+			if check[2] < cx1[2] {
+				return 1
+			} else if check[2] > cx1[2] {
+				return -1
+			} else {
+				return 0
+			}
+		}
+	}
+}
+
+func versionStringToInts(version string) []int64 {
+	if version == "" {
+		return []int64{0, 0, 0}
+	}
+	str := strings.Split(version, ".")
+	ints := make([]int64, len(str))
+	for id, val := range str {
+		ints[id], _ = strconv.ParseInt(val, 10, 64)
+	}
+	return ints
 }

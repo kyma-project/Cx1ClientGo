@@ -100,12 +100,12 @@ func main() {
 	}
 
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
-	queries, err := cx1client.GetAuditQueriesByLevelID(session.ID, "Project", project.ProjectID)
+	queries, err := cx1client.GetAuditQueriesByLevelID(session.ID, cx1client.AUDIT_QUERY_PROJECT, project.ProjectID)
 	if err != nil {
 		logger.Errorf("Failed to get queries for project: %s", err)
 	} else {
 		for _, q := range queries {
-			if q.Level != "Cx" {
+			if q.Level != cx1client.AUDIT_QUERY_PRODUCT {
 				logger.Infof(" - %v", q.String())
 			}
 		}
@@ -132,7 +132,7 @@ func main() {
 func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session string) Cx1ClientGo.AuditQuery {
 	logger.Infof("Creating corp override under session %v", session)
 	// First query: Tenant-level override of an existing query
-	baseQuery, err := cx1client.GetAuditQueryByName(session, "Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery, err := cx1client.GetAuditQueryByName(session, cx1client.AUDIT_QUERY_PRODUCT, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
@@ -157,7 +157,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 		logger.Infof("Saved new query %v", newCorpOverride.String())
 	}
 
-	nq, err := cx1client.GetAuditQueryByName(session, "Corp", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	nq, err := cx1client.GetAuditQueryByName(session, cx1client.AUDIT_QUERY_TENANT, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Failed to get new corp query: %s", err)
 	}
@@ -169,7 +169,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session, applicationId string) Cx1ClientGo.AuditQuery {
 	logger.Infof("Creating application-level override under session %v", session)
 	// First query: Tenant-level override of an existing query
-	baseQuery, err := cx1client.GetAuditQueryByName(session, "Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery, err := cx1client.GetAuditQueryByName(session, cx1client.AUDIT_QUERY_PRODUCT, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
@@ -207,7 +207,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session, projectId string) Cx1ClientGo.AuditQuery {
 	logger.Infof("Creating project override under session %v", session)
 	// First query: Tenant-level override of an existing query
-	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery, err := cx1client.GetQueryByName(cx1client.AUDIT_QUERY_PRODUCT, "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
@@ -275,7 +275,7 @@ func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, sessi
 		logger.Infof("Saved override %v", newQuery.String())
 	}
 
-	nq, err := cx1client.GetQueryByName("Corp", "Java", "Java_Spring", "TestQuery")
+	nq, err := cx1client.GetQueryByName(cx1client.AUDIT_QUERY_TENANT, "Java", "Java_Spring", "TestQuery")
 	if err != nil {
 		logger.Fatalf("Failed to get new corp query: %s", err)
 	}

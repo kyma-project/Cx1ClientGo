@@ -109,19 +109,20 @@ type ApplicationRule struct {
 type AuditQuery struct {
 	QueryID            uint64 `json:"Id,string"`
 	Level              string
+	LevelID            string `json:"-"`
 	Path               string
 	Modified           string
 	Source             string
-	Cwe                int64
+	Name               string `json:"-"`
+	Group              string `json:"-"`
+	Language           string `json:"-"`
 	Severity           uint
+	Cwe                int64
 	IsExecutable       bool
 	CxDescriptionId    int64
 	QueryDescriptionId string
-
-	Language string `json:"-"`
-	Group    string `json:"-"`
-	Name     string `json:"-"`
-	LevelID  string `json:"-"`
+	Key                string
+	Title              string
 }
 
 type AuditQueryMetadata struct {
@@ -277,14 +278,21 @@ type ConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID            uint64 `json:"queryID,string"`
+	QueryID uint64 `json:"queryID,string"`
+	Level   string `json:"-"`
+	LevelID string `json:"-"`
+	Path    string `json:"-"`
+	//Modified		   string `json:"-"`
+	//Source string
 	Name               string `json:"queryName"`
 	Group              string `json:"group"`
 	Language           string `json:"language"`
 	Severity           string `json:"severity"`
 	CweID              int64  `json:"cweID"`
+	IsExecutable       bool
 	QueryDescriptionId int64  `json:"queryDescriptionId"`
 	Custom             bool   `json:"custom"`
+	EditorKey          string `json:"-"`
 }
 
 type QueryGroup struct {
