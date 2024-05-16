@@ -28,7 +28,6 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
 	q.LevelID = level
 
@@ -49,7 +48,6 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
 	if strings.EqualFold(q.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q.Level, AUDIT_QUERY_PRODUCT) {
 		q.LevelID = q.Level
@@ -87,7 +85,6 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, err
 	applicationId := ""
 
 	for id := range queries {
-		queries[id].ParsePath()
 		switch queries[id].Level {
 		case AUDIT_QUERY_TENANT:
 			queries[id].LevelID = AUDIT_QUERY_TENANT
@@ -177,7 +174,7 @@ func (c Cx1Client) UpdateQuery(query AuditQuery) error {
 		Path:   query.Path,
 		Source: query.Source,
 		Metadata: QueryUpdateMetadata{
-			Severity: query.Severity,
+			Severity: GetSeverityID(query.Severity),
 		},
 	}
 

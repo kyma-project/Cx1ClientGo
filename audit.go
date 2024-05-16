@@ -597,7 +597,7 @@ func (c Cx1Client) AuditCreateCorpQuery(auditSessionId string, query AuditQuery)
 	qc.Path = folder
 	qc.Metadata.IsExecutable = query.IsExecutable
 	qc.Metadata.Path = query.Path
-	qc.Metadata.Severity = query.Severity
+	qc.Metadata.Severity = GetSeverityID(query.Severity)
 
 	jsonBody, _ := json.Marshal(qc)
 
@@ -623,7 +623,7 @@ func (c Cx1Client) UpdateAuditQuery(auditSessionId string, query AuditQuery) err
 		Path:   query.Path,
 		Source: query.Source,
 		Metadata: QueryUpdateMetadata{
-			Severity: query.Severity,
+			Severity: GetSeverityID(query.Severity),
 		},
 	}
 
@@ -686,12 +686,6 @@ func (c Cx1Client) AuditGetScanSourcesByID(auditSessionId string) ([]AuditScanSo
 func (q AuditQuery) String() string {
 	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
 }
-func (q *AuditQuery) ParsePath() {
-	s := strings.Split(q.Path, "/")
-	q.Language = s[1]
-	q.Group = s[2]
-	q.Name = s[3]
-}
 
 func (c Cx1Client) GetAuditQueryByName(auditSessionId, level, language, group, query string) (AuditQuery, error) {
 	c.logger.Debugf("Get %v audit query by name: %v -> %v -> %v", level, language, group, query)
@@ -707,7 +701,6 @@ func (c Cx1Client) GetAuditQueryByName(auditSessionId, level, language, group, q
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
 	q.LevelID = level
 
@@ -727,7 +720,6 @@ func (c Cx1Client) GetAuditQueryByPath(auditSessionId, level, path string) (Audi
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
 	if strings.EqualFold(q.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q.Level, AUDIT_QUERY_PRODUCT) {
 		q.LevelID = q.Level
@@ -759,10 +751,6 @@ func (c Cx1Client) GetAuditQueriesByLevelID(auditSessionId, level, levelId strin
 	err = json.Unmarshal(response, &queries)
 	if err != nil {
 		return queries, err
-	}
-
-	for id := range queries {
-		queries[id].ParsePath()
 	}
 
 	return queries, nil
@@ -825,7 +813,7 @@ func (q AuditQuery) ToQuery() Query {
 		Name:               q.Name,
 		Group:              q.Group,
 		Language:           q.Language,
-		Severity:           GetSeverity(q.Severity),
+		Severity:           q.Severity,
 		CweID:              q.Cwe,
 		IsExecutable:       q.IsExecutable,
 		QueryDescriptionId: q.CxDescriptionId,

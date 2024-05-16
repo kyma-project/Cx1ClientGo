@@ -60,6 +60,8 @@ type ClientVars struct {
 	AuditScanPollingDelaySeconds              int
 	AuditCompilePollingMaxSeconds             int
 	AuditCompilePollingDelaySeconds           int
+	AuditLanguagePollingMaxSeconds            int
+	AuditLanguagePollingDelaySeconds          int
 	ScanPollingMaxSeconds                     int
 	ScanPollingDelaySeconds                   int
 	ProjectApplicationLinkPollingMaxSeconds   int
@@ -113,10 +115,10 @@ type AuditQuery struct {
 	Path               string
 	Modified           string
 	Source             string
-	Name               string `json:"-"`
-	Group              string `json:"-"`
-	Language           string `json:"-"`
-	Severity           uint
+	Name               string
+	Group              string
+	Language           string `json:"lang"`
+	Severity           string
 	Cwe                int64
 	IsExecutable       bool
 	CxDescriptionId    int64
