@@ -109,7 +109,7 @@ type ApplicationRule struct {
 }
 
 type AuditQuery struct {
-	QueryID            uint64 `json:"Id,string"`
+	QueryID            uint64
 	Level              string
 	LevelID            string `json:"-"`
 	Path               string
@@ -123,8 +123,20 @@ type AuditQuery struct {
 	IsExecutable       bool
 	CxDescriptionId    int64
 	QueryDescriptionId string
-	Key                string
+	Key                string `json:"id"`
 	Title              string
+	SastID             uint64 `json:"sastId"`
+}
+
+type AuditQueryTree struct {
+	IsLeaf bool
+	Title  string
+	Key    string
+	Data   struct {
+		Level    string
+		Severity string
+	}
+	Children []AuditQueryTree
 }
 
 type AuditQueryMetadata struct {
@@ -160,13 +172,6 @@ type AuditSession struct {
 	ApplicationAssociation bool     `json:"applicationAssociation"`
 	Status                 string   `json:"status"`
 	Value                  []string `json:"value"`
-}
-
-type AuditRequestStatus struct {
-	Completed    bool        `json:"completed"`
-	Value        interface{} `json:"value"`
-	ErrorCode    int         `json:"code"`
-	ErrorMessage string      `json:"message"`
 }
 
 type AuditScanSourceFile struct {
@@ -280,21 +285,22 @@ type ConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID uint64 `json:"queryID,string"`
-	Level   string `json:"-"`
-	LevelID string `json:"-"`
-	Path    string `json:"-"`
-	//Modified		   string `json:"-"`
-	//Source string
+	QueryID            uint64 `json:"queryID,string"`
+	Level              string `json:"level"`
+	LevelID            string `json:"-"`
+	Path               string `json:"path"`
+	Modified           string `json:"-"`
+	Source             string `json:"-"`
 	Name               string `json:"queryName"`
 	Group              string `json:"group"`
 	Language           string `json:"language"`
 	Severity           string `json:"severity"`
 	CweID              int64  `json:"cweID"`
-	IsExecutable       bool
+	IsExecutable       bool   `json:"isExecutable"`
 	QueryDescriptionId int64  `json:"queryDescriptionId"`
 	Custom             bool   `json:"custom"`
-	EditorKey          string `json:"-"`
+	EditorKey          string `json:"key"`
+	SastID             uint64 `json:"sastId"`
 }
 
 type QueryGroup struct {

@@ -347,6 +347,16 @@ func (qg QueryGroup) GetQueryByID(qid uint64) *Query {
 	}
 	return nil
 }
+
+func (qg QueryGroup) GetQueryByLevelAndName(level, name string) *Query {
+	for id, q := range qg.Queries {
+		if q.Name == name && q.Level == level {
+			return &qg.Queries[id]
+		}
+	}
+	return nil
+}
+
 func (qg QueryGroup) GetQueryByLevelAndID(levelID string, qid uint64) *Query {
 	for id, q := range qg.Queries {
 		if q.QueryID == qid && q.LevelID == levelID {
@@ -388,6 +398,19 @@ func (qc QueryCollection) GetQueryLanguageByName(language string) *QueryLanguage
 	}
 	return nil
 }
+
+func (qc QueryCollection) GetQueryByLevelAndName(level, language, group, query string) *Query {
+	ql := qc.GetQueryLanguageByName(language)
+	if ql == nil {
+		return nil
+	}
+	qg := ql.GetQueryGroupByName(group)
+	if qg == nil {
+		return nil
+	}
+	return qg.GetQueryByLevelAndName(level, query)
+}
+
 func (qc QueryCollection) GetQueryByName(language, group, query string) *Query {
 	ql := qc.GetQueryLanguageByName(language)
 	if ql == nil {
@@ -441,8 +464,10 @@ func (qc *QueryCollection) AddAuditQueries(queries *[]AuditQuery) {
 		if qg == nil {
 			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q.ToQuery()}})
 		} else {
-			if qgq := qg.GetQueryByLevelAndID(q.LevelID, q.QueryID); qgq == nil {
+			if qgq := qg.GetQueryByLevelAndName(q.Level, q.Name); qgq == nil {
 				qg.Queries = append(qg.Queries, q.ToQuery())
+			} else {
+				qgq.MergeQuery(q.ToQuery())
 			}
 		}
 	}
@@ -471,9 +496,24 @@ func (qc *QueryCollection) AddQueries(queries *[]Query) {
 		} else {
 			if qgq := qg.GetQueryByLevelAndID(q.LevelID, q.QueryID); qgq == nil {
 				qg.Queries = append(qg.Queries, q)
+			} else {
+				qgq.MergeQuery(q)
 			}
 		}
 	}
+}
+
+func (q *Query) MergeQuery(nq Query) {
+	if q.QueryID == 0 && nq.QueryID != 0 {
+		q.QueryID = nq.QueryID
+	}
+	if q.Path == "" && nq.Path != "" {
+		q.Path = nq.Path
+	}
+	if q.EditorKey == "" && nq.EditorKey != "" {
+		q.EditorKey = nq.EditorKey
+	}
+
 }
 
 func (q Query) String() string {

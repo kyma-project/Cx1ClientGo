@@ -111,7 +111,7 @@ func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, [
 		err = c.AuditSessionKeepAlive(s.Session)
 		if err != nil {
 			c.logger.Tracef("Found an expired session %v, deleting", s.Session)
-			err = c.AuditDeleteSessionByID(s.Session)
+			err = c.AuditDeleteSessionByID_v310(s.Session)
 			if err != nil {
 				c.logger.Errorf("Failed to delete expired session %v: %s", s.Session, err)
 			} else {
@@ -317,7 +317,7 @@ func (c Cx1Client) AuditScanPollingByIDWithTimeout_v310(auditSessionId string, d
 	var err error
 	pollingCounter := 0
 	for !status {
-		status, err = c.AuditGetScanStatusByID(auditSessionId)
+		status, err = c.AuditGetScanStatusByID_v310(auditSessionId)
 		if err != nil {
 			return err
 		}
@@ -532,7 +532,7 @@ func (c Cx1Client) auditGetCompileStatusByID_v310(sessionId string) (bool, error
 }
 
 func (c Cx1Client) AuditCompilePollingByID_v310(auditSessionId string) error {
-	return c.AuditCompilePollingByIDWithTimeout(auditSessionId, c.consts.AuditCompilePollingDelaySeconds, c.consts.AuditCompilePollingMaxSeconds)
+	return c.AuditCompilePollingByIDWithTimeout_v310(auditSessionId, c.consts.AuditCompilePollingDelaySeconds, c.consts.AuditCompilePollingMaxSeconds)
 }
 
 func (c Cx1Client) AuditCompilePollingByIDWithTimeout_v310(auditSessionId string, delaySeconds, maxSeconds int) error {
