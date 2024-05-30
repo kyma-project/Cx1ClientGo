@@ -109,23 +109,13 @@ type ApplicationRule struct {
 }
 
 type AuditQuery struct {
-	QueryID            uint64
-	Level              string
-	LevelID            string `json:"-"`
-	Path               string
-	Modified           string
-	Source             string
-	Name               string
-	Group              string
-	Language           string `json:"lang"`
-	Severity           string
-	Cwe                int64
-	IsExecutable       bool
-	CxDescriptionId    int64
-	QueryDescriptionId string
-	Key                string `json:"id"`
-	Title              string
-	SastID             uint64 `json:"sastId"`
+	Key      string `json:"id"`
+	Name     string
+	Level    string
+	LevelID  string
+	Path     string
+	Source   string
+	Metadata AuditQueryMetadata
 }
 
 type AuditQueryTree struct {
@@ -140,13 +130,13 @@ type AuditQueryTree struct {
 }
 
 type AuditQueryMetadata struct {
-	Cwe                int64
-	CxDescriptionID    int64
-	IsExecutable       bool
-	Modified           string
-	Path               string
-	QueryDescriptionID string
-	Severity           uint
+	Cwe             int64
+	IsExecutable    bool  `json:"executable"`
+	CxDescriptionID int64 `json:"description"`
+	Language        string
+	Group           string
+	Severity        string
+	SastID          uint64
 }
 
 type AuditPermissions struct {
@@ -172,6 +162,8 @@ type AuditSession struct {
 	ApplicationAssociation bool     `json:"applicationAssociation"`
 	Status                 string   `json:"status"`
 	Value                  []string `json:"value"`
+	ProjectID              string   `json:"-"`
+	ApplicationID          string   `json:"-"`
 }
 
 type AuditScanSourceFile struct {

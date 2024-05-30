@@ -108,7 +108,7 @@ func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, [
 
 	sessions := []string{}
 	for _, s := range responseStruct.Metadata {
-		err = c.AuditSessionKeepAlive(s.Session)
+		err = c.AuditSessionKeepAlive_v310(s.Session)
 		if err != nil {
 			c.logger.Tracef("Found an expired session %v, deleting", s.Session)
 			err = c.AuditDeleteSessionByID_v310(s.Session)
@@ -372,7 +372,7 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 		}
 	}
 
-	err = c.AuditSessionKeepAlive(session)
+	err = c.AuditSessionKeepAlive_v310(session)
 	if err != nil {
 		return "", err
 	}
@@ -413,16 +413,16 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 		return "", err
 	}
 
-	c.AuditSessionKeepAlive(session) // one for the road
+	c.AuditSessionKeepAlive_v310(session) // one for the road
 
 	return session, nil
 }
 
-func (c Cx1Client) AuditCompileQuery_v310(auditSessionId string, query AuditQuery) error {
+func (c Cx1Client) AuditCompileQuery_v310(auditSessionId string, query AuditQuery_v310) error {
 	// this wraps "compileQueryFull" and omits parameters that seem to be specific to the CxAudit UI
 	return c.compileQueryFull_v310(auditSessionId, query, false, "cxclientgo", "cxclientgo", "cxclientgo")
 }
-func (c Cx1Client) compileQueryFull_v310(auditSessionId string, query AuditQuery, newquery bool, clientUniqID, fullEditorId, editorId string) error {
+func (c Cx1Client) compileQueryFull_v310(auditSessionId string, query AuditQuery_v310, newquery bool, clientUniqID, fullEditorId, editorId string) error {
 	// returns error if failed, else compiled successfully
 	c.logger.Infof("Triggering compile for query %v under audit session %v", query.String(), auditSessionId)
 
@@ -563,7 +563,7 @@ func (c Cx1Client) AuditCompilePollingByIDWithTimeout_v310(auditSessionId string
 	return fmt.Errorf("unknown error")
 }
 
-func (c Cx1Client) AuditCreateCorpQuery_v310(auditSessionId string, query AuditQuery) (AuditQuery, error) {
+func (c Cx1Client) AuditCreateCorpQuery_v310(auditSessionId string, query AuditQuery_v310) (AuditQuery_v310, error) {
 	folder := fmt.Sprintf("queries/%v/%v/", query.Language, query.Group)
 	var qc struct {
 		Name     string `json:"name"`
@@ -581,25 +581,25 @@ func (c Cx1Client) AuditCreateCorpQuery_v310(auditSessionId string, query AuditQ
 	qc.Path = folder
 	qc.Metadata.IsExecutable = query.IsExecutable
 	qc.Metadata.Path = query.Path
-	qc.Metadata.Severity = GetSeverityID(query.Severity)
+	qc.Metadata.Severity = query.Severity
 
 	jsonBody, _ := json.Marshal(qc)
 
 	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/cx-audit/queries/%v", auditSessionId), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return AuditQuery{}, err
+		return AuditQuery_v310{}, err
 	}
 
 	if string(response) != "" {
-		return AuditQuery{}, fmt.Errorf("creating query returned error: %v", string(response))
+		return AuditQuery_v310{}, fmt.Errorf("creating query returned error: %v", string(response))
 	}
-	return c.GetQueryByName("Corp", query.Language, query.Group, query.Name)
+	return c.GetQueryByName_v310("Corp", query.Language, query.Group, query.Name)
 }
 
 // updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
-func (c Cx1Client) AuditUpdateQuery_v310(auditSessionId string, query AuditQuery) error { // level = projectId or "Corp"
+func (c Cx1Client) AuditUpdateQuery_v310(auditSessionId string, query AuditQuery_v310) error { // level = projectId or "Corp"
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate{
@@ -607,7 +607,7 @@ func (c Cx1Client) AuditUpdateQuery_v310(auditSessionId string, query AuditQuery
 		Path:   query.Path,
 		Source: query.Source,
 		Metadata: QueryUpdateMetadata{
-			Severity: GetSeverityID(query.Severity),
+			Severity: query.Severity,
 		},
 	}
 
@@ -660,8 +660,33 @@ func (q *AuditQuery_v310) ParsePath() {
 	q.Name = s[3]
 }
 
-func (q AuditQuery_v310) ToAuditQuery() AuditQuery {
-	return AuditQuery{
+func (q AuditQuery_v310) ToAuditQuery() AuditQuery_v310 {
+	return AuditQuery_v310{
+		QueryID:            q.QueryID,
+		Level:              q.Level,
+		LevelID:            q.LevelID,
+		Path:               q.Path,
+		Modified:           q.Modified,
+		Source:             q.Source,
+		Name:               q.Name,
+		Group:              q.Group,
+		Language:           q.Language,
+		Severity:           q.Severity,
+		Cwe:                q.Cwe,
+		IsExecutable:       q.IsExecutable,
+		CxDescriptionId:    q.CxDescriptionId,
+		QueryDescriptionId: q.QueryDescriptionId,
+		Key:                q.Key,
+		Title:              q.Title,
+	}
+}
+
+func (q AuditQuery_v310) String() string {
+	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
+}
+
+func (q AuditQuery_v310) ToQuery() Query {
+	return Query{
 		QueryID:            q.QueryID,
 		Level:              q.Level,
 		LevelID:            q.LevelID,
@@ -672,11 +697,11 @@ func (q AuditQuery_v310) ToAuditQuery() AuditQuery {
 		Group:              q.Group,
 		Language:           q.Language,
 		Severity:           GetSeverity(q.Severity),
-		Cwe:                q.Cwe,
+		CweID:              q.Cwe,
 		IsExecutable:       q.IsExecutable,
-		CxDescriptionId:    q.CxDescriptionId,
-		QueryDescriptionId: q.QueryDescriptionId,
-		Key:                q.Key,
-		Title:              q.Title,
+		QueryDescriptionId: q.CxDescriptionId,
+		Custom:             q.Level != AUDIT_QUERY_PRODUCT,
+		EditorKey:          q.Key,
+		SastID:             0,
 	}
 }
