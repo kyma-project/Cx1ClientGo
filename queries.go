@@ -561,16 +561,20 @@ func (q *Query) MergeQuery(nq Query) {
 	if q.LevelID == "" && nq.LevelID != "" {
 		q.LevelID = nq.LevelID
 	}
+
 }
 
 func (q Query) StringDetailed() string {
+	var scope string
 	switch q.Level {
 	case AUDIT_QUERY_PRODUCT:
-		return fmt.Sprintf("Cx: %v -> %v -> %v [ID %v, Key %v]", q.Language, q.Group, q.Name, q.QueryID, q.EditorKey)
+		scope = "Product"
 	case AUDIT_QUERY_TENANT:
-		return fmt.Sprintf("Tenant: %v -> %v -> %v [ID %v, Key %v]", q.Language, q.Group, q.Name, q.QueryID, q.EditorKey)
+		scope = "Tenant"
+	default:
+		scope = fmt.Sprintf("%v %v", q.Level, ShortenGUID(q.LevelID))
 	}
-	return fmt.Sprintf("%v %v: %v -> %v -> %v [ID %v, Key %v]", q.Level, ShortenGUID(q.LevelID), q.Language, q.Group, q.Name, q.QueryID, q.EditorKey)
+	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v, Key %v]", scope, q.Language, q.Group, q.Name, q.Severity, q.QueryID, q.EditorKey)
 }
 
 func (q Query) String() string {
@@ -581,6 +585,19 @@ func (q QueryGroup) String() string {
 }
 func (q QueryLanguage) String() string {
 	return q.Name
+}
+
+func (q Query) GetMetadata() AuditQueryMetadata {
+	return AuditQueryMetadata{
+		Cwe:             q.CweID,
+		IsExecutable:    q.IsExecutable,
+		CxDescriptionID: q.QueryDescriptionId,
+		Language:        q.Language,
+		Group:           q.Group,
+		Severity:        q.Severity,
+		SastID:          q.SastID,
+		Name:            q.Name,
+	}
 }
 
 func (c Cx1Client) QueryLink(q *Query) string {

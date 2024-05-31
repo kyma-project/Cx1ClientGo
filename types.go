@@ -130,13 +130,14 @@ type AuditQueryTree struct {
 }
 
 type AuditQueryMetadata struct {
-	Cwe             int64
-	IsExecutable    bool  `json:"executable"`
-	CxDescriptionID int64 `json:"description"`
-	Language        string
-	Group           string
-	Severity        string
-	SastID          uint64
+	Cwe             int64  `json:"cwe,omitempty"`
+	IsExecutable    bool   `json:"executable"`
+	CxDescriptionID int64  `json:"description,omitempty"`
+	Language        string `json:"language"`
+	Group           string `json:"group"`
+	Severity        string `json:"severity"`
+	SastID          uint64 `json:"sastId,omitempty"`
+	Name            string `json:"name"`
 }
 
 type AuditPermissions struct {

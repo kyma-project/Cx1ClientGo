@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"log"
 	"net/http"
 	"net/url"
@@ -35,10 +34,10 @@ func main() {
 	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	//transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	httpClient.Transport = transport
+	//httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -188,11 +187,22 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 		return nil
 	}
 
-	newCorpOverride, err = cx1client.UpdateQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
-		return nil
+	} else {
+		newCorpOverride = updatedQuery
 	}
+
+	metadata := newCorpOverride.GetMetadata()
+	metadata.Severity = "Low"
+	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newCorpOverride = updatedQuery
+	}
+
 	if err = qc.UpdateNewQuery(&newCorpOverride); err != nil {
 		logger.Errorf("Unable to update query %v from collection: %s", newCorpOverride.String(), err)
 	}
@@ -217,11 +227,22 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 		return nil
 	}
 
-	newApplicationOverride, err = cx1client.UpdateQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
+	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
-		return nil
+	} else {
+		newApplicationOverride = updatedQuery
 	}
+
+	metadata := newApplicationOverride.GetMetadata()
+	metadata.Severity = "Medium"
+	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newApplicationOverride.EditorKey, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newApplicationOverride = updatedQuery
+	}
+
 	qc.UpdateNewQuery(&newApplicationOverride)
 
 	logger.Infof("Created new application override: %v", newApplicationOverride.StringDetailed())
@@ -244,11 +265,22 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 		return nil
 	}
 
-	newProjectOverride, err = cx1client.UpdateQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
+	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
-		return nil
+	} else {
+		newProjectOverride = updatedQuery
 	}
+
+	metadata := newProjectOverride.GetMetadata()
+	metadata.Severity = "High"
+	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newProjectOverride.EditorKey, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newProjectOverride = updatedQuery
+	}
+
 	qc.UpdateNewQuery(&newProjectOverride)
 
 	logger.Infof("Created new project override: %v", newProjectOverride.StringDetailed())

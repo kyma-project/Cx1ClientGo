@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"net/url"
 	"strings"
@@ -518,6 +519,35 @@ func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Quer
 	return c.UpdateQuerySourceByKey(auditSession, queryKey, query.Source)
 }
 
+/*
+This function will update the query metadata, however currently only the Severity of a query can be changed.
+Changes to CWE, description, and other fields will not take effect.
+*/
+func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (Query, error) {
+	jsonBody, err := json.Marshal(metadata)
+	if err != nil {
+		return Query{}, err
+	}
+
+	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/query-editor/sessions/%v/queries/%v/metadata", auditSession.ID, url.QueryEscape(queryKey)), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return Query{}, err
+	}
+
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return Query{}, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	_, err = c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return Query{}, err
+	}
+
+	return c.GetAuditQueryByKey(auditSession, queryKey)
+}
+
 func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (Query, error) {
 	var newQuery Query
 	type QueryUpdate struct {
@@ -557,7 +587,6 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 	}
 
 	return newAuditQuery, nil
-
 }
 
 func (q AuditQuery) ToQuery() Query {
@@ -582,15 +611,46 @@ func (q AuditQuery) ToQuery() Query {
 }
 
 func (q *AuditQuery) CalculateEditorKey() string {
-	queryID := fmt.Sprintf("%s-%s-%s-%s", q.Level, q.Metadata.Language, q.Metadata.Group, q.Name)
-	encodedID := base32.StdEncoding.EncodeToString([]byte(queryID))
-	q.Key = encodedID
-	return encodedID
+	q.Key = calculateEditorKey(q.Level, q.Metadata.Language, q.Metadata.Group, q.Name)
+	return q.Key
 }
 
 func (q *Query) CalculateEditorKey() string {
-	queryID := fmt.Sprintf("%s-%s-%s-%s", q.Level, q.Language, q.Group, q.Name)
+	q.EditorKey = calculateEditorKey(q.Level, q.Language, q.Group, q.Name)
+	return q.EditorKey
+}
+
+func calculateEditorKey(level, language, group, name string) string {
+	queryID := fmt.Sprintf("%s-%s-%s-%s", level, language, group, name)
 	encodedID := base32.StdEncoding.EncodeToString([]byte(queryID))
-	q.EditorKey = encodedID
 	return encodedID
+}
+
+func (q AuditQuery) CalculateQueryID() (uint64, error) {
+	id, err := getAstQueryID(q.Metadata.Language, q.Metadata.Name, q.Metadata.Group)
+	return id, err
+}
+
+func (q *Query) CalculateQueryID() (uint64, error) {
+	id, err := getAstQueryID(q.Language, q.Name, q.Group)
+	if err != nil {
+		return 0, err
+	}
+	q.QueryID = id
+	return id, nil
+}
+
+func getAstQueryID(language, name, group string) (uint64, error) {
+	sourcePath := fmt.Sprintf("queries/%s/%s/%s/%s.cs", language, group, name, name)
+	queryID, queryIDErr := hash(sourcePath)
+	if queryIDErr != nil {
+		return 0, queryIDErr
+	}
+	return queryID, nil
+}
+
+func hash(s string) (uint64, error) {
+	h := fnv.New64()
+	_, err := h.Write([]byte(s))
+	return h.Sum64(), err
 }
