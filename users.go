@@ -165,6 +165,71 @@ func (c Cx1Client) CreateUser(newuser User) (User, error) {
 	}
 }
 
+/*
+CreateSAMLUser will directly create a user that can log in via SAML, requiring the internal identifiers that are used within the identity provider.
+
+This function requires some special behavior that's not supported by the standard user type, and requires a two-step process of creating and then updating the user.
+*/
+func (c Cx1Client) CreateSAMLUser(newuser User, idpAlias, idpUserId, idpUserName string) (User, error) {
+	var samlUser User
+	jsonData, err := json.Marshal(newuser)
+	if err != nil {
+		return samlUser, err
+	}
+
+	var userMap map[string]interface{}
+	err = json.Unmarshal(jsonData, &userMap) // need to add properties to the submitted json
+	if err != nil {
+		return samlUser, err
+	}
+
+	userMap["totp"] = false
+	fedId := make([]map[string]string, 1)
+	fedId[0] = make(map[string]string)
+
+	fedId[0]["identityProvider"] = idpAlias
+	fedId[0]["userId"] = idpUserId
+	fedId[0]["userName"] = idpUserName
+
+	userMap["federatedIdentities"] = fedId
+
+	jsonData, _ = json.Marshal(userMap)
+
+	response, err := c.sendRequestRawIAM(http.MethodPost, "/auth/admin", "/users", bytes.NewReader(jsonData), nil)
+	if err != nil {
+		return samlUser, err
+	}
+
+	location := response.Header.Get("Location")
+	if location == "" {
+		return samlUser, fmt.Errorf("unknown error - no Location header redirect in response")
+	}
+
+	lastInd := strings.LastIndex(location, "/")
+	guid := location[lastInd+1:]
+	c.logger.Tracef(" New SAML user ID: %v", guid)
+	response2, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v", guid), nil, nil)
+	if err != nil {
+		return samlUser, err
+	}
+
+	err = json.Unmarshal(response2, &userMap)
+	if err != nil {
+		return samlUser, err
+	}
+
+	userMap["requiredActions"] = []string{}
+
+	jsonData, _ = json.Marshal(userMap)
+	_, err = c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/users/%v", guid), bytes.NewReader(jsonData), nil)
+
+	if err != nil {
+		return samlUser, err
+	}
+
+	return c.GetUserByID(guid)
+}
+
 func (c Cx1Client) UpdateUser(user *User) error {
 	c.logger.Debugf("Updating user %v", user.String())
 	jsonBody, err := json.Marshal(user)
