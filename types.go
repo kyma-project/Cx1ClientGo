@@ -58,10 +58,10 @@ type ClientVars struct {
 	AuditEnginePollingDelaySeconds            int
 	AuditScanPollingMaxSeconds                int
 	AuditScanPollingDelaySeconds              int
-	AuditLanguagePollingMaxSeconds            int
-	AuditLanguagePollingDelaySeconds          int
 	AuditCompilePollingMaxSeconds             int
 	AuditCompilePollingDelaySeconds           int
+	AuditLanguagePollingMaxSeconds            int
+	AuditLanguagePollingDelaySeconds          int
 	ScanPollingMaxSeconds                     int
 	ScanPollingDelaySeconds                   int
 	ProjectApplicationLinkPollingMaxSeconds   int
@@ -109,31 +109,69 @@ type ApplicationRule struct {
 }
 
 type AuditQuery struct {
-	QueryID            uint64 `json:"Id,string"`
-	Level              string
-	Path               string
-	Modified           string
-	Source             string
-	Cwe                int64
-	Severity           uint
-	IsExecutable       bool
-	CxDescriptionId    int64
-	QueryDescriptionId string
+	Key      string `json:"id"`
+	Name     string
+	Level    string
+	LevelID  string
+	Path     string
+	Source   string
+	Metadata AuditQueryMetadata
+}
 
-	Language string `json:"-"`
-	Group    string `json:"-"`
-	Name     string `json:"-"`
-	LevelID  string `json:"-"`
+type AuditQueryTree struct {
+	IsLeaf bool
+	Title  string
+	Key    string
+	Data   struct {
+		Level    string
+		Severity string
+	}
+	Children []AuditQueryTree
 }
 
 type AuditQueryMetadata struct {
-	Cwe                int64
-	CxDescriptionID    int64
-	IsExecutable       bool
-	Modified           string
-	Path               string
-	QueryDescriptionID string
-	Severity           uint
+	Cwe             int64  `json:"cwe,omitempty"`
+	IsExecutable    bool   `json:"executable"`
+	CxDescriptionID int64  `json:"description,omitempty"`
+	Language        string `json:"language"`
+	Group           string `json:"group"`
+	Severity        string `json:"severity"`
+	SastID          uint64 `json:"sastId,omitempty"`
+	Name            string `json:"name"`
+}
+
+type AuditPermissions struct {
+	View   bool `json:"view"`
+	Update bool `json:"update"`
+	Create bool `json:"create"`
+	Delete bool `json:"delete"`
+}
+
+type AuditSession struct {
+	ID   string `json:"id"`
+	Data struct {
+		Status      string `json:"status"`
+		RequestID   string `json:"requestId"`
+		Permissions struct {
+			Tenant      AuditPermissions `json:"tenant"`
+			Project     AuditPermissions `json:"project"`
+			Application AuditPermissions `json:"application"`
+		} `json:"permissions"`
+	} `json:"data"`
+	ProjectName            string   `json:"projectName"`
+	QueryBuilder           bool     `json:"queryBuilder"`
+	ApplicationAssociation bool     `json:"applicationAssociation"`
+	Status                 string   `json:"status"`
+	Value                  []string `json:"value"`
+	ProjectID              string   `json:"-"`
+	ApplicationID          string   `json:"-"`
+}
+
+type AuditScanSourceFile struct {
+	IsLeaf   bool                  `json:"isLeaf"`
+	Title    string                `json:"title"`
+	Key      string                `json:"key"`
+	Children []AuditScanSourceFile `json:"children"`
 }
 
 type AuthenticationProvider struct {
@@ -241,13 +279,21 @@ type ConfigurationSetting struct {
 
 type Query struct {
 	QueryID            uint64 `json:"queryID,string"`
+	Level              string `json:"level"`
+	LevelID            string `json:"-"`
+	Path               string `json:"path"`
+	Modified           string `json:"-"`
+	Source             string `json:"-"`
 	Name               string `json:"queryName"`
 	Group              string `json:"group"`
 	Language           string `json:"language"`
 	Severity           string `json:"severity"`
 	CweID              int64  `json:"cweID"`
+	IsExecutable       bool   `json:"isExecutable"`
 	QueryDescriptionId int64  `json:"queryDescriptionId"`
 	Custom             bool   `json:"custom"`
+	EditorKey          string `json:"key"`
+	SastID             uint64 `json:"sastId"`
 }
 
 type QueryGroup struct {

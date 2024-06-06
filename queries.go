@@ -1,7 +1,6 @@
 package Cx1ClientGo
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,23 +12,49 @@ import (
 	This file contains the generic query-related functions that do not need a valid audit session.
 */
 
-func (c Cx1Client) GetQueryByID(qid uint64) (Query, error) {
-	return Query{}, fmt.Errorf("this API call no longer exists")
-	/*
-		var q Query
-		// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-		response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/queries/%d", qid), nil, nil)
-		if err != nil {
-			return q, err
-		}
-		err = json.Unmarshal(response, &q)
-		if err != nil {
-			c.logger.Tracef("Failed to parse %v", string(response))
-		}
-		return q, err*/
+// this struct is used specifically for the to-be-deprecated /cx-audit/queries endpoint
+type AuditQuery_v312 struct {
+	QueryID            uint64 `json:"Id,string"`
+	Level              string
+	LevelID            string `json:"-"`
+	Path               string
+	Modified           string
+	Source             string
+	Name               string
+	Group              string
+	Language           string `json:"lang"`
+	Severity           string
+	Cwe                int64
+	IsExecutable       bool
+	CxDescriptionId    int64
+	QueryDescriptionId string
+	Key                string
+	Title              string
+}
+
+func (q AuditQuery_v312) ToQuery() Query {
+	return Query{
+		QueryID:            q.QueryID,
+		Level:              q.Level,
+		LevelID:            q.LevelID,
+		Path:               q.Path,
+		Modified:           q.Modified,
+		Source:             q.Source,
+		Name:               q.Name,
+		Group:              q.Group,
+		Language:           q.Language,
+		Severity:           q.Severity,
+		CweID:              q.Cwe,
+		IsExecutable:       q.IsExecutable,
+		QueryDescriptionId: q.CxDescriptionId,
+		Custom:             q.Level != AUDIT_QUERY_PRODUCT,
+		EditorKey:          q.Key,
+		SastID:             0,
+	}
 }
 
 func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQuery, error) {
+	c.depwarn("GetQueryByName", "GetAuditQueryByName")
 	c.logger.Debugf("Get %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
@@ -43,7 +68,6 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
 	q.LevelID = level
 
@@ -51,6 +75,7 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 }
 
 func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
+	c.depwarn("GetQueryByPath", "GetAuditQueryByPath")
 	c.logger.Debugf("Get %v query by path: %v", level, path)
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v", level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
@@ -63,9 +88,8 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 	if err != nil {
 		return q, err
 	}
-	q.ParsePath()
 
-	if strings.EqualFold(q.Level, "corp") || strings.EqualFold(q.Level, "cx") {
+	if strings.EqualFold(q.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q.Level, AUDIT_QUERY_PRODUCT) {
 		q.LevelID = q.Level
 	} else { // team or project-level override, so store the ID
 		q.LevelID = level
@@ -73,15 +97,18 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 	return q, nil
 }
 
-func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, error) {
+func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
+	c.depwarn("GetQueriesByLevelID", "GetAuditQueriesByLevelID")
 	c.logger.Debugf("Get all queries for %v", level)
 
 	var url string
-	var queries []AuditQuery
+
+	var queries_v312 []AuditQuery_v312
+	var queries []Query
 	switch level {
-	case "Corp":
+	case AUDIT_QUERY_TENANT:
 		url = "/cx-audit/queries"
-	case "Project":
+	case AUDIT_QUERY_PROJECT:
 		url = fmt.Sprintf("/cx-audit/queries?projectId=%v", levelId)
 	default:
 		return queries, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
@@ -92,18 +119,44 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, err
 		return queries, err
 	}
 
-	err = json.Unmarshal(response, &queries)
+	err = json.Unmarshal(response, &queries_v312)
 	if err != nil {
 		return queries, err
 	}
 
-	for id := range queries {
-		queries[id].ParsePath()
+	applicationId := ""
+
+	for id := range queries_v312 {
+		switch queries_v312[id].Level {
+		case AUDIT_QUERY_TENANT:
+			queries_v312[id].LevelID = AUDIT_QUERY_TENANT
+		case AUDIT_QUERY_PROJECT:
+			queries_v312[id].LevelID = levelId
+		case AUDIT_QUERY_APPLICATION:
+			if applicationId == "" {
+				project, err := c.GetProjectByID(levelId)
+				if err != nil {
+					return queries, fmt.Errorf("failed to retrieve project with ID %v", levelId)
+				}
+				if len(project.Applications) == 0 {
+					return queries, fmt.Errorf("project %v has an application-level query defined, but has no application associated", project.String())
+				} else if len(project.Applications) > 1 {
+					return queries, fmt.Errorf("project %v has an application-level query defined, but has multiple application associated", project.String())
+				}
+				applicationId = project.Applications[0]
+			}
+			queries_v312[id].LevelID = applicationId
+		case AUDIT_QUERY_PRODUCT:
+			queries_v312[id].LevelID = AUDIT_QUERY_PRODUCT
+		}
+
+		queries = append(queries, queries_v312[id].ToQuery())
 	}
 
 	return queries, nil
 }
 
+/*
 func FindQueryByName(queries []AuditQuery, level, language, group, name string) (AuditQuery, error) {
 	for _, q := range queries {
 		if q.Level == level && q.Language == language && q.Group == group && q.Name == name {
@@ -119,6 +172,7 @@ func (c Cx1Client) DeleteQuery(query AuditQuery) error {
 }
 
 func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query string) error {
+	c.depwarn("DeleteQueryByName", "DeleteAuditQueryByName")
 	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
@@ -141,145 +195,53 @@ func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query stri
 	}
 
 	return nil
-}
-
-func (q AuditQuery) CreateTenantOverride() AuditQuery {
-	new_query := q
-	new_query.Level = "Corp"
-	new_query.LevelID = "Corp"
-	return new_query
-}
-func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
-	new_query := q
-	new_query.Level = "Project"
-	new_query.LevelID = projectId
-	return new_query
-}
-func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
-	new_query := q
-	new_query.Level = "Team"
-	new_query.LevelID = applicationId
-	return new_query
-}
-
-/*
-
-	WebAudit use cases:
-		1. Create new Corp/Tenant-level query with no existing Cx (product default) query: AuditNewQuery function + AuditCreateCorpQuery (POST to /cx-audit/queries/:session)
-		2. Create new Corp/Tenant-level over an existing Cx (product default) query: UpdateQuery function (PUT to /cx-audit/queries/Corp)
-		3. Create new override on Project or Application level, where a Corp/Tenant or Cx-level base query already exists: UpdateQuery function (PUT to /cx-audit/queries/ProjectID or AppID)
-		4. Update an existing override on Corp/Tenant, Project, or Application level: UpdateQuery function (PUT to /cx-audit/queries/:level
-
-	Note: Application-level queries are not yet implemented in Cx1.
-
-*/
-
-func (c Cx1Client) AuditNewQuery(language, group, name string) (AuditQuery, error) {
-	newQuery, err := c.GetQueryByName("Corp", language, "CxDefaultQueryGroup", "CxDefaultQuery")
-	if err != nil {
-		return newQuery, err
-	}
-
-	newQuery.Group = group
-	newQuery.Name = name
-	return newQuery, nil
-}
-
-// updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
-// this will be fixed in the future
-// PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
-func (c Cx1Client) UpdateQuery(query AuditQuery) error { // level = projectId or "Corp"
-	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
-
-	q := QueryUpdate{
-		Name:   query.Name,
-		Path:   query.Path,
-		Source: query.Source,
-		Metadata: QueryUpdateMetadata{
-			Severity: query.Severity,
-		},
-	}
-
-	return c.UpdateQueries(query.LevelID, []QueryUpdate{q})
-}
-
-func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
-	c.depwarn("UpdateQuery/UpdateQueries", "AuditUpdateQuery/AuditUpdateQueries")
-	jsonBody, _ := json.Marshal(queries)
-	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
-	if err != nil {
-		if err.Error()[0:8] == "HTTP 405" {
-			return fmt.Errorf("this endpoint is no longer available - please use AuditUpdateQuery/AuditUpdateQueries instead")
-		} else {
-			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
-			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
-			for _, q := range queries {
-				aq, err2 := c.GetQueryByPath(level, q.Path)
-				if err2 != nil {
-					return fmt.Errorf("retrieving the query %v on %v to check status failed with: %s", q.Path, level, err2)
-				}
-				if aq.Source != q.Source {
-					return fmt.Errorf("query %v on %v source was not updated", q.Path, level)
-				}
-				c.logger.Warnf("Query %v on %v was successfully updated despite the error", q.Path, level)
-			}
-		}
-		return nil
-	}
-	if string(response) == "" {
-		return nil
-	}
-
-	var responseStruct struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	}
-
-	err = json.Unmarshal(response, &responseStruct)
-	if err != nil {
-		return err
-	}
-
-	if responseStruct.Type == "ERROR" {
-		return fmt.Errorf("error while saving queries: %v", responseStruct.Message)
-	} else {
-		return nil
-	}
-}
+} */
 
 func (c Cx1Client) GetQueries() (QueryCollection, error) {
-	c.logger.Debug("Get Cx1 Queries Collection")
+	c.depwarn("GetQueries", "GetAuditQueries")
 	var qc QueryCollection
+	q, err := c.GetPresetQueries()
+	if err != nil {
+		return qc, err
+	}
+	qc.AddQueries(&q)
 
-	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
+	aq, err := c.GetQueriesByLevelID(AUDIT_QUERY_TENANT, "")
 	if err != nil {
 		return qc, err
 	}
 
+	qc.AddQueries(&aq)
+
+	return qc, nil
+}
+
+func (c Cx1Client) GetPresetQueries() ([]Query, error) {
 	queries := []Query{}
+
+	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
+	if err != nil {
+		return queries, err
+	}
 
 	err = json.Unmarshal(response, &queries)
 	if err != nil {
 		c.logger.Tracef("Failed to parse %v", string(response))
 	}
 
-	for _, q := range queries {
-		ql := qc.GetQueryLanguageByName(q.Language)
+	for i := range queries {
+		queries[i].IsExecutable = true // all queries in the preset are executable
 
-		if ql == nil {
-			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
-			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
-		}
-
-		qg := ql.GetQueryGroupByName(q.Group)
-		if qg == nil {
-			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q}})
+		if queries[i].Custom {
+			queries[i].Level = AUDIT_QUERY_TENANT
+			queries[i].LevelID = AUDIT_QUERY_TENANT
 		} else {
-			qg.Queries = append(qg.Queries, q)
+			queries[i].Level = AUDIT_QUERY_PRODUCT
+			queries[i].LevelID = AUDIT_QUERY_PRODUCT
 		}
 	}
 
-	return qc, err
+	return queries, err
 }
 
 func (c Cx1Client) GetQueryMappings() (map[uint64]uint64, error) {
@@ -311,6 +273,10 @@ func (c Cx1Client) GetQueryMappings() (map[uint64]uint64, error) {
 
 // convenience
 func (c Cx1Client) GetSeverityID(severity string) uint {
+	return GetSeverityID(severity)
+}
+
+func GetSeverityID(severity string) uint {
 	switch strings.ToUpper(severity) {
 	case "INFO":
 		return 0
@@ -322,8 +288,30 @@ func (c Cx1Client) GetSeverityID(severity string) uint {
 		return 2
 	case "HIGH":
 		return 3
+	case "CRITICAL":
+		return 4
 	}
 	return 0
+}
+
+func (c Cx1Client) GetSeverity(severity uint) string {
+	return GetSeverity(severity)
+}
+
+func GetSeverity(severity uint) string {
+	switch severity {
+	case 0:
+		return "Info"
+	case 1:
+		return "Low"
+	case 2:
+		return "Medium"
+	case 3:
+		return "High"
+	case 4:
+		return "Critical"
+	}
+	return "Unknown"
 }
 
 func (qg QueryGroup) GetQueryByName(name string) *Query {
@@ -335,6 +323,49 @@ func (qg QueryGroup) GetQueryByName(name string) *Query {
 	return nil
 }
 
+func (qg QueryGroup) GetQueryByID(qid uint64) *Query {
+	for id, q := range qg.Queries {
+		if q.QueryID == qid {
+			return &qg.Queries[id]
+		}
+	}
+	return nil
+}
+
+func (qg QueryGroup) GetQueryByLevelAndName(level, levelID, name string) *Query {
+	for id, q := range qg.Queries {
+		if q.Name == name && q.Level == level && q.LevelID == levelID {
+			return &qg.Queries[id]
+		}
+	}
+	return nil
+}
+
+func (qg QueryGroup) GetQueryByLevelAndID(level, levelID string, qid uint64) *Query {
+	for id, q := range qg.Queries {
+		if q.QueryID == qid && q.LevelID == levelID && q.Level == level {
+			return &qg.Queries[id]
+		}
+	}
+	return nil
+}
+
+func (ql QueryLanguage) GetQueryByID(qid uint64) *Query {
+	for id := range ql.QueryGroups {
+		if q := ql.QueryGroups[id].GetQueryByID(qid); q != nil {
+			return q
+		}
+	}
+	return nil
+}
+func (ql QueryLanguage) GetQueryByLevelAndID(level, levelID string, qid uint64) *Query {
+	for id := range ql.QueryGroups {
+		if q := ql.QueryGroups[id].GetQueryByLevelAndID(level, levelID, qid); q != nil {
+			return q
+		}
+	}
+	return nil
+}
 func (ql QueryLanguage) GetQueryGroupByName(name string) *QueryGroup {
 	for id, qg := range ql.QueryGroups {
 		if strings.EqualFold(qg.Name, name) {
@@ -351,6 +382,19 @@ func (qc QueryCollection) GetQueryLanguageByName(language string) *QueryLanguage
 	}
 	return nil
 }
+
+func (qc QueryCollection) GetQueryByLevelAndName(level, levelID, language, group, query string) *Query {
+	ql := qc.GetQueryLanguageByName(language)
+	if ql == nil {
+		return nil
+	}
+	qg := ql.GetQueryGroupByName(group)
+	if qg == nil {
+		return nil
+	}
+	return qg.GetQueryByLevelAndName(level, levelID, query)
+}
+
 func (qc QueryCollection) GetQueryByName(language, group, query string) *Query {
 	ql := qc.GetQueryLanguageByName(language)
 	if ql == nil {
@@ -364,17 +408,175 @@ func (qc QueryCollection) GetQueryByName(language, group, query string) *Query {
 }
 
 func (qc QueryCollection) GetQueryByID(qid uint64) *Query {
-	for _, ql := range qc.QueryLanguages {
-		for _, qg := range ql.QueryGroups {
-			for id, q := range qg.Queries {
-				if q.QueryID == qid {
-					return &qg.Queries[id]
-				}
-			}
+	for id := range qc.QueryLanguages {
+		if q := qc.QueryLanguages[id].GetQueryByID(qid); q != nil {
+			return q
 		}
 	}
 	return nil
 }
+
+func (qc QueryCollection) GetQueryByLevelAndID(level, levelID string, qid uint64) *Query {
+	for id := range qc.QueryLanguages {
+		if q := qc.QueryLanguages[id].GetQueryByLevelAndID(level, levelID, qid); q != nil {
+			return q
+		}
+	}
+	return nil
+}
+
+func (qc *QueryCollection) GetQueryCount() uint {
+	var total uint = 0
+	for lid := range qc.QueryLanguages {
+		for gid := range qc.QueryLanguages[lid].QueryGroups {
+			total += uint(len(qc.QueryLanguages[lid].QueryGroups[gid].Queries))
+		}
+	}
+	return total
+}
+
+/*
+func (qc *QueryCollection) AddAuditQueries(queries *[]AuditQuery) {
+	for _, q := range *queries {
+		ql := qc.GetQueryLanguageByName(q.Language)
+
+		if ql == nil {
+			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
+			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
+		}
+
+		qg := ql.GetQueryGroupByName(q.Group)
+		if qg == nil {
+			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q.ToQuery()}})
+		} else {
+			if qgq := qg.GetQueryByLevelAndName(q.Level, q.Name); qgq == nil {
+				qg.Queries = append(qg.Queries, q.ToQuery())
+			} else {
+				qgq.MergeQuery(q.ToQuery())
+			}
+		}
+	}
+}
+*/
+
+func (qc *QueryCollection) AddQuery(q Query) {
+	ql := qc.GetQueryLanguageByName(q.Language)
+
+	if ql == nil {
+		qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
+		ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
+	}
+
+	qg := ql.GetQueryGroupByName(q.Group)
+	if qg == nil {
+		ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q}})
+	} else {
+		var qgq *Query = nil
+		if q.QueryID == 0 {
+			tq := qg.GetQueryByName(q.Name)
+			if tq != nil {
+				q.QueryID = tq.QueryID
+			}
+		}
+		if q.QueryID != 0 {
+			qgq = qg.GetQueryByLevelAndID(q.Level, q.LevelID, q.QueryID)
+		}
+		if qgq == nil {
+			qgq = qg.GetQueryByLevelAndName(q.Level, q.LevelID, q.Name)
+		}
+
+		if qgq == nil {
+			qg.Queries = append(qg.Queries, q)
+		} else {
+			qgq.MergeQuery(q)
+		}
+	}
+}
+
+func (qc *QueryCollection) UpdateNewQuery(query *Query) error {
+	ql := qc.GetQueryLanguageByName(query.Language)
+	if ql == nil {
+		return fmt.Errorf("query language '%v' is not included in this query collection, refresh the collection", query.Language)
+	}
+	qg := ql.GetQueryGroupByName(query.Group)
+	if qg == nil {
+		return fmt.Errorf("query group '%v' is not included in this query collection, refresh the collection", query.Group)
+	}
+	qgq := qg.GetQueryByLevelAndName(query.Level, query.LevelID, query.Name)
+	if qgq != nil {
+		query.MergeQuery(*qgq)
+		return nil
+	}
+
+	qgq = qg.GetQueryByLevelAndName(AUDIT_QUERY_TENANT, AUDIT_QUERY_TENANT, query.Name)
+	if qgq != nil {
+		query.MergeQuery(*qgq)
+		return nil
+	}
+
+	qgq = qg.GetQueryByLevelAndName(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, query.Name)
+	if qgq != nil {
+		query.MergeQuery(*qgq)
+		return nil
+	}
+
+	return fmt.Errorf("query '%v' inherits from an unknown query, refresh the collection", query.Name)
+}
+
+func (qc *QueryCollection) AddQueries(queries *[]Query) {
+	for _, q := range *queries {
+		qc.AddQuery(q)
+	}
+}
+
+func (qc *QueryCollection) GetCustomQueryCollection() QueryCollection {
+	var cqc QueryCollection
+
+	for _, ql := range qc.QueryLanguages {
+		for _, qg := range ql.QueryGroups {
+			for _, qq := range qg.Queries {
+				if qq.Custom {
+					cqc.AddQuery(qq)
+				}
+			}
+		}
+	}
+
+	return cqc
+}
+
+func (q *Query) MergeQuery(nq Query) {
+	if q.QueryID == 0 && nq.QueryID != 0 {
+		q.QueryID = nq.QueryID
+	}
+	if q.Path == "" && nq.Path != "" {
+		q.Path = nq.Path
+	}
+	if q.EditorKey == "" && nq.EditorKey != "" {
+		q.EditorKey = nq.EditorKey
+	}
+	if q.Level == "" && nq.Level != "" {
+		q.Level = nq.Level
+	}
+	if q.LevelID == "" && nq.LevelID != "" {
+		q.LevelID = nq.LevelID
+	}
+
+}
+
+func (q Query) StringDetailed() string {
+	var scope string
+	switch q.Level {
+	case AUDIT_QUERY_PRODUCT:
+		scope = "Product"
+	case AUDIT_QUERY_TENANT:
+		scope = "Tenant"
+	default:
+		scope = fmt.Sprintf("%v %v", q.Level, ShortenGUID(q.LevelID))
+	}
+	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v, Key %v]", scope, q.Language, q.Group, q.Name, q.Severity, q.QueryID, q.EditorKey)
+}
+
 func (q Query) String() string {
 	return fmt.Sprintf("[%d] %v -> %v -> %v", q.QueryID, q.Language, q.Group, q.Name)
 }
@@ -383,6 +585,19 @@ func (q QueryGroup) String() string {
 }
 func (q QueryLanguage) String() string {
 	return q.Name
+}
+
+func (q Query) GetMetadata() AuditQueryMetadata {
+	return AuditQueryMetadata{
+		Cwe:             q.CweID,
+		IsExecutable:    q.IsExecutable,
+		CxDescriptionID: q.QueryDescriptionId,
+		Language:        q.Language,
+		Group:           q.Group,
+		Severity:        q.Severity,
+		SastID:          q.SastID,
+		Name:            q.Name,
+	}
 }
 
 func (c Cx1Client) QueryLink(q *Query) string {
