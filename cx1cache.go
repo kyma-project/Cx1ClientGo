@@ -48,7 +48,7 @@ func (c *Cx1Cache) ClientSummary() string {
 }
 
 func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
-	client.logger.Info("Refreshing projects in cache")
+	client.logger.Info("Refreshing projects in Cx1 cache")
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
@@ -59,7 +59,7 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
-	client.logger.Info("Refreshing applications in cache")
+	client.logger.Info("Refreshing applications in Cx1 cache")
 	var err error
 	if !c.ApplicationRefresh {
 		c.ApplicationRefresh = true
@@ -70,7 +70,7 @@ func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshClients(client *Cx1Client) error {
-	client.logger.Info("Refreshing OIDC Clients in cache")
+	client.logger.Info("Refreshing OIDC Clients in Cx1 cache")
 	var err error
 	if !c.ClientRefresh {
 		c.ClientRefresh = true
@@ -81,7 +81,7 @@ func (c *Cx1Cache) RefreshClients(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
-	client.logger.Info("Refreshing groups in cache")
+	client.logger.Info("Refreshing groups in Cx1 cache")
 	var err error
 	if !c.GroupRefresh {
 		c.GroupRefresh = true
@@ -92,7 +92,7 @@ func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
-	client.logger.Info("Refreshing users in cache")
+	client.logger.Info("Refreshing users in Cx1 cache")
 	var err error
 	if !c.UserRefresh {
 		c.UserRefresh = true
@@ -103,7 +103,7 @@ func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
-	client.logger.Info("Refreshing queries in cache")
+	client.logger.Info("Refreshing queries in Cx1 cache")
 	var err error
 	if !c.QueryRefresh {
 		c.QueryRefresh = true
@@ -114,7 +114,7 @@ func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
-	client.logger.Info("Refreshing presets in cache")
+	client.logger.Info("Refreshing presets in Cx1 cache")
 	var err error
 	if !c.PresetRefresh {
 		c.PresetRefresh = true
@@ -136,7 +136,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
-	client.logger.Info("Refreshing roles in cache")
+	client.logger.Info("Refreshing roles in Cx1 cache")
 	var err error
 	if !c.RoleRefresh {
 		c.RoleRefresh = true
