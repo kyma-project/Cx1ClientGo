@@ -121,7 +121,7 @@ func (c Cx1Client) CreateClient(name string, notificationEmails []string, secret
 		return newClient, fmt.Errorf("failed to add 'groups' client scope to new client: %s", err)
 	}
 
-	err = c.saveClient(newClient)
+	err = c.SaveClient(newClient)
 	return newClient, err
 }
 
@@ -152,7 +152,7 @@ func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
 	return client, nil
 }
 
-func (c Cx1Client) saveClient(client OIDCClient) error {
+func (c Cx1Client) SaveClient(client OIDCClient) error {
 	c.logger.Debugf("Updating OIDC client with name %v", client.ClientID)
 
 	jsonBody, _ := json.Marshal(client.OIDCClientRaw)
