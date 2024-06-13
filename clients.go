@@ -152,6 +152,10 @@ func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
 	return client, nil
 }
 
+/*
+The SaveClient function should be used sparingly - it will use the contents of the OIDCClient.OIDCClientRaw variable of type map[string]interface{} in the PUT request.
+As a result, changes to the member variables in the OIDCClient object itself (creator & clientsecretexpiry) will not be saved using this method unless they are also updated in OIDCClientRaw.
+*/
 func (c Cx1Client) SaveClient(client OIDCClient) error {
 	c.logger.Debugf("Updating OIDC client with name %v", client.ClientID)
 

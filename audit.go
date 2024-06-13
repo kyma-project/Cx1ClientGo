@@ -155,7 +155,7 @@ func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, req
 }
 
 func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
-	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession)
+	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
 	var status interface{}
 	var err error
 	var completed bool
@@ -225,7 +225,7 @@ func (c Cx1Client) GetAuditSessionByID(engine, projectId, scanId string) (AuditS
 }
 
 func (c Cx1Client) AuditGetScanSourcesByID(auditSession *AuditSession) ([]AuditScanSourceFile, error) {
-	c.logger.Debugf("Get %v audit scan sources", auditSession)
+	c.logger.Debugf("Get audit session %v scan sources", auditSession.ID)
 
 	var sourcefiles []AuditScanSourceFile
 
