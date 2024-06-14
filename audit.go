@@ -95,11 +95,19 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 		return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
 	}
 
-	_, err = c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
+	languageResponse, err := c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
 
 	if err != nil {
 		c.logger.Errorf("Error while creating audit engine: %s", err)
 		return session, err
+	}
+	if languages, ok := languageResponse.([]interface{}); ok {
+		for _, lang := range languages {
+			session.Languages = append(session.Languages, lang.(string))
+		}
+
+	} else {
+		return session, fmt.Errorf("failed to get languages from response: %v", languageResponse)
 	}
 
 	session.ProjectID = projectId
@@ -110,7 +118,7 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 	return session, nil
 }
 
-func (c Cx1Client) AuditDeleteSessionByID(auditSession *AuditSession) error {
+func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
@@ -156,22 +164,22 @@ func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, req
 
 func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
 	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
-	var status interface{}
+	var value interface{}
 	var err error
-	var completed bool
+	var status bool
 	pollingCounter := 0
 
 	for {
-		completed, status, err = c.AuditGetRequestStatusByID(auditSession, requestId)
+		status, value, err = c.AuditGetRequestStatusByID(auditSession, requestId)
 		if err != nil {
-			return status, err
+			return value, err
 		}
 
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return status, fmt.Errorf("audit request %v polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", requestId, pollingCounter)
+			return value, fmt.Errorf("audit request %v polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", requestId, pollingCounter)
 		}
 
-		if completed {
+		if status {
 			break
 		}
 
@@ -179,7 +187,7 @@ func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession,
 		pollingCounter += delaySeconds
 	}
 
-	return status, nil
+	return value, nil
 }
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
@@ -653,4 +661,13 @@ func hash(s string) (uint64, error) {
 	h := fnv.New64()
 	_, err := h.Write([]byte(s))
 	return h.Sum64(), err
+}
+
+func (s AuditSession) HasLanguage(language string) bool {
+	for _, lang := range s.Languages {
+		if strings.EqualFold(lang, language) {
+			return true
+		}
+	}
+	return false
 }
