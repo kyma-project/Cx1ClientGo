@@ -298,6 +298,13 @@ func (c Cx1Client) GetSeverity(severity uint) string {
 	return GetSeverity(severity)
 }
 
+func (c Cx1Client) GetCx1QueryFromSAST(sastId uint64, language, group, name string, mapping *map[uint64]uint64, qc *QueryCollection) *Query {
+	if cx1id, ok := (*mapping)[sastId]; ok {
+		return qc.GetQueryByID(cx1id)
+	}
+	return qc.GetQueryByName(language, group, name)
+}
+
 func GetSeverity(severity uint) string {
 	switch severity {
 	case 0:
@@ -493,6 +500,9 @@ func (qc *QueryCollection) AddQuery(q Query) {
 	}
 }
 
+/*
+This function may not be necessary in the future, it is used to fill in missing fields when creating new queries
+*/
 func (qc *QueryCollection) UpdateNewQuery(query *Query) error {
 	ql := qc.GetQueryLanguageByName(query.Language)
 	if ql == nil {
