@@ -606,12 +606,10 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 
 	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
 	if err != nil {
-		return newQuery, err
+		return newQuery, fmt.Errorf("failed due to %s: %v", err, responseObj)
 	}
 
-	status := responseObj.(map[string]interface{})
-
-	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, status["id"].(string))
+	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
 	if err != nil {
 		return newQuery, err
 	}
