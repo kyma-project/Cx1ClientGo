@@ -165,6 +165,8 @@ type AuditSession struct {
 	Value                  []string `json:"value"`
 	ProjectID              string   `json:"-"`
 	ApplicationID          string   `json:"-"`
+	ScanID                 string   `json:"-"`
+	Languages              []string `json:"-"`
 }
 
 type AuditScanSourceFile struct {

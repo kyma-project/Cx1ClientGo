@@ -95,11 +95,19 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 		return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
 	}
 
-	_, err = c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
+	languageResponse, err := c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
 
 	if err != nil {
 		c.logger.Errorf("Error while creating audit engine: %s", err)
 		return session, err
+	}
+	if languages, ok := languageResponse.([]interface{}); ok {
+		for _, lang := range languages {
+			session.Languages = append(session.Languages, lang.(string))
+		}
+
+	} else {
+		return session, fmt.Errorf("failed to get languages from response: %v", languageResponse)
 	}
 
 	session.ProjectID = projectId
@@ -110,7 +118,7 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 	return session, nil
 }
 
-func (c Cx1Client) AuditDeleteSessionByID(auditSession *AuditSession) error {
+func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
@@ -155,23 +163,23 @@ func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, req
 }
 
 func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
-	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession)
-	var status interface{}
+	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
+	var value interface{}
 	var err error
-	var completed bool
+	var status bool
 	pollingCounter := 0
 
 	for {
-		completed, status, err = c.AuditGetRequestStatusByID(auditSession, requestId)
+		status, value, err = c.AuditGetRequestStatusByID(auditSession, requestId)
 		if err != nil {
-			return status, err
+			return value, err
 		}
 
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return status, fmt.Errorf("audit request %v polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", requestId, pollingCounter)
+			return value, fmt.Errorf("audit request %v polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", requestId, pollingCounter)
 		}
 
-		if completed {
+		if status {
 			break
 		}
 
@@ -179,7 +187,7 @@ func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession,
 		pollingCounter += delaySeconds
 	}
 
-	return status, nil
+	return value, nil
 }
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
@@ -225,7 +233,7 @@ func (c Cx1Client) GetAuditSessionByID(engine, projectId, scanId string) (AuditS
 }
 
 func (c Cx1Client) AuditGetScanSourcesByID(auditSession *AuditSession) ([]AuditScanSourceFile, error) {
-	c.logger.Debugf("Get %v audit scan sources", auditSession)
+	c.logger.Debugf("Get audit session %v scan sources", auditSession.ID)
 
 	var sourcefiles []AuditScanSourceFile
 
@@ -473,6 +481,10 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 		newQuery.LevelID = AUDIT_QUERY_TENANT
 	}
 
+	if newQuery.QueryID == 0 {
+		newQuery.QueryID = baseQuery.QueryID
+	}
+
 	return newQuery, nil
 }
 
@@ -522,8 +534,10 @@ func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Quer
 /*
 This function will update the query metadata, however currently only the Severity of a query can be changed.
 Changes to CWE, description, and other fields will not take effect.
+Also, the data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
 */
 func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (Query, error) {
+	c.logger.Debugf("Updating query metadata by key: %v", queryKey)
 	jsonBody, err := json.Marshal(metadata)
 	if err != nil {
 		return Query{}, err
@@ -548,7 +562,23 @@ func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey
 	return c.GetAuditQueryByKey(auditSession, queryKey)
 }
 
+func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *Query, metadata AuditQueryMetadata) (Query, error) {
+	if query.EditorKey == "" {
+		return Query{}, fmt.Errorf("Query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, err := c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, metadata)
+	if err != nil {
+		return Query{}, err
+	}
+	newQuery.MergeQuery(*query)
+	return newQuery, nil
+}
+
+/*
+The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
+*/
 func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (Query, error) {
+	c.logger.Debugf("Updating query source by key: %v", queryKey)
 	var newQuery Query
 	type QueryUpdate struct {
 		ID     string `json:"id"`
@@ -587,6 +617,18 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 	}
 
 	return newAuditQuery, nil
+}
+
+func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, source string) (Query, error) {
+	if query.EditorKey == "" {
+		return Query{}, fmt.Errorf("Query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
+	if err != nil {
+		return Query{}, err
+	}
+	newQuery.MergeQuery(*query)
+	return newQuery, nil
 }
 
 func (q AuditQuery) ToQuery() Query {
@@ -653,4 +695,13 @@ func hash(s string) (uint64, error) {
 	h := fnv.New64()
 	_, err := h.Write([]byte(s))
 	return h.Sum64(), err
+}
+
+func (s AuditSession) HasLanguage(language string) bool {
+	for _, lang := range s.Languages {
+		if strings.EqualFold(lang, language) {
+			return true
+		}
+	}
+	return false
 }

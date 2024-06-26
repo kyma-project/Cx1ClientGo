@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
 	"net/http"
 	"net/url"
@@ -34,10 +35,10 @@ func main() {
 	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
-	//transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	//httpClient.Transport = transport
+	httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -90,7 +91,7 @@ func main() {
 
 	defer func() {
 		logger.Infof("Terminating audit session %v", session.ID)
-		err = cx1client.AuditDeleteSessionByID(&session)
+		err = cx1client.AuditDeleteSession(&session)
 		if err != nil {
 			logger.Errorf("Failed to terminate audit session: %s", err)
 		}
@@ -149,7 +150,7 @@ func main() {
 		logger.Errorf("Error getting the query collection: %s", err)
 	}
 
-	aq, err = cx1client.GetAuditQueriesByLevelID(&session, cx1client.QueryTypeProject(), project.ProjectID)
+	aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
 	if err != nil {
 		logger.Errorf("Error getting queries: %s", err)
 	}
@@ -181,7 +182,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 		return nil
 	}
 
-	newCorpOverride, err := cx1client.CreateQueryOverride(session, cx1client.QueryTypeTenant(), baseQuery)
+	newCorpOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_TENANT, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
@@ -221,7 +222,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newApplicationOverride, err := cx1client.CreateQueryOverride(session, cx1client.QueryTypeApplication(), baseQuery)
+	newApplicationOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_APPLICATION, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
@@ -259,7 +260,7 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newProjectOverride, err := cx1client.CreateQueryOverride(session, cx1client.QueryTypeProject(), baseQuery)
+	newProjectOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_PROJECT, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil

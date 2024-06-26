@@ -705,3 +705,22 @@ func (q AuditQuery_v310) ToQuery() Query {
 		SastID:             0,
 	}
 }
+
+func (q AuditQuery_v310) CreateTenantOverride() AuditQuery_v310 {
+	new_query := q
+	new_query.Level = "Corp"
+	new_query.LevelID = "Corp"
+	return new_query
+}
+func (q AuditQuery_v310) CreateProjectOverrideByID(projectId string) AuditQuery_v310 {
+	new_query := q
+	new_query.Level = "Project"
+	new_query.LevelID = projectId
+	return new_query
+}
+func (q AuditQuery_v310) CreateApplicationOverrideByID(applicationId string) AuditQuery_v310 {
+	new_query := q
+	new_query.Level = "Team"
+	new_query.LevelID = applicationId
+	return new_query
+}
