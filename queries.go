@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -349,6 +350,10 @@ func (qg QueryGroup) GetQueryByLevelAndName(level, levelID, name string) *Query 
 }
 
 func (qg QueryGroup) GetQueryByLevelAndID(level, levelID string, qid uint64) *Query {
+	if qid == 0 {
+		return nil
+	}
+
 	for id, q := range qg.Queries {
 		if q.QueryID == qid && q.LevelID == levelID && q.Level == level {
 			return &qg.Queries[id]
@@ -415,6 +420,10 @@ func (qc QueryCollection) GetQueryByName(language, group, query string) *Query {
 }
 
 func (qc QueryCollection) GetQueryByID(qid uint64) *Query {
+	if qid == 0 {
+		return nil
+	}
+
 	for id := range qc.QueryLanguages {
 		if q := qc.QueryLanguages[id].GetQueryByID(qid); q != nil {
 			return q
@@ -424,6 +433,10 @@ func (qc QueryCollection) GetQueryByID(qid uint64) *Query {
 }
 
 func (qc QueryCollection) GetQueryByLevelAndID(level, levelID string, qid uint64) *Query {
+	if qid == 0 {
+		return nil
+	}
+
 	for id := range qc.QueryLanguages {
 		if q := qc.QueryLanguages[id].GetQueryByLevelAndID(level, levelID, qid); q != nil {
 			return q
@@ -571,7 +584,9 @@ func (q *Query) MergeQuery(nq Query) {
 	if q.LevelID == "" && nq.LevelID != "" {
 		q.LevelID = nq.LevelID
 	}
-
+	if q.Source == "" && nq.Source != "" {
+		q.Source = nq.Source
+	}
 }
 
 func (q Query) StringDetailed() string {
@@ -584,7 +599,7 @@ func (q Query) StringDetailed() string {
 	default:
 		scope = fmt.Sprintf("%v %v", q.Level, ShortenGUID(q.LevelID))
 	}
-	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v, Key %v]", scope, q.Language, q.Group, q.Name, q.Severity, q.QueryID, q.EditorKey)
+	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v, Key %v]", scope, q.Language, q.Group, q.Name, q.Severity, ShortenGUID(strconv.FormatUint(q.QueryID, 10)), ShortenGUID(q.EditorKey))
 }
 
 func (q Query) String() string {

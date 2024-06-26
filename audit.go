@@ -481,6 +481,10 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 		newQuery.LevelID = AUDIT_QUERY_TENANT
 	}
 
+	if newQuery.QueryID == 0 {
+		newQuery.QueryID = baseQuery.QueryID
+	}
+
 	return newQuery, nil
 }
 
@@ -530,8 +534,10 @@ func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Quer
 /*
 This function will update the query metadata, however currently only the Severity of a query can be changed.
 Changes to CWE, description, and other fields will not take effect.
+Also, the data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
 */
 func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (Query, error) {
+	c.logger.Debugf("Updating query metadata by key: %v", queryKey)
 	jsonBody, err := json.Marshal(metadata)
 	if err != nil {
 		return Query{}, err
@@ -556,7 +562,23 @@ func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey
 	return c.GetAuditQueryByKey(auditSession, queryKey)
 }
 
+func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *Query, metadata AuditQueryMetadata) (Query, error) {
+	if query.EditorKey == "" {
+		return Query{}, fmt.Errorf("Query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, err := c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, metadata)
+	if err != nil {
+		return Query{}, err
+	}
+	newQuery.MergeQuery(*query)
+	return newQuery, nil
+}
+
+/*
+The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
+*/
 func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (Query, error) {
+	c.logger.Debugf("Updating query source by key: %v", queryKey)
 	var newQuery Query
 	type QueryUpdate struct {
 		ID     string `json:"id"`
@@ -595,6 +617,18 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 	}
 
 	return newAuditQuery, nil
+}
+
+func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, source string) (Query, error) {
+	if query.EditorKey == "" {
+		return Query{}, fmt.Errorf("Query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
+	if err != nil {
+		return Query{}, err
+	}
+	newQuery.MergeQuery(*query)
+	return newQuery, nil
 }
 
 func (q AuditQuery) ToQuery() Query {
