@@ -190,6 +190,7 @@ func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditS
 			break
 		}
 
+		// TODO: also refresh the audit session
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
 		pollingCounter += delaySeconds
 	}
@@ -198,6 +199,7 @@ func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditS
 }
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
+	// TODO: keep track of the last-keepalive and don't spam the server, especially with the polling fix
 	_, err := c.sendRequest(http.MethodPatch, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
