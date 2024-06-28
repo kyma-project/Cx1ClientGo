@@ -128,6 +128,7 @@ func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 }
 
 func (c Cx1Client) AuditGetRequestStatusByID(auditSession *AuditSession, requestId string) (bool, interface{}, error) {
+	c.logger.Debugf("Get status of request %v for audit session %v", requestId, auditSession.ID)
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/requests/%v", auditSession.ID, requestId), nil, nil)
 	type AuditRequestStatus struct {
 		Completed    bool        `json:"completed"`

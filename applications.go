@@ -236,6 +236,15 @@ func (a *Application) AddRule(ruletype, value string) {
 	}
 }
 
+func (a *Application) RemoveRule(rule *ApplicationRule) {
+	for i := 0; i < len(a.Rules); i++ {
+		if rule == &a.Rules[i] {
+			a.Rules = append(a.Rules[:i], a.Rules[i+1:]...)
+			return
+		}
+	}
+}
+
 func (a *Application) AssignProject(project *Project) {
 	a.AddRule("project.name.in", project.Name)
 }
