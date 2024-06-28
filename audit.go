@@ -128,6 +128,7 @@ func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 }
 
 func (c Cx1Client) AuditGetRequestStatusByID(auditSession *AuditSession, requestId string) (bool, interface{}, error) {
+	c.logger.Debugf("Get status of request %v for audit session %v", requestId, auditSession.ID)
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/requests/%v", auditSession.ID, requestId), nil, nil)
 	type AuditRequestStatus struct {
 		Completed    bool        `json:"completed"`
@@ -159,10 +160,16 @@ func (c Cx1Client) AuditGetRequestStatusByID(auditSession *AuditSession, request
 }
 
 func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, requestId string) (interface{}, error) {
-	return c.AuditRequestStatusByIDWithTimeout(auditSession, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
+	return c.AuditRequestStatusPollingByIDWithTimeout(auditSession, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
 }
 
+// this function should've always been called AuditRequestStatusPollingByIDWithTimeout
 func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
+	c.depwarn("AuditRequestStatusByIDWithTimeout", "AuditRequestStatusPollingByIDWithTimeout")
+	return c.AuditRequestStatusPollingByIDWithTimeout(auditSession, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
+}
+
+func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
 	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
 	var value interface{}
 	var err error
@@ -183,6 +190,7 @@ func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession,
 			break
 		}
 
+		// TODO: also refresh the audit session
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
 		pollingCounter += delaySeconds
 	}
@@ -191,6 +199,7 @@ func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession,
 }
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
+	// TODO: keep track of the last-keepalive and don't spam the server, especially with the polling fix
 	_, err := c.sendRequest(http.MethodPatch, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
@@ -606,12 +615,10 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 
 	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
 	if err != nil {
-		return newQuery, err
+		return newQuery, fmt.Errorf("failed due to %s: %v", err, responseObj)
 	}
 
-	status := responseObj.(map[string]interface{})
-
-	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, status["id"].(string))
+	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
 	if err != nil {
 		return newQuery, err
 	}
