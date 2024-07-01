@@ -351,7 +351,7 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 	available, sessions, err := c.AuditFindSessionsByID_v310(projectId, scanId)
 	if err != nil {
 		c.logger.Errorf("Failed to retrieve sessions: %s", err)
-		return "", err
+		//return "", err
 	}
 	session := ""
 	reusedSession := false
