@@ -621,7 +621,7 @@ func (c Cx1Client) AuditUpdateQueries_v310(auditSessionId, level string, queries
 		// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 		c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
 		for _, q := range queries {
-			aq, err2 := c.GetQueryByPath(level, q.Path)
+			aq, err2 := c.GetQueryByPath_v310(level, q.Path)
 			if err2 != nil {
 				return fmt.Errorf("retrieving the query %v on %v to check status failed with: %s", q.Path, level, err2)
 			}
@@ -660,7 +660,7 @@ func (q *AuditQuery_v310) ParsePath() {
 	q.Name = s[3]
 }
 
-func (q AuditQuery_v310) ToAuditQuery() AuditQuery_v310 {
+func (q Query) ToAuditQuery_v310() AuditQuery_v310 {
 	return AuditQuery_v310{
 		QueryID:            q.QueryID,
 		Level:              q.Level,
@@ -671,13 +671,13 @@ func (q AuditQuery_v310) ToAuditQuery() AuditQuery_v310 {
 		Name:               q.Name,
 		Group:              q.Group,
 		Language:           q.Language,
-		Severity:           q.Severity,
-		Cwe:                q.Cwe,
+		Severity:           GetSeverityID(q.Severity),
+		Cwe:                q.CweID,
 		IsExecutable:       q.IsExecutable,
-		CxDescriptionId:    q.CxDescriptionId,
-		QueryDescriptionId: q.QueryDescriptionId,
-		Key:                q.Key,
-		Title:              q.Title,
+		CxDescriptionId:    q.GetMetadata().CxDescriptionID,
+		QueryDescriptionId: "",
+		Key:                q.EditorKey,
+		Title:              q.Name,
 	}
 }
 

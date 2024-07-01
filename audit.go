@@ -628,7 +628,7 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 
 func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, source string) (Query, error) {
 	if query.EditorKey == "" {
-		return Query{}, fmt.Errorf("Query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+		return Query{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 	newQuery, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
 	if err != nil {
@@ -636,6 +636,22 @@ func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, s
 	}
 	newQuery.MergeQuery(*query)
 	return newQuery, nil
+}
+
+// convenience/wrapper function
+func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *Query) error {
+	if query.EditorKey == "" {
+		return fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+
+	_, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, query.Source)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, query.GetMetadata())
+
+	return err
 }
 
 func (q AuditQuery) ToQuery() Query {

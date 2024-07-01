@@ -33,7 +33,7 @@ func (c Cx1Client) GetQueryByName_v310(level, language, group, query string) (Au
 
 	q_v310.LevelID = level
 
-	return q_v310.ToAuditQuery(), nil
+	return q_v310, nil
 }
 
 func (c Cx1Client) GetQueryByPath_v310(level, path string) (AuditQuery_v310, error) {
@@ -198,7 +198,7 @@ func (c Cx1Client) UpdateQueries_v310(level string, queries []QueryUpdate) error
 			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
 			for _, q := range queries {
-				aq, err2 := c.GetQueryByPath(level, q.Path)
+				aq, err2 := c.GetQueryByPath_v310(level, q.Path)
 				if err2 != nil {
 					return fmt.Errorf("retrieving the query %v on %v to check status failed with: %s", q.Path, level, err2)
 				}

@@ -54,6 +54,7 @@ func (q AuditQuery_v312) ToQuery() Query {
 	}
 }
 
+/*
 func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQuery, error) {
 	c.depwarn("GetQueryByName", "GetAuditQueryByName")
 	c.logger.Debugf("Get %v query by name: %v -> %v -> %v", level, language, group, query)
@@ -96,7 +97,7 @@ func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
 		q.LevelID = level
 	}
 	return q, nil
-}
+} */
 
 func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
 	c.depwarn("GetQueriesByLevelID", "GetAuditQueriesByLevelID")
