@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 /*
@@ -13,55 +12,27 @@ import (
 	This file contains the generic query-related functions that do not need a valid audit session.
 */
 
-func (c Cx1Client) GetQueryByName_v310(level, language, group, query string) (AuditQuery_v310, error) {
-	c.depwarn("GetQueryByName", "GetAuditQueryByName")
+func (c Cx1Client) GetQueryByName_v310(level, levelid, language, group, query string) (AuditQuery_v310, error) {
+	c.depwarn("GetQueryByName_v310", "GetQueries + QueryCollection.Get*")
 	c.logger.Debugf("Get %v query by name: %v -> %v -> %v", level, language, group, query)
-	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", level, path), nil, nil)
+	queries, err := c.GetQueriesByLevelID_v310(level, levelid)
 	if err != nil {
 		return AuditQuery_v310{}, err
 	}
 
-	var q_v310 AuditQuery_v310
-	var q AuditQuery_v310
-	err = json.Unmarshal(response, &q_v310)
-	if err != nil {
-		return q, err
-	}
-	q_v310.ParsePath()
-
-	q_v310.LevelID = level
-
-	return q_v310, nil
-}
-
-func (c Cx1Client) GetQueryByPath_v310(level, path string) (AuditQuery_v310, error) {
-	c.depwarn("GetQueryByPath", "GetAuditQueryByPath")
-	c.logger.Debugf("Get %v query by path: %v", level, path)
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v", level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
+	aq, err := FindQueryByName_v310(queries, levelid, language, group, query)
 	if err != nil {
 		return AuditQuery_v310{}, err
 	}
 
-	var q_v310 AuditQuery_v310
-	err = json.Unmarshal(response, &q_v310)
-	if err != nil {
-		return q_v310, err
-	}
-	q_v310.ParsePath()
+	aq.LevelID = levelid
 
-	if strings.EqualFold(q_v310.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q_v310.Level, AUDIT_QUERY_PRODUCT) {
-		q_v310.LevelID = q_v310.Level
-	} else { // team or project-level override, so store the ID
-		q_v310.LevelID = level
-	}
-	return q_v310, nil
+	return aq, nil
 }
 
 func (c Cx1Client) GetQueriesByLevelID_v310(level, levelId string) ([]AuditQuery_v310, error) {
-	c.depwarn("GetQueryByLevelID", "GetAuditQueryByLevelID")
+	c.depwarn("GetQueryByLevelID_v310", "GetAuditQueryByLevelID")
 	c.logger.Debugf("Get all queries for %v", level)
 
 	var url string
@@ -131,7 +102,7 @@ func (c Cx1Client) DeleteQuery_v310(query AuditQuery_v310) error {
 }
 
 func (c Cx1Client) DeleteQueryByName_v310(level, levelID, language, group, query string) error {
-	c.depwarn("DeleteQueryByName", "DeleteAuditQueryByName")
+	c.depwarn("DeleteQueryByName_v310", "DeleteAuditQueryByName")
 	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
@@ -139,7 +110,7 @@ func (c Cx1Client) DeleteQueryByName_v310(level, levelID, language, group, query
 	if err != nil {
 		// currently there's a bug where the response can be error 500 even if it succeeded.
 
-		q, err2 := c.GetQueryByName_v310(levelID, language, group, query)
+		q, err2 := c.GetQueryByName_v310(level, levelID, language, group, query)
 		if err2 != nil {
 			c.logger.Warnf("error while deleting query (%s) followed by error while checking if the query was deleted (%s) - assuming the query was deleted", err, err2)
 			return nil
@@ -157,8 +128,8 @@ func (c Cx1Client) DeleteQueryByName_v310(level, levelID, language, group, query
 }
 
 func (c Cx1Client) AuditNewQuery_v310(language, group, name string) (AuditQuery_v310, error) {
-	c.depwarn("AuditNewQuery", "CreateAuditQuery")
-	newQuery, err := c.GetQueryByName_v310(AUDIT_QUERY_TENANT, language, "CxDefaultQueryGroup", "CxDefaultQuery")
+	c.depwarn("AuditNewQuery_v310", "CreateQueryOverride")
+	newQuery, err := c.GetQueryByName_v310(AUDIT_QUERY_TENANT, AUDIT_QUERY_TENANT, language, "CxDefaultQueryGroup", "CxDefaultQuery")
 	if err != nil {
 		return newQuery, err
 	}
@@ -172,23 +143,23 @@ func (c Cx1Client) AuditNewQuery_v310(language, group, name string) (AuditQuery_
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
 func (c Cx1Client) UpdateQuery_v310(query AuditQuery_v310) error {
-	c.depwarn("UpdateQuery", "UpdateAuditQuery")
+	c.depwarn("UpdateQuery_v310", "UpdateQuery*")
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
-	q := QueryUpdate{
+	q := QueryUpdate_v310{
 		Name:   query.Name,
 		Path:   query.Path,
 		Source: query.Source,
-		Metadata: QueryUpdateMetadata{
+		Metadata: QueryUpdateMetadata_v310{
 			Severity: query.Severity,
 		},
 	}
 
-	return c.UpdateQueries_v310(query.LevelID, []QueryUpdate{q})
+	return c.UpdateQueries_v310(query.Level, query.LevelID, []QueryUpdate_v310{q})
 }
 
-func (c Cx1Client) UpdateQueries_v310(level string, queries []QueryUpdate) error {
-	c.depwarn("UpdateQuery/UpdateQueries", "UpdateAuditQuery/UpdateAuditQueries")
+func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpdate_v310) error {
+	c.depwarn("UpdateQuery_v310/UpdateQueries_v310", "UpdateQuery*")
 	jsonBody, _ := json.Marshal(queries)
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
 	if err != nil {
@@ -197,18 +168,26 @@ func (c Cx1Client) UpdateQueries_v310(level string, queries []QueryUpdate) error
 		} else {
 			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
+
+			queries, err := c.GetQueriesByLevelID_v310(level, levelid)
+			if err != nil {
+				return err
+			}
+
 			for _, q := range queries {
-				aq, err2 := c.GetQueryByPath_v310(level, q.Path)
+				aq, err2 := FindQueryByName_v310(queries, levelid, q.Language, q.Group, q.Name)
 				if err2 != nil {
-					return fmt.Errorf("retrieving the query %v on %v to check status failed with: %s", q.Path, level, err2)
+					return fmt.Errorf("failed to update query %v (%v) %v -> %v -> %v: %s", level, levelid, q.Language, q.Group, q.Name, err2)
 				}
+
 				if aq.Source != q.Source {
 					return fmt.Errorf("query %v on %v source was not updated", q.Path, level)
 				}
-				c.logger.Warnf("Query %v on %v was successfully updated despite the error", q.Path, level)
+
+				c.logger.Infof("Query %v on %v was successfully updated despite the error", q.Path, level)
 			}
+			return nil
 		}
-		return nil
 	}
 	if string(response) == "" {
 		return nil
@@ -232,7 +211,7 @@ func (c Cx1Client) UpdateQueries_v310(level string, queries []QueryUpdate) error
 }
 
 func (c Cx1Client) GetQueries_v310() (QueryCollection, error) {
-	c.depwarn("GetQueries", "GetAuditQueries")
+	c.depwarn("GetQueries_v310", "GetQueries/GetAuditQueries*")
 	var qc QueryCollection
 	q, err := c.GetPresetQueries()
 	if err != nil {

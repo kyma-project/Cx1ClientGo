@@ -313,13 +313,16 @@ type QueryCollection struct {
 	QueryLanguages []QueryLanguage
 }
 
-type QueryUpdate struct { // used when saving queries in Cx1
-	Name     string              `json:"name"`
-	Path     string              `json:"path"`
-	Source   string              `json:"source"`
-	Metadata QueryUpdateMetadata `json:"metadata"`
+type QueryUpdate_v310 struct { // used when saving queries in Cx1
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Source   string `json:"source"`
+	Language string `json:"-"`
+	Group    string `json:"-"`
+
+	Metadata QueryUpdateMetadata_v310 `json:"metadata"`
 }
-type QueryUpdateMetadata struct {
+type QueryUpdateMetadata_v310 struct {
 	Severity uint `json:"severity"`
 }
 
