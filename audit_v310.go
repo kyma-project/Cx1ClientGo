@@ -36,14 +36,14 @@ type AuditQuery_v310 struct {
 
 func (c Cx1Client) AuditCreateSessionByID_v310(projectId, scanId string) (string, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
-	available, _, err := c.AuditFindSessionsByID_v310(projectId, scanId)
+	/*available, _, err := c.AuditFindSessionsByID_v310(projectId, scanId)
 	if err != nil {
 		return "", err
 	}
 
 	if !available {
 		return "", fmt.Errorf("audit session not available")
-	}
+	}*/
 
 	body := map[string]interface{}{
 		"projectId": projectId,
@@ -86,6 +86,7 @@ func (c Cx1Client) AuditDeleteSessionByID_v310(sessionId string) error {
 	return nil
 }
 
+/* this function seems to no longer work
 func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, []string, error) {
 	c.logger.Tracef("Checking for audit session for project %v scan %v", projectId, scanId)
 
@@ -123,7 +124,7 @@ func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, [
 	}
 
 	return responseStruct.Available, sessions, nil
-}
+}*/
 
 func (c Cx1Client) AuditGetEngineStatusByID_v310(auditSessionId string) (bool, error) {
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/sast-status", auditSessionId), nil, nil)
