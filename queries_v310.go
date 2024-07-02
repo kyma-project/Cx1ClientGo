@@ -87,6 +87,10 @@ func (c Cx1Client) GetQueriesByLevelID_v310(level, levelId string) ([]AuditQuery
 	return queries_v310, nil
 }
 
+func (c Cx1Client) FindQueryByName_v310(queries []AuditQuery_v310, level, language, group, name string) (AuditQuery_v310, error) {
+	return FindQueryByName_v310(queries, level, language, group, name)
+}
+
 func FindQueryByName_v310(queries []AuditQuery_v310, level, language, group, name string) (AuditQuery_v310, error) {
 	for _, q := range queries {
 		if q.Level == level && q.Language == language && q.Group == group && q.Name == name {
