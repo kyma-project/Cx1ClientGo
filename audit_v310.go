@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 )
 
 /*
@@ -34,16 +32,22 @@ type AuditQuery_v310 struct {
 	Title              string
 }
 
+/*
+no longer exists
+
 func (c Cx1Client) AuditCreateSessionByID_v310(projectId, scanId string) (string, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
-	/*available, _, err := c.AuditFindSessionsByID_v310(projectId, scanId)
-	if err != nil {
-		return "", err
-	}
 
-	if !available {
-		return "", fmt.Errorf("audit session not available")
-	}*/
+	{ // this block no longer working
+		available, _, err := c.AuditFindSessionsByID_v310(projectId, scanId)
+		if err != nil {
+			return "", err
+		}
+
+		if !available {
+			return "", fmt.Errorf("audit session not available")
+		}
+	}
 
 	body := map[string]interface{}{
 		"projectId": projectId,
@@ -86,7 +90,6 @@ func (c Cx1Client) AuditDeleteSessionByID_v310(sessionId string) error {
 	return nil
 }
 
-/* this function seems to no longer work
 func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, []string, error) {
 	c.logger.Tracef("Checking for audit session for project %v scan %v", projectId, scanId)
 
@@ -124,7 +127,7 @@ func (c Cx1Client) AuditFindSessionsByID_v310(projectId, scanId string) (bool, [
 	}
 
 	return responseStruct.Available, sessions, nil
-}*/
+}
 
 func (c Cx1Client) AuditGetEngineStatusByID_v310(auditSessionId string) (bool, error) {
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/sast-status", auditSessionId), nil, nil)
@@ -349,16 +352,18 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 	// TODO: convert the audit session to an object that also does the polling/keepalive
 	c.logger.Infof("Creating an audit session for project %v scan %v", projectId, scanId)
 
-	/* this throws a 404 now
-	available, sessions, err := c.AuditFindSessionsByID_v310(projectId, scanId)
-	if err != nil {
-		c.logger.Errorf("Failed to retrieve sessions: %s", err)
-		//return "", err
+	{ // this block no longer working either
+		available, sessions, err := c.AuditFindSessionsByID_v310(projectId, scanId)
+		if err != nil {
+			c.logger.Errorf("Failed to retrieve sessions: %s", err)
+			//return "", err
+		}
 	}
-	*/
+
 	session := ""
 	var err error
-	/*reusedSession := false
+
+	reusedSession := false
 	if len(sessions) > 0 && (fastInit || !available) {
 		lastSession := len(sessions) - 1
 		if fastInit { // reuse existing
@@ -368,7 +373,7 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 		}
 		session = sessions[lastSession]
 		reusedSession = true
-	} else {*/
+	} else {
 
 	session, err = c.AuditCreateSessionByID_v310(projectId, scanId)
 	if err != nil {
@@ -568,6 +573,7 @@ func (c Cx1Client) AuditCompilePollingByIDWithTimeout_v310(auditSessionId string
 	return fmt.Errorf("unknown error")
 }
 
+
 func (c Cx1Client) AuditCreateCorpQuery_v310(auditSessionId string, query AuditQuery_v310) (AuditQuery_v310, error) {
 	folder := fmt.Sprintf("queries/%v/%v/", query.Language, query.Group)
 	var qc struct {
@@ -600,11 +606,12 @@ func (c Cx1Client) AuditCreateCorpQuery_v310(auditSessionId string, query AuditQ
 	}
 	return c.GetQueryByName_v310("Corp", query.Language, query.Group, query.Name)
 }
+*/
 
 // updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
 // this will be fixed in the future
 // PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
-func (c Cx1Client) AuditUpdateQuery_v310(auditSessionId string, query AuditQuery_v310) error { // level = projectId or "Corp"
+func (c Cx1Client) AuditUpdateQuery_v310(query AuditQuery_v310) error { // level = projectId or "Corp"
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate{
@@ -616,12 +623,12 @@ func (c Cx1Client) AuditUpdateQuery_v310(auditSessionId string, query AuditQuery
 		},
 	}
 
-	return c.AuditUpdateQueries_v310(auditSessionId, query.LevelID, []QueryUpdate{q})
+	return c.AuditUpdateQueries_v310(query.LevelID, []QueryUpdate{q})
 }
 
-func (c Cx1Client) AuditUpdateQueries_v310(auditSessionId, level string, queries []QueryUpdate) error {
+func (c Cx1Client) AuditUpdateQueries_v310(level string, queries []QueryUpdate) error {
 	jsonBody, _ := json.Marshal(queries)
-	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v/%v", auditSessionId, level), bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 		c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
