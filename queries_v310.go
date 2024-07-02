@@ -165,10 +165,10 @@ func (c Cx1Client) UpdateQuery_v310(query AuditQuery_v310) error {
 func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpdate_v310) error {
 	c.depwarn("UpdateQuery_v310/UpdateQueries_v310", "UpdateQuery*")
 	jsonBody, _ := json.Marshal(queries)
-	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", levelid), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		if err.Error()[0:8] == "HTTP 405" {
-			return fmt.Errorf("this endpoint is no longer available - please use UpdateAuditQuery/UpdateAuditQueries instead")
+			return fmt.Errorf("this endpoint is no longer available - please use UpdateQuery* instead")
 		} else {
 			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
