@@ -348,13 +348,16 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 	// TODO: convert the audit session to an object that also does the polling/keepalive
 	c.logger.Infof("Creating an audit session for project %v scan %v", projectId, scanId)
 
+	/* this throws a 404 now
 	available, sessions, err := c.AuditFindSessionsByID_v310(projectId, scanId)
 	if err != nil {
 		c.logger.Errorf("Failed to retrieve sessions: %s", err)
 		//return "", err
 	}
+	*/
 	session := ""
-	reusedSession := false
+	var err error
+	/*reusedSession := false
 	if len(sessions) > 0 && (fastInit || !available) {
 		lastSession := len(sessions) - 1
 		if fastInit { // reuse existing
@@ -364,13 +367,14 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 		}
 		session = sessions[lastSession]
 		reusedSession = true
-	} else {
-		session, err = c.AuditCreateSessionByID_v310(projectId, scanId)
-		if err != nil {
-			c.logger.Errorf("Error creating cxaudit session: %s", err)
-			return "", err
-		}
+	} else {*/
+
+	session, err = c.AuditCreateSessionByID_v310(projectId, scanId)
+	if err != nil {
+		c.logger.Errorf("Error creating cxaudit session: %s", err)
+		return "", err
 	}
+	//}
 
 	err = c.AuditSessionKeepAlive_v310(session)
 	if err != nil {
@@ -383,13 +387,13 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 		return "", err
 	}
 
-	if !fastInit || !reusedSession {
-		err = c.AuditCheckLanguagesByID_v310(session)
-		if err != nil {
-			c.logger.Errorf("Error while checking languages: %s", err)
-			return "", err
-		}
+	//if !fastInit || !reusedSession {
+	err = c.AuditCheckLanguagesByID_v310(session)
+	if err != nil {
+		c.logger.Errorf("Error while checking languages: %s", err)
+		return "", err
 	}
+	//}
 
 	languages, err := c.AuditLanguagePollingByID_v310(session)
 	if err != nil {
@@ -399,13 +403,13 @@ func (c Cx1Client) GetAuditSessionByID_v310(projectId, scanId string, fastInit b
 
 	c.logger.Infof("Languages present: %v", languages)
 
-	if !fastInit || !reusedSession {
-		err = c.AuditRunScanByID_v310(session)
-		if err != nil {
-			c.logger.Errorf("Error while triggering audit scan: %s", err)
-			return "", err
-		}
+	//if !fastInit || !reusedSession {
+	err = c.AuditRunScanByID_v310(session)
+	if err != nil {
+		c.logger.Errorf("Error while triggering audit scan: %s", err)
+		return "", err
 	}
+	//}
 
 	err = c.AuditScanPollingByID_v310(session)
 	if err != nil {
