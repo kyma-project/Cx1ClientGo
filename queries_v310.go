@@ -116,6 +116,10 @@ func (c Cx1Client) DeleteQueryByName_v310(level, levelID, language, group, query
 	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
+	if levelID == "Tenant" {
+		levelID = "Corp"
+	}
+
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", levelID, path), nil, nil)
 	if err != nil {
 		// currently there's a bug where the response can be error 500 even if it succeeded.
@@ -171,6 +175,10 @@ func (c Cx1Client) UpdateQuery_v310(query AuditQuery_v310) error {
 func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpdate_v310) error {
 	c.depwarn("UpdateQuery_v310/UpdateQueries_v310", "UpdateQuery*")
 	jsonBody, _ := json.Marshal(queries)
+	if levelid == "Tenant" {
+		levelid = "Corp"
+	}
+
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", levelid), bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		if err.Error()[0:8] == "HTTP 405" {
