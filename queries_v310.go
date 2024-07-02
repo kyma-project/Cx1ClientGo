@@ -100,6 +100,10 @@ func FindQueryByName_v310(queries []AuditQuery_v310, level, language, group, nam
 		}
 	}
 
+	if level == "Corp" {
+		return FindQueryByName_v310(queries, "Tenant", language, group, name)
+	}
+
 	return AuditQuery_v310{}, fmt.Errorf("no query found matching [%v] %v -> %v -> %v", level, language, group, name)
 }
 
