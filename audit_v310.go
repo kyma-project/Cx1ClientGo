@@ -31,9 +31,11 @@ type AuditQuery_v310 struct {
 
 func (q *AuditQuery_v310) ParsePath() {
 	s := strings.Split(q.Path, "/")
-	q.Language = s[1]
-	q.Group = s[2]
-	q.Name = s[3]
+	if len(s) >= 4 {
+		q.Language = s[1]
+		q.Group = s[2]
+		q.Name = s[3]
+	}
 }
 
 func (q Query) ToAuditQuery_v310() AuditQuery_v310 {
