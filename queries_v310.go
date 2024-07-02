@@ -81,6 +81,8 @@ func (c Cx1Client) GetQueriesByLevelID_v310(level, levelId string) ([]AuditQuery
 			queries_v310[id].LevelID = applicationId
 		case AUDIT_QUERY_PRODUCT:
 			queries_v310[id].LevelID = AUDIT_QUERY_PRODUCT
+		case "Tenant":
+			queries_v310[id].LevelID = AUDIT_QUERY_TENANT
 		}
 	}
 
