@@ -155,7 +155,7 @@ func (c Cx1Client) UpdateQuery_v310(query AuditQuery_v310) error {
 		Path:   query.Path,
 		Source: query.Source,
 		Metadata: QueryUpdateMetadata_v310{
-			Severity: query.Severity,
+			Severity: GetSeverityID(query.Severity),
 		},
 	}
 

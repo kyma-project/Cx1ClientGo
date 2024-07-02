@@ -20,7 +20,7 @@ type AuditQuery_v310 struct {
 	Name               string
 	Group              string
 	Language           string `json:"lang"`
-	Severity           uint
+	Severity           string
 	Cwe                int64
 	IsExecutable       bool
 	CxDescriptionId    int64
@@ -47,7 +47,7 @@ func (q Query) ToAuditQuery_v310() AuditQuery_v310 {
 		Name:               q.Name,
 		Group:              q.Group,
 		Language:           q.Language,
-		Severity:           GetSeverityID(q.Severity),
+		Severity:           q.Severity,
 		Cwe:                q.CweID,
 		IsExecutable:       q.IsExecutable,
 		CxDescriptionId:    q.GetMetadata().CxDescriptionID,
@@ -72,7 +72,7 @@ func (q AuditQuery_v310) ToQuery() Query {
 		Name:               q.Name,
 		Group:              q.Group,
 		Language:           q.Language,
-		Severity:           GetSeverity(q.Severity),
+		Severity:           q.Severity,
 		CweID:              q.Cwe,
 		IsExecutable:       q.IsExecutable,
 		QueryDescriptionId: q.CxDescriptionId,
