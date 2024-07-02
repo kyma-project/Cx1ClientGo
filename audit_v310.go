@@ -35,6 +35,8 @@ func (q *AuditQuery_v310) ParsePath() {
 		q.Language = s[1]
 		q.Group = s[2]
 		q.Name = s[3]
+	} else { // path was empty (since v3.14?) so create it
+		q.Path = fmt.Sprintf("queries/%v/%v/%v/%v.cs", q.Language, q.Group, q.Name, q.Name)
 	}
 }
 
