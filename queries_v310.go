@@ -161,9 +161,11 @@ func (c Cx1Client) UpdateQuery_v310(query AuditQuery_v310) error {
 	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
 	q := QueryUpdate_v310{
-		Name:   query.Name,
-		Path:   query.Path,
-		Source: query.Source,
+		Name:     query.Name,
+		Path:     query.Path,
+		Source:   query.Source,
+		Language: query.Language,
+		Group:    query.Group,
 		Metadata: QueryUpdateMetadata_v310{
 			Severity: GetSeverityID(query.Severity),
 		},
@@ -187,13 +189,13 @@ func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpda
 			// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
 			c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
 
-			queries, err := c.GetQueriesByLevelID_v310(level, levelid)
+			allqueries, err := c.GetQueriesByLevelID_v310(level, levelid)
 			if err != nil {
 				return err
 			}
 
 			for _, q := range queries {
-				aq, err2 := FindQueryByName_v310(queries, levelid, q.Language, q.Group, q.Name)
+				aq, err2 := FindQueryByName_v310(allqueries, levelid, q.Language, q.Group, q.Name)
 				if err2 != nil {
 					return fmt.Errorf("failed to update query %v (%v) %v -> %v -> %v: %s", level, levelid, q.Language, q.Group, q.Name, err2)
 				}
