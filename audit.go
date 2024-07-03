@@ -618,6 +618,12 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 		return newQuery, fmt.Errorf("failed due to %s: %v", err, responseObj)
 	}
 
+	if responseMap, ok := responseObj.(map[string]interface{}); ok {
+		if val, ok := responseMap["failed_queries"]; ok {
+			return newQuery, fmt.Errorf("failed to save source, details: %v", val)
+		}
+	}
+
 	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
 	if err != nil {
 		return newQuery, err
