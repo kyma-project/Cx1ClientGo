@@ -35,7 +35,7 @@ func (c Cx1Client) GetApplications(limit uint) ([]Application, error) {
 	return ApplicationResponse.Applications, err
 }
 
-func (c Cx1Client) GetApplicationById(id string) (Application, error) {
+func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
 	c.logger.Debugf("Get Cx1 Applications by id: %v", id)
 	var application Application
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications/%v", id), nil, nil)
@@ -245,6 +245,33 @@ func (a *Application) RemoveRule(rule *ApplicationRule) {
 	}
 }
 
+// AssignProject will create or update a "project.name.in" type rule to assign the project to the app
 func (a *Application) AssignProject(project *Project) {
 	a.AddRule("project.name.in", project.Name)
+}
+
+// UnassignProject will remove the project from the "project.name.in" rule if it's there, and if the rule ends up empty it will remove the rule
+func (a *Application) UnassignProject(project *Project) {
+	rule := a.GetRuleByType("project.name.in")
+	if rule == nil {
+		return
+	}
+
+	rule.RemoveItem(project.Name)
+	if rule.Value == "" {
+		a.RemoveRule(rule)
+	}
+}
+
+func (ar *ApplicationRule) RemoveItem(item string) {
+	rulestr := ";" + ar.Value + ";"
+	itemstr := ";" + item + ";"
+	if strings.Contains(rulestr, item) {
+		rulestr = strings.Replace(rulestr, itemstr, ";", 1)
+		rulestr = rulestr[1:] // chop out starting ;
+		if len(rulestr) > 0 {
+			rulestr = rulestr[:len(rulestr)-1]
+		}
+	}
+	ar.Value = rulestr
 }
