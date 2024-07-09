@@ -282,7 +282,7 @@ type ConfigurationSetting struct {
 type Query struct {
 	QueryID            uint64 `json:"queryID,string"`
 	Level              string `json:"level"`
-	LevelID            string `json:"-"`
+	LevelID            string `json:"levelId"`
 	Path               string `json:"path"`
 	Modified           string `json:"-"`
 	Source             string `json:"-"`

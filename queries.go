@@ -131,7 +131,7 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
 	for id := range queries_v312 {
 		switch queries_v312[id].Level {
 		case AUDIT_QUERY_TENANT:
-			queries_v312[id].LevelID = AUDIT_QUERY_TENANT
+			queries_v312[id].LevelID = c.QueryTypeTenant()
 		case AUDIT_QUERY_PROJECT:
 			queries_v312[id].LevelID = levelId
 		case AUDIT_QUERY_APPLICATION:
@@ -149,7 +149,7 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
 			}
 			queries_v312[id].LevelID = applicationId
 		case AUDIT_QUERY_PRODUCT:
-			queries_v312[id].LevelID = AUDIT_QUERY_PRODUCT
+			queries_v312[id].LevelID = c.QueryTypeProduct()
 		}
 
 		queries = append(queries, queries_v312[id].ToQuery())
@@ -208,7 +208,7 @@ func (c Cx1Client) GetQueries() (QueryCollection, error) {
 	}
 	qc.AddQueries(&q)
 
-	aq, err := c.GetQueriesByLevelID(AUDIT_QUERY_TENANT, "")
+	aq, err := c.GetQueriesByLevelID(c.QueryTypeTenant(), c.QueryTypeTenant())
 	if err != nil {
 		return qc, err
 	}
@@ -235,11 +235,11 @@ func (c Cx1Client) GetPresetQueries() ([]Query, error) {
 		queries[i].IsExecutable = true // all queries in the preset are executable
 
 		if queries[i].Custom {
-			queries[i].Level = AUDIT_QUERY_TENANT
-			queries[i].LevelID = AUDIT_QUERY_TENANT
+			queries[i].Level = c.QueryTypeTenant()
+			queries[i].LevelID = c.QueryTypeTenant()
 		} else {
-			queries[i].Level = AUDIT_QUERY_PRODUCT
-			queries[i].LevelID = AUDIT_QUERY_PRODUCT
+			queries[i].Level = c.QueryTypeProduct()
+			queries[i].LevelID = c.QueryTypeProduct()
 		}
 	}
 
