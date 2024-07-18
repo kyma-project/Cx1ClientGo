@@ -70,15 +70,25 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 	}
 
 	var project Project
-	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/application/%v", applicationId), bytes.NewReader(jsonBody), nil)
-
-	if err != nil && err.Error()[0:8] == "HTTP 404" { // At some point, the api /projects/applications will be removed and instead the normal /projects API will do the job.
+	var response []byte
+	if cxVersion.CheckCxOne("3.16.0") >= 0 {
 		data["applicationIds"] = []string{applicationId}
 		jsonBody, err = json.Marshal(data)
 		if err != nil {
 			return Project{}, err
 		}
 		response, err = c.sendRequest(http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil)
+	} else {
+		response, err = c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/application/%v", applicationId), bytes.NewReader(jsonBody), nil)
+
+		if err != nil && err.Error()[0:8] == "HTTP 404" { // At some point, the api /projects/applications will be removed and instead the normal /projects API will do the job.
+			data["applicationIds"] = []string{applicationId}
+			jsonBody, err = json.Marshal(data)
+			if err != nil {
+				return Project{}, err
+			}
+			response, err = c.sendRequest(http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil)
+		}
 	}
 
 	if err != nil {
