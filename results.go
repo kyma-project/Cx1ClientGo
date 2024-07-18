@@ -14,7 +14,7 @@ func (c Cx1Client) GetScanResults(scanID string, limit uint64) (ScanResultSet, e
 	return c.GetScanResultsByID(scanID, limit)
 }
 func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSet, error) {
-	c.logger.Debug("Get Cx1 Scan Results")
+	c.logger.Debug("Get Cx1 Scan Results for scan %v", scanID)
 	var resultResponse struct {
 		Results    []map[string]interface{}
 		TotalCount int
@@ -101,7 +101,7 @@ func (c Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
 }
 
 func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
-	c.logger.Debug("Get Cx1 Scan Results")
+	c.logger.Debugf("Get Cx1 Scan Results count for scan %v", scanID)
 	var resultResponse struct {
 		//Results    []ScanResult
 		TotalCount uint64
