@@ -62,7 +62,7 @@ func (c Cx1Client) GetUsers() ([]User, error) {
 }
 
 func (c Cx1Client) GetUserByID(userID string) (User, error) {
-	c.logger.Debug("Get Cx1 User by ID")
+	c.logger.Debugf("Get Cx1 User by ID %v", userID)
 
 	var user User
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.

@@ -134,7 +134,7 @@ func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 
 // convenience
 func (c Cx1Client) GetApplicationCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects")
+	c.logger.Debug("Get Cx1 Project count")
 	var ApplicationResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
@@ -157,7 +157,7 @@ func (c Cx1Client) GetApplicationCount() (uint64, error) {
 }
 
 func (c Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects")
+	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
 	var ApplicationResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64

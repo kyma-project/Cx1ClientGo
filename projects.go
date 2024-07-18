@@ -285,7 +285,7 @@ func (c Cx1Client) GetProjectConfiguration(project *Project) error {
 }
 
 func (c Cx1Client) GetProjectConfigurationByID(projectID string) ([]ConfigurationSetting, error) {
-	c.logger.Debug("Getting project configuration")
+	c.logger.Debugf("Getting project configuration for project %v", projectID)
 	var projectConfigurations []ConfigurationSetting
 	params := url.Values{
 		"project-id": {projectID},
@@ -472,7 +472,7 @@ func (c Cx1Client) GetProjectCount() (uint64, error) {
 }
 
 func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects")
+	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
 	var ProjectResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64

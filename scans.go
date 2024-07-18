@@ -126,7 +126,7 @@ func (s *ScanSummary) TotalCount() uint64 {
 }
 
 func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]ConfigurationSetting, error) {
-	c.logger.Debug("Getting project configuration")
+	c.logger.Debugf("Getting scan configuration for project %v, scan %v", projectID, scanID)
 	var scanConfigurations []ConfigurationSetting
 	params := url.Values{
 		"project-id": {projectID},
