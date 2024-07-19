@@ -316,7 +316,7 @@ func (c Cx1Client) GetAuditQueryByKey(auditSession *AuditSession, key string) (Q
 }
 
 func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, levelId string) ([]Query, error) {
-	c.logger.Debugf("Get all queries for %v", level)
+	c.logger.Debugf("Get all queries for %v %v", level, levelId)
 
 	var url string
 	var queries []Query
@@ -395,6 +395,7 @@ func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, l
 }
 
 func (c Cx1Client) DeleteQueryOverrideByKey(auditSession *AuditSession, queryKey string) error {
+	c.logger.Debugf("Deleting query %v under session %v", queryKey, auditSession.ID)
 	response, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v/queries/%v", auditSession.ID, url.QueryEscape(queryKey)), nil, nil)
 	if err != nil {
 		return err
@@ -415,6 +416,9 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	var newQuery Query
 	if strings.EqualFold(level, AUDIT_QUERY_APPLICATION) {
 		level = AUDIT_QUERY_APPLICATION
+		if auditSession.ApplicationID == "" {
+			return newQuery, fmt.Errorf("requested to create an application-level query but the current audit session %v for project %v has no application associated", auditSession.ID, auditSession.ProjectName)
+		}
 	} else if strings.EqualFold(level, AUDIT_QUERY_PROJECT) {
 		level = AUDIT_QUERY_PROJECT
 	} else if strings.EqualFold(level, AUDIT_QUERY_TENANT) {
@@ -422,6 +426,8 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	} else {
 		return newQuery, fmt.Errorf("invalid query override level specified ('%v'), use functions cx1client.QueryTypeTenant, QueryTypeApplication, and QueryTypeProduct", level)
 	}
+
+	c.logger.Debugf("Create new override of query %v at level %v under session %v", baseQuery.String(), level, auditSession.ID)
 
 	/*baseQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
 	if err != nil {
@@ -498,6 +504,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 }
 
 func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Query, error) {
+	c.logger.Debugf("Creating new query %v under session %v", query.String(), auditSession.ID)
 	type NewQuery struct {
 		Name        string `json:"name"`
 		Language    string `json:"language"`
