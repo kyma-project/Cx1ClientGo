@@ -79,13 +79,6 @@ func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType strin
 	var aas []AccessAssignment
 	c.logger.Debugf("Getting the resources accessible to entity %v", entityId)
 
-	type AccessAssignmentRAW struct {
-		Roles        []string `json:"roles"`
-		ResourceID   string   `json:"id"`
-		ResourceType string   `json:"type"`
-	}
-	//var aar []AccessAssignment
-
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/resources-for?entity-id=%v&entity-type=%v&resource-types=%v", entityId, entityType, strings.Join(resourceTypes, ",")), nil, nil)
 	if err != nil {
 		return aas, err
@@ -95,24 +88,6 @@ func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType strin
 	if err != nil {
 		return aas, err
 	}
-
-	/*
-		aas = make([]AccessAssignment, len(aar))
-		for id, a := range aar {
-			aas[id] = AccessAssignment{
-				EntityID:     entityId,
-				EntityType:   entityType,
-				ResourceID:   a.ResourceID,
-				ResourceType: a.ResourceType,
-			}
-			aas[id].EntityRoles = make([]AccessAssignedRole, len(a.Roles))
-			for rid, r := range a.Roles {
-				aas[rid].EntityRoles[rid] = AccessAssignedRole{
-					Id:   r,
-					Name: "",
-				}
-			}
-		}*/
 
 	return aas, nil
 }
