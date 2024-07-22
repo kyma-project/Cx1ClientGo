@@ -75,27 +75,6 @@ func (c Cx1Client) GetEntitiesAccessToResourceByID(resourceId, resourceType stri
 	return aas, err
 }
 
-/*
-This function will return partially-filled structures as returned by Cx1 API. Only the EntityID, EntityType, EntityRoles.ID, ResourceID, and ResourceType values will be filled
-The resulting access assignments will have the following structure:
-
-	AccessAssignment{
-		TenantID:     "",
-		EntityID:     entityId, (provided in function call)
-		EntityType:   entityType, (provided in function call)
-		EntityName:   "",
-		EntityRoles:  []AccessAssignedRole{
-			AccessAssignedRole{
-				Id:   "Cx1-role-ID",
-				Name: "",
-			}
-		},
-		ResourceID:   "resource-id",
-		ResourceType: "resource-type",
-		ResourceName: "",
-		CreatedAt:    "",
-	}
-*/
 func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType string, resourceTypes []string) ([]AccessAssignment, error) {
 	var aas []AccessAssignment
 	c.logger.Debugf("Getting the resources accessible to entity %v", entityId)
@@ -105,34 +84,35 @@ func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType strin
 		ResourceID   string   `json:"id"`
 		ResourceType string   `json:"type"`
 	}
-	var aar []AccessAssignmentRAW
+	//var aar []AccessAssignment
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/resources-for?entity-id=%v&entity-type=%v&resource-types=%v", entityId, entityType, strings.Join(resourceTypes, ",")), nil, nil)
 	if err != nil {
 		return aas, err
 	}
 
-	err = json.Unmarshal(response, &aar)
+	err = json.Unmarshal(response, &aas)
 	if err != nil {
 		return aas, err
 	}
 
-	aas = make([]AccessAssignment, len(aar))
-	for id, a := range aar {
-		aas[id] = AccessAssignment{
-			EntityID:     entityId,
-			EntityType:   entityType,
-			ResourceID:   a.ResourceID,
-			ResourceType: a.ResourceType,
-		}
-		aas[id].EntityRoles = make([]AccessAssignedRole, len(a.Roles))
-		for rid, r := range a.Roles {
-			aas[rid].EntityRoles[rid] = AccessAssignedRole{
-				Id:   r,
-				Name: "",
+	/*
+		aas = make([]AccessAssignment, len(aar))
+		for id, a := range aar {
+			aas[id] = AccessAssignment{
+				EntityID:     entityId,
+				EntityType:   entityType,
+				ResourceID:   a.ResourceID,
+				ResourceType: a.ResourceType,
 			}
-		}
-	}
+			aas[id].EntityRoles = make([]AccessAssignedRole, len(a.Roles))
+			for rid, r := range a.Roles {
+				aas[rid].EntityRoles[rid] = AccessAssignedRole{
+					Id:   r,
+					Name: "",
+				}
+			}
+		}*/
 
 	return aas, nil
 }
