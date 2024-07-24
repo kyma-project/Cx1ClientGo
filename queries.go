@@ -54,51 +54,6 @@ func (q AuditQuery_v312) ToQuery() Query {
 	}
 }
 
-/*
-func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQuery, error) {
-	c.depwarn("GetQueryByName", "GetAuditQueryByName")
-	c.logger.Debugf("Get %v query by name: %v -> %v -> %v", level, language, group, query)
-	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", level, path), nil, nil)
-	if err != nil {
-		return AuditQuery{}, err
-	}
-
-	var q AuditQuery
-	err = json.Unmarshal(response, &q)
-	if err != nil {
-		return q, err
-	}
-
-	q.LevelID = level
-
-	return q, nil
-}
-
-func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
-	c.depwarn("GetQueryByPath", "GetAuditQueryByPath")
-	c.logger.Debugf("Get %v query by path: %v", level, path)
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v", level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
-	if err != nil {
-		return AuditQuery{}, err
-	}
-
-	var q AuditQuery
-	err = json.Unmarshal(response, &q)
-	if err != nil {
-		return q, err
-	}
-
-	if strings.EqualFold(q.Level, AUDIT_QUERY_TENANT) || strings.EqualFold(q.Level, AUDIT_QUERY_PRODUCT) {
-		q.LevelID = q.Level
-	} else { // team or project-level override, so store the ID
-		q.LevelID = level
-	}
-	return q, nil
-} */
-
 func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
 	c.depwarn("GetQueriesByLevelID", "GetAuditQueriesByLevelID")
 	c.logger.Debugf("Get all queries for %v", level)
@@ -158,49 +113,7 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]Query, error) {
 	return queries, nil
 }
 
-/*
-func FindQueryByName(queries []AuditQuery, level, language, group, name string) (AuditQuery, error) {
-	for _, q := range queries {
-		if q.Level == level && q.Language == language && q.Group == group && q.Name == name {
-			return q, nil
-		}
-	}
-
-	return AuditQuery{}, fmt.Errorf("no query found matching [%v] %v -> %v -> %v", level, language, group, name)
-}
-
-func (c Cx1Client) DeleteQuery(query AuditQuery) error {
-	return c.DeleteQueryByName(query.Level, query.LevelID, query.Language, query.Group, query.Name)
-}
-
-func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query string) error {
-	c.depwarn("DeleteQueryByName", "DeleteAuditQueryByName")
-	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
-	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
-
-	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", levelID, path), nil, nil)
-	if err != nil {
-		// currently there's a bug where the response can be error 500 even if it succeeded.
-
-		q, err2 := c.GetQueryByName(levelID, language, group, query)
-		if err2 != nil {
-			c.logger.Warnf("error while deleting query (%s) followed by error while checking if the query was deleted (%s) - assuming the query was deleted", err, err2)
-			return nil
-		}
-
-		if q.Level != level {
-			c.logger.Warnf("While deleting the query an error was returned (%s) but the query was deleted", err)
-			return nil
-		} else {
-			return fmt.Errorf("error while deleting query (%s) and the query %v still exists", err, q)
-		}
-	}
-
-	return nil
-} */
-
 func (c Cx1Client) GetQueries() (QueryCollection, error) {
-	c.depwarn("GetQueries", "GetAuditQueries")
 	var qc QueryCollection
 	q, err := c.GetPresetQueries()
 	if err != nil {

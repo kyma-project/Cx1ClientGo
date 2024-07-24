@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-func (c Cx1Client) GetScan(scanID string) (Scan, error) {
-	c.depwarn("GetScan", "GetScanByID")
-	return c.GetScanByID(scanID)
-}
-
 func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	var scan Scan
 
@@ -52,11 +47,6 @@ func (c Cx1Client) CancelScanByID(scanID string) error {
 	}
 
 	return nil
-}
-
-func (c Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
-	c.depwarn("GetScanMetadata", "GetScanMetadataByID")
-	return c.GetScanMetadataByID(scanID)
 }
 
 func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
@@ -206,10 +196,6 @@ func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error)
 	return ScansSummaries.ScanSum, nil
 }
 
-func (c Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
-	c.depwarn("GetScanLogs", "GetScanLogsByID")
-	return c.GetScanLogsByID(scanID, engine)
-}
 func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	c.logger.Debugf("Fetching scan logs for scan %v", scanID)
 
@@ -265,11 +251,6 @@ func (c Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error) 
 	return scan, err
 }
 
-func (c Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
-	c.depwarn("ScanProjectZip", "ScanProjectZipByID")
-	return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)
-}
-
 func (c Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
@@ -287,11 +268,6 @@ func (c Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, setti
 		return scan, fmt.Errorf("failed to start a zip scan for project %v: %s", projectID, err)
 	}
 	return scan, err
-}
-
-func (c Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
-	c.depwarn("ScanProjectGit", "ScanProjectGitByID")
-	return c.ScanProjectGitByID(projectID, repoUrl, branch, settings, tags)
 }
 
 func (c Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
@@ -314,11 +290,6 @@ func (c Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, setting
 }
 
 // convenience function
-func (c Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
-	c.depwarn("ScanProject", "ScanProjectByID")
-	return c.ScanProjectByID(projectID, sourceUrl, branch, scanType, settings, tags)
-}
-
 func (c Cx1Client) ScanProjectByID(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	if scanType == "upload" {
 		return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)

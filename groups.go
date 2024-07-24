@@ -425,10 +425,6 @@ func (c Cx1Client) GetGroupMembersByID(groupID string) ([]User, error) {
 }
 
 // convenience
-func (c Cx1Client) GetOrCreateGroup(name string) (Group, error) {
-	c.depwarn("GetOrCreateGroup", "GetOrCreateGroupByName")
-	return c.GetOrCreateGroupByName(name)
-}
 func (c Cx1Client) GetOrCreateGroupByName(name string) (Group, error) {
 	group, err := c.GetGroupByName(name)
 	if err != nil {

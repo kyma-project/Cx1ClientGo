@@ -234,11 +234,6 @@ func (c Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Projec
 	return ProjectResponse.Projects, nil
 }
 
-func (c Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
-	c.depwarn("GetProjectsByNameAndGroup", "GetProjectsByNameAndGroupID")
-	return c.GetProjectsByNameAndGroupID(projectName, groupID)
-}
-
 func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
@@ -340,11 +335,6 @@ func (c Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []C
 	return nil
 }
 
-func (c Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool) error {
-	c.depwarn("SetProjectBranch", "SetProjectBranchByID")
-	return c.SetProjectBranchByID(projectID, branch, allowOverride)
-}
-
 func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride bool) error {
 	var setting ConfigurationSetting
 	setting.Key = "scan.handler.git.branch"
@@ -363,11 +353,6 @@ func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowO
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
-func (c Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
-	c.depwarn("SetProjectPreset", "SetProjectPresetByID")
-	return c.SetProjectPresetByID(projectID, presetName, allowOverride)
-}
-
 func (c Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverride bool) error {
 	var setting ConfigurationSetting
 	setting.Key = "scan.config.sast.presetName"
@@ -377,11 +362,6 @@ func (c Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverr
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
-func (c Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
-	c.depwarn("SetProjectLanguageMode", "SetProjectLanguageModeByID")
-	return c.SetProjectLanguageModeByID(projectID, languageMode, allowOverride)
-}
-
 func (c Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, allowOverride bool) error {
 	var setting ConfigurationSetting
 	setting.Key = "scan.config.sast.languageMode"
@@ -389,11 +369,6 @@ func (c Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, al
 	setting.AllowOverride = allowOverride
 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
-}
-
-func (c Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
-	c.depwarn("SetProjectFileFilter", "SetProjectFileFilterByID")
-	return c.SetProjectFileFilterByID(projectID, filter, allowOverride)
 }
 
 func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverride bool) error {
@@ -536,11 +511,6 @@ func (p *Project) AssignGroup(group *Group) {
 		return
 	}
 	p.Groups = append(p.Groups, group.GroupID)
-}
-
-func (c Cx1Client) GetOrCreateProject(name string) (Project, error) {
-	c.depwarn("GetOrCreateProject", "GetOrCreateProjectByName")
-	return c.GetOrCreateProjectByName(name)
 }
 
 func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {

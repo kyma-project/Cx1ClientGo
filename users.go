@@ -292,11 +292,6 @@ func (c Cx1Client) GetUserGroups(user *User) ([]Group, error) {
 	return user.Groups, nil
 }
 
-func (c Cx1Client) AssignUserToGroup(user *User, groupId string) error {
-	c.depwarn("AssignUserToGroup", "AssignUserToGroupByID")
-	return c.AssignUserToGroupByID(user, groupId)
-}
-
 func (c Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
 	inGroup, err := user.IsInGroupByID(groupId)
 	if err != nil {
@@ -331,11 +326,6 @@ func (c Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
 		user.Groups = append(user.Groups, group)
 	}
 	return nil
-}
-
-func (c Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
-	c.depwarn("RemoveUserFromGroup", "RemoveUserFromGroupByID")
-	return c.RemoveUserFromGroupByID(user, groupId)
 }
 
 func (c Cx1Client) RemoveUserFromGroupByID(user *User, groupId string) error {
@@ -587,36 +577,3 @@ func (c Cx1Client) removeUserKCRoles(userID string, roles *[]Role) error {
 	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), bytes.NewReader(jsonBody), nil)
 	return err
 }
-
-// these functions to be deprecated/hidden in favor of simpler functions below
-func (c Cx1Client) GetUserRoleMappings(userID string, clientID string) ([]Role, error) {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.getUserRolesByClientID(userID, clientID)
-}
-
-func (c Cx1Client) GetUserASTRoleMappings(userID string) ([]Role, error) {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.getUserRolesByClientID(userID, c.GetASTAppID())
-}
-
-func (c Cx1Client) AddUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.addUserRolesByClientID(userID, clientID, &roles)
-}
-
-func (c Cx1Client) AddUserASTRoleMappings(userID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.addUserRolesByClientID(userID, c.GetASTAppID(), &roles)
-}
-
-func (c Cx1Client) RemoveUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.removeUserRolesByClientID(userID, clientID, &roles)
-}
-
-func (c Cx1Client) RemoveUserASTRoleMappings(userID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.removeUserRolesByClientID(userID, c.GetASTAppID(), &roles)
-}
-
-// end to-be-deprecated function block

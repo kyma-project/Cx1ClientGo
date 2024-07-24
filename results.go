@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-func (c Cx1Client) GetScanResults(scanID string, limit uint64) (ScanResultSet, error) {
-	c.depwarn("GetScanResults", "GetScanResultsByID")
-	return c.GetScanResultsByID(scanID, limit)
-}
 func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSet, error) {
 	c.logger.Debug("Get Cx1 Scan Results for scan %v", scanID)
 	var resultResponse struct {
@@ -95,11 +91,6 @@ func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSe
 	return ResultSet, nil
 }
 
-func (c Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
-	c.depwarn("GetScanResultsCount", "GetScanResultsCountByID")
-	return c.GetScanResultsCountByID(scanID)
-}
-
 func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 	c.logger.Debugf("Get Cx1 Scan Results count for scan %v", scanID)
 	var resultResponse struct {
@@ -151,11 +142,6 @@ func (r ScanKICSResult) CreateResultsPredicate(projectId string) KICSResultsPred
 }
 
 // results
-func (c Cx1Client) AddResultsPredicates(predicates []SASTResultsPredicates) error {
-	c.depwarn("AddResultsPredicates", "AddSASTResultsPredicates")
-	return c.AddSASTResultsPredicates(predicates)
-}
-
 func (c Cx1Client) AddSASTResultsPredicates(predicates []SASTResultsPredicates) error {
 	c.logger.Debugf("Adding %d SAST results predicates", len(predicates))
 
@@ -179,11 +165,6 @@ func (c Cx1Client) AddKICSResultsPredicates(predicates []KICSResultsPredicates) 
 
 	_, err = c.sendRequest(http.MethodPost, "/kics-results-predicates", bytes.NewReader(jsonBody), nil)
 	return err
-}
-
-func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {
-	c.depwarn("GetResultsPredicatesByID", "GetSASTResultsPredicatesByID")
-	return c.GetSASTResultsPredicatesByID(SimilarityID, ProjectID)
 }
 
 func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {

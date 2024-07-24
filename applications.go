@@ -116,9 +116,8 @@ func (c Cx1Client) CreateApplication(appname string) (Application, error) {
 	return app, err
 }
 
-func (c Cx1Client) DeleteApplication(applicationId string) error {
-	c.depwarn("DeleteApplication", "DeleteApplicationByID")
-	return c.DeleteApplicationByID(applicationId)
+func (c Cx1Client) DeleteApplication(application *Application) error {
+	return c.DeleteApplicationByID(application.ApplicationID)
 }
 func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 	c.logger.Debugf("Delete Application: %v", applicationId)
@@ -183,10 +182,6 @@ func (a *Application) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(a.ApplicationID), a.Name)
 }
 
-func (c Cx1Client) GetOrCreateApplication(name string) (Application, error) {
-	c.depwarn("GetOrCreateApplication", "GetOrCreateApplicationByName")
-	return c.GetOrCreateApplicationByName(name)
-}
 func (c Cx1Client) GetOrCreateApplicationByName(name string) (Application, error) {
 	app, err := c.GetApplicationByName(name)
 	if err == nil {
