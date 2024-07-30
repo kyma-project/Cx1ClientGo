@@ -9,10 +9,6 @@ import (
 )
 
 // Reports
-func (c Cx1Client) RequestNewReport(scanID, projectID, branch, reportType string) (string, error) {
-	c.depwarn("RequestNewReport", "RequestNewReportByID")
-	return c.RequestNewReportByID(scanID, projectID, branch, reportType)
-}
 
 func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType string) (string, error) {
 	jsonData := map[string]interface{}{
@@ -49,10 +45,6 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 	err = json.Unmarshal([]byte(data), &reportResponse)
 
 	return reportResponse.ReportId, err
-}
-func (c Cx1Client) GetReportStatus(reportID string) (ReportStatus, error) {
-	c.depwarn("GetReportStatus", "GetReportStatusByID")
-	return c.GetReportStatusByID(reportID)
 }
 
 func (c Cx1Client) GetReportStatusByID(reportID string) (ReportStatus, error) {

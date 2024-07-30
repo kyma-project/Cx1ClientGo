@@ -163,12 +163,6 @@ func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, req
 	return c.AuditRequestStatusPollingByIDWithTimeout(auditSession, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
 }
 
-// this function should've always been called AuditRequestStatusPollingByIDWithTimeout
-func (c Cx1Client) AuditRequestStatusByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
-	c.depwarn("AuditRequestStatusByIDWithTimeout", "AuditRequestStatusPollingByIDWithTimeout")
-	return c.AuditRequestStatusPollingByIDWithTimeout(auditSession, requestId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
-}
-
 func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
 	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
 	var value interface{}

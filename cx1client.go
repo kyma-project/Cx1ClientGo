@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"strconv"
@@ -25,7 +26,7 @@ var tenantID string
 var tenantOwner *TenantOwner
 var cxVersion VersionInfo
 
-// Main entry for users of this client:
+// Main entry for users of this client when using OAuth Client ID & Client Secret:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
 	if base_url == "" || iam_url == "" || tenant == "" || client_id == "" || client_secret == "" || logger == nil {
 		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
@@ -65,6 +66,7 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 	return &cli, nil
 }
 
+// Main entry for users of this client when using API Key
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
 	ctx := context.Background()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
@@ -104,6 +106,31 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	_, _ = cli.GetCurrentUser()
 
 	return &cli, nil
+}
+
+// Convenience function that reads command-line flags to create the Cx1Client
+func NewClient(client *http.Client, logger *logrus.Logger) (*Cx1Client, error) {
+	APIKey := flag.String("apikey", "", "CheckmarxOne API Key (if not using client id/secret)")
+	ClientID := flag.String("client", "", "CheckmarxOne Client ID (if not using API Key)")
+	ClientSecret := flag.String("secret", "", "CheckmarxOne Client Secret (if not using API Key)")
+	Cx1URL := flag.String("cx1", "", "Optional: CheckmarxOne platform URL, if not defined in the test config.yaml")
+	IAMURL := flag.String("iam", "", "Optional: CheckmarxOne IAM URL, if not defined in the test config.yaml")
+	Tenant := flag.String("tenant", "", "Optional: CheckmarxOne tenant, if not defined in the test config.yaml")
+	flag.Parse()
+
+	if *APIKey == "" && (*ClientID == "" || *ClientSecret == "") {
+		return nil, fmt.Errorf("no credentials provided - need to supply either 'apikey' or 'client' and 'secret' parameters")
+	}
+
+	if *Cx1URL == "" || *IAMURL == "" || *Tenant == "" {
+		return nil, fmt.Errorf("no server details provided - need to supply 'cx1' and 'iam' URL parameters plus 'tenant'")
+	}
+
+	if *APIKey != "" {
+		return NewAPIKeyClient(client, *Cx1URL, *IAMURL, *Tenant, *APIKey, logger)
+	} else {
+		return NewOAuthClient(client, *Cx1URL, *IAMURL, *Tenant, *ClientID, *ClientSecret, logger)
+	}
 }
 
 func (c Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
