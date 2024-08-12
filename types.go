@@ -635,7 +635,7 @@ type User struct {
 	LastName     string      `json:"lastName"`
 	UserName     string      `json:"username"`
 	Email        string      `json:"email"`
-	LastLogin    Cx1LongTime `json:"lastLogin"`
+	LastLogin    Cx1LongTime `json:"-"`
 	Groups       []Group     `json:"-"` // only returned from /users/{id}/groups. Use GetUserGroups to fill.
 	FilledGroups bool        `json:"-"` // indicates if the user object has had the Groups array filled.
 	Roles        []Role      `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
