@@ -1,6 +1,10 @@
 package Cx1ClientGo
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 func ShortenGUID(guid string) string {
 	if len(guid) <= 2 {
@@ -60,4 +64,17 @@ func RemoveRoleByID(slice []Role, ID string) []Role {
 		return slice
 	}
 	return RemoveRole(slice, index)
+}
+
+// 2024-08-12T10:57:20.192973906Z
+const cx1TimeLayout = "2006-01-02T15:04:05.999999999Z"
+
+func (ct *Cx1LongTime) UnmarshalJSON(b []byte) (err error) {
+	s := strings.Trim(string(b), "\"")
+	if s == "null" {
+		ct.Time = time.Time{}
+		return
+	}
+	ct.Time, err = time.Parse(cx1TimeLayout, s)
+	return
 }
