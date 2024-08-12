@@ -624,17 +624,29 @@ type Status struct {
 	Details ScanStatusDetails `json:"details"`
 }
 
+type Cx1LongTime struct {
+	time.Time
+}
+
 type User struct {
-	Enabled      bool    `json:"enabled"`
-	UserID       string  `json:"id,omitempty"`
-	FirstName    string  `json:"firstName"`
-	LastName     string  `json:"lastName"`
-	UserName     string  `json:"username"`
-	Email        string  `json:"email"`
-	Groups       []Group `json:"-"` // only returned from /users/{id}/groups. Use GetUserGroups to fill.
-	FilledGroups bool    `json:"-"` // indicates if the user object has had the Groups array filled.
-	Roles        []Role  `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
-	FilledRoles  bool    `json:"-"` // indicates if the user object has had the Roles array filled.
+	Enabled      bool        `json:"enabled"`
+	UserID       string      `json:"id,omitempty"`
+	FirstName    string      `json:"firstName"`
+	LastName     string      `json:"lastName"`
+	UserName     string      `json:"username"`
+	Email        string      `json:"email"`
+	LastLogin    Cx1LongTime `json:"lastLogin"`
+	Groups       []Group     `json:"-"` // only returned from /users/{id}/groups. Use GetUserGroups to fill.
+	FilledGroups bool        `json:"-"` // indicates if the user object has had the Groups array filled.
+	Roles        []Role      `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
+	FilledRoles  bool        `json:"-"` // indicates if the user object has had the Roles array filled.
+}
+
+type UserWithAttributes struct {
+	User
+	Attributes struct {
+		LastLogin []Cx1LongTime `json:"lastLogin"`
+	} `json:"attributes"`
 }
 
 type VersionInfo struct {

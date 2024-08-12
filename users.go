@@ -49,42 +49,43 @@ func (c Cx1Client) Whoami() (WhoAmI, error) {
 func (c Cx1Client) GetUsers() ([]User, error) {
 	c.logger.Debug("Get Cx1 Users")
 
-	var users []User
+	var users []UserWithAttributes
+
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/users", nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/users?briefRepresentation=false", nil, nil)
 	if err != nil {
-		return users, err
+		return []User{}, err
 	}
 
 	err = json.Unmarshal(response, &users)
 	c.logger.Tracef("Got %d users", len(users))
-	return users, err
+	return toUsers(&users), err
 }
 
 func (c Cx1Client) GetUserByID(userID string) (User, error) {
 	c.logger.Debugf("Get Cx1 User by ID %v", userID)
 
-	var user User
+	var user UserWithAttributes
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v", userID), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v?briefRepresentation=false", userID), nil, nil)
 	if err != nil {
-		return user, err
+		return User{}, err
 	}
 
 	err = json.Unmarshal(response, &user)
-	return user, err
+	return toUser(&user), err
 }
 
 func (c Cx1Client) GetUserByUserName(name string) (User, error) {
 	c.logger.Debugf("Get Cx1 User by Username: %v", name)
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?exact=true&username=%v", url.QueryEscape(name)), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=true&username=%v", url.QueryEscape(name)), nil, nil)
 	if err != nil {
 		return User{}, err
 	}
 
-	var users []User
+	var users []UserWithAttributes
 
 	err = json.Unmarshal(response, &users)
 	if err != nil {
@@ -96,36 +97,37 @@ func (c Cx1Client) GetUserByUserName(name string) (User, error) {
 	if len(users) > 1 {
 		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), name)
 	}
-	return users[0], err
+	return toUser(&users[0]), err
 }
 
 func (c Cx1Client) GetUsersByUserName(search string) ([]User, error) {
-	var users []User
+	var users []UserWithAttributes
 	c.logger.Debugf("Get Cx1 Users matching search: %v", search)
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?exact=false&username=%v", url.QueryEscape(search)), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=false&username=%v", url.QueryEscape(search)), nil, nil)
 	if err != nil {
-		return users, err
+		return []User{}, err
 	}
 
 	err = json.Unmarshal(response, &users)
 	if err != nil {
-		return users, err
+		return []User{}, err
 	}
-	return users, err
+
+	return toUsers(&users), err
 }
 
 func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 	c.logger.Debugf("Get Cx1 User by email: %v", email)
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?exact=true&email=%v", url.QueryEscape(email)), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=true&email=%v", url.QueryEscape(email)), nil, nil)
 	if err != nil {
 		return User{}, err
 	}
 
-	var users []User
+	var users []UserWithAttributes
 
 	err = json.Unmarshal(response, &users)
 	if err != nil {
@@ -137,7 +139,7 @@ func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 	if len(users) > 1 {
 		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), email)
 	}
-	return users[0], err
+	return toUser(&users[0]), err
 }
 
 func (c Cx1Client) CreateUser(newuser User) (User, error) {
@@ -576,4 +578,25 @@ func (c Cx1Client) removeUserKCRoles(userID string, roles *[]Role) error {
 
 	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), bytes.NewReader(jsonBody), nil)
 	return err
+}
+
+// utility
+func toUser(u *UserWithAttributes) User {
+	user := u.User
+	if len(u.Attributes.LastLogin) > 0 {
+		user.LastLogin = u.Attributes.LastLogin[0]
+	}
+	return user
+}
+
+func toUsers(users *[]UserWithAttributes) []User {
+	ret := []User{}
+	for _, u := range *users {
+		user := u.User
+		if len(u.Attributes.LastLogin) > 0 {
+			user.LastLogin = u.Attributes.LastLogin[0]
+		}
+		ret = append(ret, user)
+	}
+	return ret
 }
