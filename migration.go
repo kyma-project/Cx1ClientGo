@@ -101,6 +101,8 @@ func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, m
 		switch status.Status {
 		case "failed":
 			return status.Status, fmt.Errorf("import failed: %s", status.Logs)
+		case "blank":
+			return status.Status, fmt.Errorf("import finished but nothing was imported: %s", status.Logs)
 		case "completed":
 			return status.Status, nil
 		case "partial":
