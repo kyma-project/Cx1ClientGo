@@ -416,6 +416,12 @@ func (f ScanFilter) AddURLValues(params *url.Values) {
 	for _, s := range f.Statuses {
 		params.Add("statuses", s)
 	}
+	if !f.FromDate.IsZero() {
+		params.Add("from-date", f.FromDate.Format(time.RFC3339))
+	}
+	if !f.ToDate.IsZero() {
+		params.Add("to-date", f.ToDate.Format(time.RFC3339))
+	}
 }
 
 func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
