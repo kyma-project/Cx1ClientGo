@@ -355,8 +355,6 @@ func (c *Cx1Client) parseJWT(jwtToken string) error {
 	_, err := jwt.ParseWithClaims(jwtToken, &c.claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(nil), nil
 	})
-
-	fmt.Println("Current user id: ", c.claims.UserID)
 	return err
 }
 
