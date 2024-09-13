@@ -10,7 +10,7 @@ import (
 )
 
 func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSet, error) {
-	c.logger.Debug("Get Cx1 Scan Results for scan %v", scanID)
+	c.logger.Debugf("Get Cx1 Scan Results for scan %v", scanID)
 	var resultResponse struct {
 		Results    []map[string]interface{}
 		TotalCount int
