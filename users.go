@@ -13,11 +13,11 @@ func (c *Cx1Client) GetCurrentUser() (User, error) {
 	if c.user != nil {
 		return *c.user, nil
 	}
+	var user User
 
-	var whoami struct {
+	/*var whoami struct {
 		UserID string
 	}
-	var user User
 
 	response, err := c.sendRequestOther(http.MethodGet, "/auth/admin", "/console/whoami", nil, nil)
 	if err != nil {
@@ -27,14 +27,15 @@ func (c *Cx1Client) GetCurrentUser() (User, error) {
 	err = json.Unmarshal(response, &whoami)
 	if err != nil {
 		return user, err
-	}
+	}*/
 
-	user, _ = c.GetUserByID(whoami.UserID)
+	user, err := c.GetUserByID(c.claims.UserID)
 	c.user = &user
 
 	return *c.user, err
 }
 
+// this no longer works as of 2024-09-13 / version 3.21.5
 func (c Cx1Client) Whoami() (WhoAmI, error) {
 	var me WhoAmI
 	response, err := c.sendRequestOther(http.MethodGet, "/auth/admin", "/console/whoami", nil, nil)
