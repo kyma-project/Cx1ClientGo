@@ -88,19 +88,19 @@ func (q AuditQuery_v310) ToQuery() Query {
 
 func (q AuditQuery_v310) CreateTenantOverride() AuditQuery_v310 {
 	new_query := q
-	new_query.Level = "Corp"
-	new_query.LevelID = "Corp"
+	new_query.Level = AUDIT_QUERY_TENANT
+	new_query.LevelID = AUDIT_QUERY_TENANT
 	return new_query
 }
 func (q AuditQuery_v310) CreateProjectOverrideByID(projectId string) AuditQuery_v310 {
 	new_query := q
-	new_query.Level = "Project"
+	new_query.Level = AUDIT_QUERY_PROJECT
 	new_query.LevelID = projectId
 	return new_query
 }
 func (q AuditQuery_v310) CreateApplicationOverrideByID(applicationId string) AuditQuery_v310 {
 	new_query := q
-	new_query.Level = "Team"
+	new_query.Level = AUDIT_QUERY_APPLICATION
 	new_query.LevelID = applicationId
 	return new_query
 }
