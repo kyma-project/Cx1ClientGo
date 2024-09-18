@@ -170,6 +170,19 @@ type AuditSession struct {
 	Languages              []string `json:"-"`
 }
 
+type AuditSessionFilters map[string]AuditSessionLanguageFilters
+
+type AuditSessionLanguageFilters struct {
+	Description string
+	Filters     []AuditSessionLanguage
+}
+
+type AuditSessionLanguage struct {
+	Key   string
+	Title string
+	Icon  string
+}
+
 type AuditScanSourceFile struct {
 	IsLeaf   bool                  `json:"isLeaf"`
 	Title    string                `json:"title"`

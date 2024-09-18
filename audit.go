@@ -48,6 +48,66 @@ func (c Cx1Client) QueryTypeProject() string {
 	return AUDIT_QUERY_PROJECT
 }
 
+func (c Cx1Client) GetAuditSessionFilters() (AuditSessionFilters, error) {
+	var filters AuditSessionFilters
+	response, err := c.sendRequest(http.MethodGet, "/query-editor/filters", nil, nil)
+	if err != nil {
+		return filters, err
+	}
+
+	err = json.Unmarshal(response, &filters)
+	return filters, err
+}
+
+func (c Cx1Client) AuditCreateSession(engine, filter string) (AuditSession, error) {
+	c.logger.Debugf("Trying to create a tenant-level audit session for engine %v and filter %v", engine, filter)
+
+	body := map[string]string{
+		"scanner": engine,
+		"filter":  filter,
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	var session AuditSession
+
+	response, err := c.sendRequest(http.MethodPost, "/query-editor/sessions", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return session, err
+	}
+
+	err = json.Unmarshal(response, &session)
+	if err != nil {
+		return session, err
+	}
+
+	if session.Data.Status != "ALLOCATED" {
+		return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
+	}
+
+	languageResponse, err := c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
+
+	if err != nil {
+		c.logger.Errorf("Error while creating audit engine: %s", err)
+		return session, err
+	}
+	if languages, ok := languageResponse.([]interface{}); ok {
+		for _, lang := range languages {
+			session.Languages = append(session.Languages, lang.(string))
+		}
+
+	} else {
+		return session, fmt.Errorf("failed to get languages from response: %v", languageResponse)
+	}
+
+	session.ProjectID = ""
+	session.ApplicationID = ""
+
+	c.logger.Debugf("Created audit session %v under tenant with engine %v and filter %v", session.ID, engine, filter)
+
+	return session, nil
+
+}
+
 func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (AuditSession, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
 	/*available, _, err := c.AuditFindSessionsByID(projectId, scanId)
@@ -309,6 +369,15 @@ func (c Cx1Client) GetAuditQueryByKey(auditSession *AuditSession, key string) (Q
 	return query, nil
 }
 
+/*
+Retrieves the list of queries available for this audit session. Level and LevelID options are:
+QueryTypeProduct(), QueryTypeProduct() : same value for both when retrieving product-level queries
+QueryTypeTenant(), QueryTypeTenant() : same value for both when retrieving tenant-level queries
+QueryTypeApplication(), application.ApplicationID : when retrieving application-level queries
+QueryTypeProject(), project.ProjectID : when retrieving project-level queries
+
+The resulting array of queries should be merged into a QueryCollection object returned by the GetQueries function.
+*/
 func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, levelId string) ([]Query, error) {
 	c.logger.Debugf("Get all queries for %v %v", level, levelId)
 
@@ -734,4 +803,17 @@ func (s AuditSession) HasLanguage(language string) bool {
 		}
 	}
 	return false
+}
+
+func (f AuditSessionFilters) GetKey(engine, language string) (string, error) {
+	for eng := range f {
+		if strings.EqualFold(eng, engine) {
+			for _, lang := range f[eng].Filters {
+				if strings.EqualFold(lang.Title, language) {
+					return lang.Key, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("no language '%v' found for engine '%v'", language, engine)
 }
