@@ -20,11 +20,12 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-var cxOrigin = "Cx1-Golang-Client"
+var cxOrigin = "Cx1-Client-GoLang"
 var astAppID string
 var tenantID string
 var tenantOwner *TenantOwner
 var cxVersion VersionInfo
+var cx1UserAgent string = "Cx1-Client-GoLang (github.com/cxpsemea/cx1clientgo)"
 
 // Main entry for users of this client when using OAuth Client ID & Client Secret:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -147,7 +148,8 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 
 	//request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
 	if request.Header.Get("User-Agent") == "" {
-		request.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0")
+		//request.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0")
+		request.Header.Set("User-Agent", cx1UserAgent)
 	}
 
 	if request.Header.Get("Content-Type") == "" {
@@ -428,6 +430,13 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 
 	err = json.Unmarshal(response, &v)
 	return v, err
+}
+
+func (c Cx1Client) GetUserAgent() string {
+	return cx1UserAgent
+}
+func (c Cx1Client) SetUserAgent(ua string) {
+	cx1UserAgent = ua
 }
 
 func (v VersionInfo) String() string {
