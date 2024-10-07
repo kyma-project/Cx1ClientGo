@@ -345,15 +345,44 @@ func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride 
 }
 
 func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
-	limit := 1000 // hard-coded limit of number of branches
+	filter := ProjectBranchFilter{
+		Limit:     1000,
+		ProjectID: projectID,
+	}
+
+	return c.GetProjectBranchesFiltered(filter)
+}
+
+func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
+	query := url.Values{}
 	branches := []string{}
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?project-id=%v&limit=%v", projectID, limit), nil, nil)
+
+	filter.AddURLValues(&query)
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?%v", query.Encode()), nil, nil)
 	if err != nil {
-		return branches, fmt.Errorf("failed to fetch project %v: %s", projectID, err)
+		err = fmt.Errorf("failed to fetch branches matching filter %v: %s", query, err)
+		c.logger.Tracef("Error: %s", err)
+		return branches, err
 	}
 
 	err = json.Unmarshal(data, &branches)
 	return branches, err
+}
+
+func (f ProjectBranchFilter) AddURLValues(params *url.Values) {
+	if f.Offset != 0 {
+		params.Add("offset", strconv.Itoa(f.Offset))
+	}
+	if f.Limit != 0 {
+		params.Add("limit", strconv.Itoa(f.Limit))
+	}
+	if f.ProjectID != "" {
+		params.Add("project-id", f.ProjectID)
+	}
+	if f.Name != "" {
+		params.Add("branch-name", f.ProjectID)
+	}
 }
 
 func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowOverride bool) error {

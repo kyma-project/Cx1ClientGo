@@ -282,6 +282,13 @@ type Project struct {
 	Configuration []ConfigurationSetting `json:"-"`
 }
 
+type ProjectBranchFilter struct {
+	ProjectID string `json:"project-id,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+	Offset    int    `json:"offset,omitempty"`
+	Name      string `json:"branch-name,omitempty"`
+}
+
 type ConfigurationSetting struct {
 	Key             string `json:"key"`
 	Name            string `json:"name"`
@@ -418,15 +425,15 @@ type Scan struct {
 
 type ScanFilter struct {
 	ProjectID string    `json:"project-id"`
-	Limit     int       `json:"limit"`
-	Offset    int       `json:"offset"`
-	Sort      string    `json:"sort"`
-	TagKeys   []string  `json:"tags-keys"`
-	TagValues []string  `json:"tags-values"`
-	Statuses  []string  `json:"statuses"`
-	Branches  []string  `json:"branches"`
-	FromDate  time.Time `json:"from-date"`
-	ToDate    time.Time `json:"to-date"`
+	Limit     int       `json:"limit,omitempty"`
+	Offset    int       `json:"offset,omitempty"`
+	Sort      string    `json:"sort,omitempty"`
+	TagKeys   []string  `json:"tags-keys,omitempty"`
+	TagValues []string  `json:"tags-values,omitempty"`
+	Statuses  []string  `json:"statuses,omitempty"`
+	Branches  []string  `json:"branches,omitempty"`
+	FromDate  time.Time `json:"from-date,omitempty"`
+	ToDate    time.Time `json:"to-date,omitempty"`
 }
 
 type ScanConfiguration struct {
