@@ -49,6 +49,23 @@ func (c Cx1Client) CancelScanByID(scanID string) error {
 	return nil
 }
 
+func (c Cx1Client) GetScansByProjectIDAndBranch(projectID string, branch string) ([]Scan, error) {
+	var scanResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+		Scans              []Scan
+	}
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?project-id=%v&branch=%v", projectID, branch), nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to fetch scan by Project ID %v: %s", projectID, err)
+		return scanResponse.Scans, fmt.Errorf("failed to fetch scan with Project ID %v: %s", projectID, err)
+	}
+
+	json.Unmarshal([]byte(data), &scanResponse)
+	return scanResponse.Scans, nil
+}
+
 func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 	var scanmeta ScanMetadata
 

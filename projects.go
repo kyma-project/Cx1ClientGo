@@ -344,6 +344,18 @@ func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
+	limit := 1000 // hard-coded limit of number of branches
+	branches := []string{}
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?project-id=%v&limit=%v", projectID, limit), nil, nil)
+	if err != nil {
+		return branches, fmt.Errorf("failed to fetch project %v: %s", projectID, err)
+	}
+
+	err = json.Unmarshal(data, &branches)
+	return branches, err
+}
+
 func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowOverride bool) error {
 	var setting ConfigurationSetting
 	setting.Key = "scan.handler.git.repository"
