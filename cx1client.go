@@ -148,7 +148,6 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 
 	//request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
 	if request.Header.Get("User-Agent") == "" {
-		//request.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0")
 		request.Header.Set("User-Agent", cx1UserAgent)
 	}
 
@@ -437,6 +436,11 @@ func (c Cx1Client) GetUserAgent() string {
 }
 func (c Cx1Client) SetUserAgent(ua string) {
 	cx1UserAgent = ua
+}
+
+// this function set the U-A to be the old one that was previously default in Cx1ClientGo
+func (c Cx1Client) SetUserAgentFirefox() {
+	cx1UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0"
 }
 
 func (v VersionInfo) String() string {
