@@ -25,7 +25,7 @@ var astAppID string
 var tenantID string
 var tenantOwner *TenantOwner
 var cxVersion VersionInfo
-var cx1UserAgent string = "Cx1-Client-GoLang (github.com/cxpsemea/cx1clientgo)"
+var cx1UserAgent string = "Cx1ClientGo"
 
 // Main entry for users of this client when using OAuth Client ID & Client Secret:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
