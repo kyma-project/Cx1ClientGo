@@ -47,10 +47,46 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 	return reportResponse.ReportId, err
 }
 
+// the v2 report is the "improved scan report" which can be used the same as the existing RequestNewReportByID
+// returns the report ID which can be passed to GetReportStatusByID or ReportPollingByID
+func (c Cx1Client) RequestNewReportByIDv2(scanID string, engines []string) (string, error) {
+	jsonData := map[string]interface{}{
+		"reportName": "improved-scan-report",
+		"entities": []map[string]interface{}{
+			{
+				"entity": "scan",
+				"ids":    []string{scanID},
+				"tags":   []string{},
+			},
+		},
+		"filters": map[string][]string{
+			"scanners": {"sast"},
+		},
+		"reportType": "ui",
+		"fileFormat": "pdf",
+	}
+
+	jsonValue, _ := json.Marshal(jsonData)
+
+	data, err := c.sendRequest(http.MethodPost, "/reports/v2", bytes.NewReader(jsonValue), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to trigger report v2 generation for scan %v: %s", scanID, err)
+	} else {
+		c.logger.Infof("Generating report %v", string(data))
+	}
+
+	var reportResponse struct {
+		ReportId string
+	}
+	err = json.Unmarshal(data, &reportResponse)
+
+	return reportResponse.ReportId, err
+}
+
 func (c Cx1Client) GetReportStatusByID(reportID string) (ReportStatus, error) {
 	var response ReportStatus
 
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/reports/%v", reportID), nil, nil)
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/reports/%v?returnUrl=true", reportID), nil, nil)
 	if err != nil {
 		c.logger.Tracef("Failed to fetch report status for reportID %v: %s", reportID, err)
 		return response, fmt.Errorf("failed to fetch report status for reportID %v: %s", reportID, err)
