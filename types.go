@@ -19,6 +19,7 @@ type Cx1Client struct {
 	consts  ClientVars
 	claims  Cx1Claims
 	user    *User
+	version *VersionInfo
 }
 
 type Cx1Claims struct {
@@ -232,12 +233,13 @@ type DataImportStatus struct {
 }
 
 type Group struct {
-	GroupID     string              `json:"id"`
-	Name        string              `json:"name"`
-	Path        string              `json:"path"`
-	SubGroups   []Group             `json:"subGroups"`
-	ClientRoles map[string][]string `json:"clientRoles"`
-	Filled      bool                `json:"-"`
+	GroupID       string              `json:"id"`
+	Name          string              `json:"name"`
+	Path          string              `json:"path"`
+	SubGroups     []Group             `json:"subGroups"`
+	SubGroupCount int                 `json:"subGroupCount"`
+	ClientRoles   map[string][]string `json:"clientRoles"`
+	Filled        bool                `json:"-"`
 }
 
 type OIDCClient struct {

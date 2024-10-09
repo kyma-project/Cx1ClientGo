@@ -24,7 +24,8 @@ var cxOrigin = "Cx1-Client-GoLang"
 var astAppID string
 var tenantID string
 var tenantOwner *TenantOwner
-var cxVersion VersionInfo
+
+// var cxVersion VersionInfo
 var cx1UserAgent string = "Cx1ClientGo"
 
 // Main entry for users of this client when using OAuth Client ID & Client Secret:
@@ -285,17 +286,22 @@ func (c Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
 
-func (c *Cx1Client) InitializeClient() {
+func (c *Cx1Client) InitializeClient() error {
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
 	_, _ = c.GetTenantOwner()
-	cxVersion, _ = c.GetVersion()
-	if cxVersion.CheckCxOne("3.12.7") >= 0 {
+	cxVersion, err := c.GetVersion()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve cx1 version: %s", err)
+	}
+	c.version = &cxVersion
+
+	if c.version.CheckCxOne("3.12.7") >= 0 {
 		AUDIT_QUERY_TENANT = "Tenant"
 		AUDIT_QUERY_APPLICATION = "Application"
 	}
 
-	err := c.RefreshFlags()
+	err = c.RefreshFlags()
 	if err != nil {
 		c.logger.Warnf("Failed to get tenant flags: %s", err)
 	}
@@ -320,6 +326,8 @@ func (c *Cx1Client) InitializeClient() {
 
 	c.consts.ProjectApplicationLinkPollingDelaySeconds = 5
 	c.consts.ProjectApplicationLinkPollingMaxSeconds = 300 // 5 min
+
+	return nil
 }
 
 func (c *Cx1Client) RefreshFlags() error {
@@ -421,6 +429,10 @@ func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
 }
 
 func (c Cx1Client) GetVersion() (VersionInfo, error) {
+	if c.version != nil {
+		return *c.version, nil
+	}
+
 	var v VersionInfo
 	response, err := c.sendRequest(http.MethodGet, "/versions", nil, nil)
 	if err != nil {

@@ -89,23 +89,31 @@ func (c Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 	return Group{}, fmt.Errorf("no such group %v found", groupname)
 }
 
+// this returns all groups including all subgroups
 func (c Cx1Client) GetGroups() ([]Group, error) {
 	c.logger.Debug("Get Cx1 Groups")
 	var groups []Group
 
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/groups?briefRepresentation=true", nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/groups?briefRepresentation=false&q", nil, nil)
 	if err != nil {
 		return groups, err
 	}
 
 	err = json.Unmarshal(response, &groups)
 	c.logger.Tracef("Got %d groups", len(groups))
+
+	if c.version.CheckCxOne("3.20.0") >= 0 { // after 3.20 there's a keycloak upgrade to 23.0.7, affecting the behavior of the group apis
+		for i := range groups {
+			setGroupFilled(&groups[i])
+		}
+	}
+
 	return groups, err
 }
 
 func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=false&search=%v", url.PathEscape(groupname)), nil, nil)
 	if err != nil {
 		return Group{}, err
 	}
@@ -120,6 +128,9 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Tracef("Got %d groups", len(groups))
 
 	for i := range groups {
+		if c.version.CheckCxOne("3.20.0") >= 0 {
+			setGroupFilled(&groups[i])
+		}
 		if groups[i].Name == groupname {
 			match := groups[i]
 			return match, nil
@@ -134,6 +145,8 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	return Group{}, fmt.Errorf("no group %v found", groupname)
 }
 
+// this function returns all top-level groups matching the search string, or
+// if a sub-group matches the search, it will return the parent group and only the matching subgroups
 func (c Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
@@ -142,7 +155,16 @@ func (c Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
 	}
 	var groups []Group
 	err = json.Unmarshal(response, &groups)
-	return groups, err
+
+	if err != nil {
+		return groups, err
+	} else if c.version.CheckCxOne("3.20.0") >= 0 {
+		for i := range groups {
+			setGroupFilled(&groups[i])
+		}
+	}
+
+	return groups, nil
 }
 
 func (c Cx1Client) DeleteGroup(group *Group) error {
@@ -166,10 +188,43 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	}
 
 	err = json.Unmarshal(data, &group)
-	group.Filled = true
+	if c.version.CheckCxOne("3.20.0") == -1 && err == nil {
+		group.Filled = true
+	}
 	return group, err
 }
 
+func (c Cx1Client) GetGroupChildren(group *Group) ([]Group, error) {
+	var groups []Group
+	if group.SubGroupCount == 0 {
+		return groups, nil
+	}
+
+	var err error
+	groups, err = c.GetGroupChildrenByID(group.GroupID, 0, group.SubGroupCount)
+	if err != nil {
+		return groups, err
+	}
+	group.SubGroups = groups
+	group.Filled = true
+	return groups, nil
+}
+
+func (c Cx1Client) GetGroupChildrenByID(groupID string, first, max int) ([]Group, error) {
+	var groups []Group
+	data, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/children?briefRepresentation=false&first=%d&max=%d", groupID, first, max), nil, http.Header{})
+	if err != nil {
+		c.logger.Tracef("Fetching group %v children failed: %s", groupID, err)
+		return groups, err
+	}
+
+	err = json.Unmarshal(data, &groups)
+	return groups, err
+}
+
+// this function returns a group matching a path, however as of keycloak 23.0.7 this endpoint
+// is missing the subGroupCount field, which other parts of cx1clientgo rely on, so this function
+// will automatically trigger a GetGroupByID call
 func (c Cx1Client) GetGroupByPath(path string) (Group, error) {
 	c.logger.Debugf("Getting Group with path %v...", path)
 	var group Group
@@ -181,8 +236,10 @@ func (c Cx1Client) GetGroupByPath(path string) (Group, error) {
 	}
 
 	err = json.Unmarshal(data, &group)
-	group.Filled = true
-	return group, err
+	if err != nil {
+		return group, err
+	}
+	return c.GetGroupByID(group.GroupID)
 }
 
 func (c Cx1Client) GroupLink(g *Group) string {
@@ -206,7 +263,11 @@ func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 
 func (c Cx1Client) UpdateGroup(g *Group) error {
 	if !g.Filled {
-		return fmt.Errorf("group %v data is not filled (use GetGroupByID) - may be missing expected roles & subgroups, update aborted", g.String())
+		if c.version.CheckCxOne("3.20.0") >= 0 {
+			return fmt.Errorf("group %v data is not filled (use GetGroupChildren) - may be missing expected roles & subgroups, update aborted", g.String())
+		} else {
+			return fmt.Errorf("group %v data is not filled (use GetGroupByID) - may be missing expected roles & subgroups, update aborted", g.String())
+		}
 	}
 
 	err := c.groupRoleChange(g)
@@ -458,4 +519,15 @@ func (g *Group) FindSubgroupByName(name string) (Group, error) {
 	}
 
 	return Group{}, fmt.Errorf("group %v does not contain subgroup named %v", g.String(), name)
+}
+
+// internal convenience, called from functions that retrieve groups including their subgroups
+func setGroupFilled(group *Group) {
+	if len(group.SubGroups) == int(group.SubGroupCount) {
+		group.Filled = true
+	}
+
+	for i := range group.SubGroups {
+		setGroupFilled(&group.SubGroups[i])
+	}
 }
