@@ -71,7 +71,7 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 
 	var project Project
 	var response []byte
-	if cxVersion.CheckCxOne("3.16.0") >= 0 {
+	if c.version.CheckCxOne("3.16.0") >= 0 {
 		data["applicationIds"] = []string{applicationId}
 		jsonBody, err = json.Marshal(data)
 		if err != nil {
