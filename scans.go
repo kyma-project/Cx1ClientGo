@@ -326,7 +326,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 			}
 		}
 	}
-	return false, fmt.Errorf(fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID))
+	return false, fmt.Errorf("Scan %v did not have a sast-engine incremental flag set", s.ScanID)
 }
 
 // convenience
