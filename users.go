@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -14,20 +13,6 @@ func (c *Cx1Client) GetCurrentUser() (User, error) {
 		return *c.user, nil
 	}
 	var user User
-
-	/*var whoami struct {
-		UserID string
-	}
-
-	response, err := c.sendRequestOther(http.MethodGet, "/auth/admin", "/console/whoami", nil, nil)
-	if err != nil {
-		return user, err
-	}
-
-	err = json.Unmarshal(response, &whoami)
-	if err != nil {
-		return user, err
-	}*/
 
 	user, err := c.GetUserByID(c.claims.UserID)
 	c.user = &user
@@ -50,17 +35,11 @@ func (c Cx1Client) Whoami() (WhoAmI, error) {
 func (c Cx1Client) GetUsers() ([]User, error) {
 	c.logger.Debug("Get Cx1 Users")
 
-	var users []UserWithAttributes
-
-	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/users?briefRepresentation=false", nil, nil)
-	if err != nil {
-		return []User{}, err
-	}
-
-	err = json.Unmarshal(response, &users)
-	c.logger.Tracef("Got %d users", len(users))
-	return toUsers(&users), err
+	_, users, err := c.GetAllUsersFiltered(UserFilter{
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
+		BriefRepresentation: false,
+	})
+	return users, err
 }
 
 func (c Cx1Client) GetUserByID(userID string) (User, error) {
@@ -77,71 +56,117 @@ func (c Cx1Client) GetUserByID(userID string) (User, error) {
 	return toUser(&user), err
 }
 
-func (c Cx1Client) GetUserByUserName(name string) (User, error) {
-	c.logger.Debugf("Get Cx1 User by Username: %v", name)
+func (c Cx1Client) GetUserByUserName(username string) (User, error) {
+	c.logger.Debugf("Get Cx1 User by Username: %v", username)
 
-	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=true&username=%v", url.QueryEscape(name)), nil, nil)
-	if err != nil {
-		return User{}, err
-	}
+	_, users, err := c.GetAllUsersFiltered(UserFilter{
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
+		BriefRepresentation: false,
+		Username:            username,
+		Exact:               true,
+	})
 
-	var users []UserWithAttributes
-
-	err = json.Unmarshal(response, &users)
-	if err != nil {
-		return User{}, err
-	}
 	if len(users) == 0 {
-		return User{}, fmt.Errorf("no user %v found", name)
+		return User{}, fmt.Errorf("no user %v found", username)
 	}
 	if len(users) > 1 {
-		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), name)
+		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), username)
 	}
-	return toUser(&users[0]), err
+	return users[0], err
 }
 
-func (c Cx1Client) GetUsersByUserName(search string) ([]User, error) {
-	var users []UserWithAttributes
-	c.logger.Debugf("Get Cx1 Users matching search: %v", search)
+func (c Cx1Client) GetUsersByUserName(username string) ([]User, error) {
+	c.logger.Debugf("Get Cx1 Users matching search: %v", username)
 
-	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=false&username=%v", url.QueryEscape(search)), nil, nil)
-	if err != nil {
-		return []User{}, err
-	}
-
-	err = json.Unmarshal(response, &users)
-	if err != nil {
-		return []User{}, err
-	}
-
-	return toUsers(&users), err
+	_, users, err := c.GetAllUsersFiltered(UserFilter{
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
+		BriefRepresentation: false,
+		Username:            username,
+		Exact:               false,
+	})
+	return users, err
 }
 
 func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 	c.logger.Debugf("Get Cx1 User by email: %v", email)
+	_, users, err := c.GetAllUsersFiltered(UserFilter{
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
+		BriefRepresentation: false,
+		Email:               email,
+		Exact:               true,
+	})
+	return users[0], err
+}
 
-	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?briefRepresentation=false&exact=true&email=%v", url.QueryEscape(email)), nil, nil)
+func (c Cx1Client) GetUserCount(filter UserFilter) (uint64, error) {
+	params := filter.UrlParams()
+	c.logger.Debugf("Get Cx1 User count with filter %v", params.Encode())
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/count?%v", params.Encode()), nil, nil)
 	if err != nil {
-		return User{}, err
+		return 0, err
 	}
 
-	var users []UserWithAttributes
+	var CountResponse struct {
+		Count uint64 `json:"count"`
+	}
+
+	err = json.Unmarshal(response, &CountResponse)
+	return CountResponse.Count, err
+}
+
+// Underlying function used by many GetUsers* calls
+// Returns the number of applications matching the filter and the array of matching applications
+func (c Cx1Client) GetUsersFiltered(filter UserFilter) ([]User, error) {
+	var users []User
+	var uwa []UserWithAttributes
+	params := filter.UrlParams()
+	if filter.Realm == "" {
+		filter.Realm = c.tenant
+	}
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users?%v", params.Encode()), nil, nil)
+	if err != nil {
+		return users, err
+	}
 
 	err = json.Unmarshal(response, &users)
 	if err != nil {
-		return User{}, err
+		return users, err
 	}
-	if len(users) == 0 {
-		return User{}, fmt.Errorf("no user %v found", email)
-	}
-	if len(users) > 1 {
-		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), email)
-	}
-	return toUser(&users[0]), err
+
+	users = toUsers(&uwa)
+
+	return users, err
 }
+
+// returns all users matching the filter
+// fill parameter will?
+func (c Cx1Client) GetAllUsersFiltered(filter UserFilter) (uint64, []User, error) {
+	var users []User
+
+	count, err := c.GetUserCount(filter)
+	if err != nil {
+		return count, users, err
+	}
+	gs, err := c.GetUsersFiltered(filter)
+	users = gs
+
+	for err == nil && count > filter.Max+filter.First && filter.Max > 0 {
+		filter.Bump()
+		gs, err = c.GetUsersFiltered(filter)
+		users = append(users, gs...)
+	}
+
+	return count, users, err
+}
+
+/*
+func (f UserFilter) UrlParams() url.Values {
+	params, _ := query.Values(f)
+	return params
+}
+*/
 
 func (c Cx1Client) CreateUser(newuser User) (User, error) {
 	c.logger.Debugf("Creating a new user %v", newuser.String())
@@ -161,7 +186,7 @@ func (c Cx1Client) CreateUser(newuser User) (User, error) {
 	if location != "" {
 		lastInd := strings.LastIndex(location, "/")
 		guid := location[lastInd+1:]
-		c.logger.Tracef(" New user ID: %v", guid)
+		c.logger.Tracef("New user ID: %v", guid)
 		return c.GetUserByID(guid)
 	} else {
 		return User{}, fmt.Errorf("unknown error - no Location header redirect in response")
@@ -170,7 +195,6 @@ func (c Cx1Client) CreateUser(newuser User) (User, error) {
 
 /*
 CreateSAMLUser will directly create a user that can log in via SAML, requiring the internal identifiers that are used within the identity provider.
-
 This function requires some special behavior that's not supported by the standard user type, and requires a two-step process of creating and then updating the user.
 */
 func (c Cx1Client) CreateSAMLUser(newuser User, idpAlias, idpUserId, idpUserName string) (User, error) {

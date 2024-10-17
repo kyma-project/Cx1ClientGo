@@ -13,6 +13,7 @@ func (g *Group) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(g.GroupID), g.Name)
 }
 
+// create a top-level group
 func (c Cx1Client) CreateGroup(groupname string) (Group, error) {
 	c.logger.Debugf("Create Group: %v ", groupname)
 	data := map[string]interface{}{
@@ -23,13 +24,21 @@ func (c Cx1Client) CreateGroup(groupname string) (Group, error) {
 		return Group{}, err
 	}
 
-	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups", bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequestRawIAM(http.MethodPost, "/auth/admin", "/groups", bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		c.logger.Tracef("Error creating group %v: %s", groupname, err)
 		return Group{}, err
 	}
 
-	return c.GetGroupByName(groupname)
+	location := response.Header.Get("Location")
+	if location != "" {
+		lastInd := strings.LastIndex(location, "/")
+		guid := location[lastInd+1:]
+		c.logger.Tracef("New group ID: %v", guid)
+		return c.GetGroupByID(guid)
+	} else {
+		return Group{}, fmt.Errorf("unknown error - no Location header redirect in response")
+	}
 }
 
 func (c Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (Group, error) {
@@ -92,36 +101,27 @@ func (c Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 // this returns all groups including all subgroups
 func (c Cx1Client) GetGroups() ([]Group, error) {
 	c.logger.Debug("Get Cx1 Groups")
-	var groups []Group
-
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/groups?briefRepresentation=false&q", nil, nil)
-	if err != nil {
-		return groups, err
-	}
-
-	err = json.Unmarshal(response, &groups)
-	c.logger.Tracef("Got %d groups", len(groups))
-
-	if c.version.CheckCxOne("3.20.0") >= 0 { // after 3.20 there's a keycloak upgrade to 23.0.7, affecting the behavior of the group apis
-		for i := range groups {
-			setGroupFilled(&groups[i])
-		}
-	}
-
+	_, groups, err := c.GetAllGroupsFiltered(GroupFilter{
+		BriefRepresentation: false,
+		PopulateHierarchy:   false,
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Groups},
+	}, true)
 	return groups, err
 }
 
+// will return the first group matching 'groupname'
+// the group is not "filled": the subgroups array will be empty (use FillGroup/GetGroupChildren)
 func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=false&search=%v", url.PathEscape(groupname)), nil, nil)
-	if err != nil {
-		return Group{}, err
-	}
-	var groups []Group
-	err = json.Unmarshal(response, &groups)
+	_, groups, err := c.GetAllGroupsFiltered(GroupFilter{
+		BriefRepresentation: false,
+		PopulateHierarchy:   false,
+		Search:              groupname,
+		Exact:               true,
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Groups},
+	}, false)
 
 	if err != nil {
-		c.logger.Tracef("Error retrieving group %v: %s", groupname, err)
 		return Group{}, err
 	}
 
@@ -131,14 +131,11 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 		if c.version.CheckCxOne("3.20.0") >= 0 {
 			setGroupFilled(&groups[i])
 		}
+
 		if groups[i].Name == groupname {
-			match := groups[i]
-			return match, nil
-		} else {
-			subg, err := groups[i].FindSubgroupByName(groupname)
-			if err == nil {
-				return subg, nil
-			}
+			return groups[i], nil
+		} else if g, err := groups[i].FindSubgroupByName(groupname); err == nil {
+			return g, nil
 		}
 	}
 
@@ -147,25 +144,102 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 
 // this function returns all top-level groups matching the search string, or
 // if a sub-group matches the search, it will return the parent group and only the matching subgroups
+// the returned groups are not "filled": they will not include subgroups that do not match the search term
 func (c Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
-	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
-	if err != nil {
-		return []Group{}, err
-	}
-	var groups []Group
-	err = json.Unmarshal(response, &groups)
+	c.logger.Debugf("Get Cx1 Groups by name: %v", groupname)
+	_, groups, err := c.GetAllGroupsFiltered(GroupFilter{
+		BriefRepresentation: false,
+		PopulateHierarchy:   true,
+		Search:              groupname,
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Groups},
+	}, false)
 
+	return groups, err
+}
+
+func (c Cx1Client) GetGroupCount(search string, topLevel bool) (uint64, error) {
+	c.logger.Debugf("Get Cx1 Group count with search=%v, topLevel=%v", search, topLevel)
+
+	params := url.Values{}
+
+	if search != "" {
+		params.Add("search", search)
+	}
+	if topLevel {
+		params.Add("top", "true")
+	}
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/count?%v", params.Encode()), nil, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	var CountResponse struct {
+		Count uint64 `json:"count"`
+	}
+
+	err = json.Unmarshal(response, &CountResponse)
+	return CountResponse.Count, err
+}
+
+// Underlying function used by many GetGroups* calls
+// Returns the number of applications matching the filter and the array of matching applications
+func (c Cx1Client) GetGroupsFiltered(filter GroupFilter, fill bool) ([]Group, error) {
+	var groups []Group
+	params := filter.UrlParams()
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?%v", params.Encode()), nil, nil)
 	if err != nil {
 		return groups, err
-	} else if c.version.CheckCxOne("3.20.0") >= 0 {
+	}
+
+	err = json.Unmarshal(response, &groups)
+	if err != nil {
+		return groups, err
+	}
+
+	if fill {
 		for i := range groups {
-			setGroupFilled(&groups[i])
+			c.FillGroup(&groups[i])
 		}
 	}
 
-	return groups, nil
+	return groups, err
 }
+
+// returns all groups matching the filter
+// fill parameter will recursively fill subgroups
+func (c Cx1Client) GetAllGroupsFiltered(filter GroupFilter, fill bool) (uint64, []Group, error) {
+	var groups []Group
+
+	count, err := c.GetGroupCount(filter.Search, true)
+	if err != nil {
+		return count, groups, err
+	}
+	gs, err := c.GetGroupsFiltered(filter, fill)
+	groups = gs
+
+	for err == nil && count > filter.Max+filter.First && filter.Max > 0 {
+		filter.Bump()
+		gs, err = c.GetGroupsFiltered(filter, fill)
+		groups = append(groups, gs...)
+	}
+
+	return count, groups, err
+}
+
+/*
+func (f GroupFilter) UrlParams() url.Values {
+	params := url.Values{}
+	params.Add("first", strconv.FormatUint(f.First, 10))
+	params.Add("max", strconv.FormatUint(f.Max, 10))
+	if f.Search != "" {
+		params.Add("search", f.Search)
+	}
+
+	return params
+}
+*/
 
 func (c Cx1Client) DeleteGroup(group *Group) error {
 	c.logger.Debugf("Deleting Group %v...", group.String())
@@ -173,6 +247,9 @@ func (c Cx1Client) DeleteGroup(group *Group) error {
 	return err
 }
 
+// this will return the specific group matching this ID
+// before cx1 version 3.20.0, the group was 'filled' (including subgroups)
+// on/after cx1 version 3.20.0, the group is not filled, use FillGroup/GetGroupChildren
 func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	c.logger.Debugf("Getting Group with ID %v...", groupID)
 	var group Group
@@ -194,6 +271,8 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	return group, err
 }
 
+// gets and fills the group's immediate children (subgroups)
+// does not include sub-children
 func (c Cx1Client) GetGroupChildren(group *Group) ([]Group, error) {
 	var groups []Group
 	if group.SubGroupCount == 0 {
@@ -201,16 +280,43 @@ func (c Cx1Client) GetGroupChildren(group *Group) ([]Group, error) {
 	}
 
 	var err error
-	groups, err = c.GetGroupChildrenByID(group.GroupID, 0, group.SubGroupCount)
-	if err != nil {
-		return groups, err
+	group.SubGroups = []Group{}
+	for offset := uint64(0); offset < group.SubGroupCount; offset += c.pagination.Groups {
+		groups, err = c.GetGroupChildrenByID(group.GroupID, offset, c.pagination.Groups)
+		if err != nil {
+			return group.SubGroups, err
+		}
+		group.SubGroups = append(group.SubGroups, groups...)
 	}
-	group.SubGroups = groups
+
 	group.Filled = true
-	return groups, nil
+	return group.SubGroups, nil
 }
 
-func (c Cx1Client) GetGroupChildrenByID(groupID string, first, max int) ([]Group, error) {
+// fills the group's immediate children (subgroups) along with sub-children and all descendents
+func (c Cx1Client) FillGroup(group *Group) error {
+	if group.SubGroupCount != uint64(len(group.SubGroups)) {
+		if _, err := c.GetGroupChildren(group); err != nil {
+			return err
+		}
+	} else {
+		group.Filled = true
+	}
+
+	group.DescendentCount = group.SubGroupCount
+
+	for i := range group.SubGroups {
+		if err := c.FillGroup(&group.SubGroups[i]); err != nil {
+			return err
+		}
+
+		group.DescendentCount += group.SubGroups[i].DescendentCount
+	}
+	return nil
+}
+
+// Used by GetGroupChildren
+func (c Cx1Client) GetGroupChildrenByID(groupID string, first, max uint64) ([]Group, error) {
 	var groups []Group
 	data, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/children?briefRepresentation=false&first=%d&max=%d", groupID, first, max), nil, http.Header{})
 	if err != nil {

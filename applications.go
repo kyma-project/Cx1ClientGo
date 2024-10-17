@@ -5,34 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
-// Applications
-func (c Cx1Client) GetApplications(limit uint) ([]Application, error) {
+// Get All Applications
+// As of 2024-10-17 this function no longer takes a specific limit as a parameter
+// To set limits, offsets, and other parameters directly, use GetApplicationsFiltered
+func (c Cx1Client) GetApplications() ([]Application, error) {
 	c.logger.Debug("Get Cx1 Applications")
-	var ApplicationResponse struct {
-		TotalCount    uint64
-		FilteredCount uint64
-		Applications  []Application
-	}
 
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", limit)},
-		//"sort":       {"+created_at"},
-	}
+	_, applications, err := c.GetAllApplicationsFiltered(ApplicationFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
+	})
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return ApplicationResponse.Applications, err
-	}
-
-	err = json.Unmarshal(response, &ApplicationResponse)
-	c.logger.Tracef("Retrieved %d applications", len(ApplicationResponse.Applications))
-	return ApplicationResponse.Applications, err
+	return applications, err
 }
 
 func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
@@ -47,34 +33,22 @@ func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
 	return application, err
 }
 
-func (c Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Application, error) {
+// Get all applications matching 'name'
+// As of 2024-10-17, this function no longer takes a specific limit as a parameter
+// To set limits, offsets, and other parameters directly, use GetApplicationsFiltered
+func (c Cx1Client) GetApplicationsByName(name string) ([]Application, error) {
 	c.logger.Debugf("Get Cx1 Applications by name: %v", name)
 
-	var ApplicationResponse struct {
-		TotalCount    uint64
-		FilteredCount uint64
-		Applications  []Application
-	}
+	_, applications, err := c.GetAllApplicationsFiltered(ApplicationFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
+		Name:       name,
+	})
 
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", limit)},
-		"name":  {name},
-	}
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return ApplicationResponse.Applications, err
-	}
-
-	err = json.Unmarshal(response, &ApplicationResponse)
-	c.logger.Tracef("Retrieved %d applications", len(ApplicationResponse.Applications))
-	return ApplicationResponse.Applications, err
+	return applications, err
 }
 
 func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
-	apps, err := c.GetApplicationsByName(name, 0)
+	apps, err := c.GetApplicationsByName(name)
 	if err != nil {
 		return Application{}, err
 	}
@@ -87,6 +61,66 @@ func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
 
 	return Application{}, fmt.Errorf("no application found named %v", name)
 }
+
+// Underlying function used by many GetApplications* calls
+// Returns the number of applications matching the filter and the array of matching applications
+func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []Application, error) {
+	params := filter.UrlParams()
+
+	var ApplicationResponse struct {
+		BaseFilteredResponse
+		Applications []Application
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications?%v", params.Encode()), nil, nil)
+
+	if err != nil {
+		return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
+	}
+
+	err = json.Unmarshal(response, &ApplicationResponse)
+	return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
+}
+
+func (c Cx1Client) GetAllApplicationsFiltered(filter ApplicationFilter) (uint64, []Application, error) {
+	var applications []Application
+
+	count, apps, err := c.GetApplicationsFiltered(filter)
+	applications = apps
+
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 {
+		filter.Bump()
+		count, apps, err = c.GetApplicationsFiltered(filter)
+		applications = append(applications, apps...)
+	}
+
+	return count, applications, err
+}
+
+/*
+func (f ApplicationFilter) UrlParams() url.Values {
+	params := url.Values{}
+	params.Add("offset", strconv.FormatUint(f.Offset, 10))
+	params.Add("limit", strconv.FormatUint(f.Limit, 10))
+	if f.Name != "" {
+		params.Add("name", f.Name)
+	}
+
+	if len(f.TagsKeys) > 0 {
+		for _, v := range f.TagsKeys {
+			params.Add("tags-keys", v)
+		}
+	}
+
+	if len(f.TagsValues) > 0 {
+		for _, v := range f.TagsValues {
+			params.Add("tags-values", v)
+		}
+	}
+
+	return params
+}
+*/
 
 func (c Cx1Client) CreateApplication(appname string) (Application, error) {
 	c.logger.Debugf("Create Application: %v", appname)
@@ -134,48 +168,23 @@ func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 // convenience
 func (c Cx1Client) GetApplicationCount() (uint64, error) {
 	c.logger.Debug("Get Cx1 Project count")
-	var ApplicationResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-	}
 
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", 1)},
-		//"sort":       {"+created_at"},
-	}
+	count, _, err := c.GetApplicationsFiltered(ApplicationFilter{
+		BaseFilter: BaseFilter{Limit: 1},
+	})
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return 0, err
-	}
-
-	err = json.Unmarshal(response, &ApplicationResponse)
-	return ApplicationResponse.TotalCount, err
+	return count, err
 }
 
 func (c Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
 	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
-	var ApplicationResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-	}
 
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", 1)},
-		"name":  {name},
-	}
+	count, _, err := c.GetApplicationsFiltered(ApplicationFilter{
+		BaseFilter: BaseFilter{Limit: 1},
+		Name:       name,
+	})
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return 0, err
-	}
-
-	err = json.Unmarshal(response, &ApplicationResponse)
-	return ApplicationResponse.FilteredTotalCount, err
+	return count, err
 }
 
 func (a *Application) String() string {

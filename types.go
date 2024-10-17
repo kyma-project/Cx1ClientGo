@@ -11,15 +11,16 @@ import (
 type Cx1Client struct {
 	httpClient *http.Client
 	//authToken  string
-	baseUrl string
-	iamUrl  string
-	tenant  string
-	logger  *logrus.Logger
-	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
-	consts  ClientVars
-	claims  Cx1Claims
-	user    *User
-	version *VersionInfo
+	baseUrl    string
+	iamUrl     string
+	tenant     string
+	logger     *logrus.Logger
+	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts     ClientVars
+	pagination PaginationSettings
+	claims     Cx1Claims
+	user       *User
+	version    *VersionInfo
 }
 
 type Cx1Claims struct {
@@ -70,6 +71,32 @@ type ClientVars struct {
 	ProjectApplicationLinkPollingDelaySeconds int
 }
 
+// Related to pagination and filtering
+type PaginationSettings struct {
+	Applications uint64
+	Branches     uint64
+	Groups       uint64
+	Projects     uint64
+	Results      uint64
+	Scans        uint64
+	Users        uint64
+}
+
+type BaseFilter struct {
+	Offset uint64 `url:"offset"`
+	Limit  uint64 `url:"limit"`
+}
+
+type BaseIAMFilter struct {
+	First uint64 `url:"first"`
+	Max   uint64 `url:"max"`
+}
+
+type BaseFilteredResponse struct {
+	TotalCount         uint64 `json:"totalCount"`
+	FilteredTotalCount uint64 `json:"filteredTotalCount"`
+}
+
 type AccessAssignment struct {
 	TenantID     string               `json:"tenantID"`
 	EntityID     string               `json:"entityID"`
@@ -103,6 +130,13 @@ type Application struct {
 	ProjectIds    []string          `json:"projectIds"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
+}
+
+type ApplicationFilter struct {
+	BaseFilter
+	Name       string   `url:"name,omitempty"`
+	TagsKeys   []string `url:"tags-keys,omitempty"`
+	TagsValues []string `url:"tags-values,omitempty"`
 }
 
 type ApplicationRule struct {
@@ -233,13 +267,24 @@ type DataImportStatus struct {
 }
 
 type Group struct {
-	GroupID       string              `json:"id"`
-	Name          string              `json:"name"`
-	Path          string              `json:"path"`
-	SubGroups     []Group             `json:"subGroups"`
-	SubGroupCount int                 `json:"subGroupCount"`
-	ClientRoles   map[string][]string `json:"clientRoles"`
-	Filled        bool                `json:"-"`
+	GroupID         string              `json:"id"`
+	Name            string              `json:"name"`
+	Path            string              `json:"path"`
+	SubGroups       []Group             `json:"subGroups"`
+	SubGroupCount   uint64              `json:"subGroupCount"`
+	DescendentCount uint64              `json:"-"`
+	ClientRoles     map[string][]string `json:"clientRoles"`
+	Filled          bool                `json:"-"`
+}
+
+type GroupFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool   `url:"briefRepresentation,omitempty"`
+	Exact               bool   `url:"exact,omitempty"`
+	PopulateHierarchy   bool   `url:"populateHierarchy,omitempty"`
+	Q                   bool   `url:"q,omitempty"`
+	Search              string `url:"search,omitempty"` // used in both GetGroup and GetGroupCount
+	Top                 bool   `url:"-"`                // used only in GetGroupCount
 }
 
 type OIDCClient struct {
@@ -284,11 +329,24 @@ type Project struct {
 	Configuration []ConfigurationSetting `json:"-"`
 }
 
+type ProjectFilter struct {
+	BaseFilter
+	ProjectIDs []string `url:"ids,omitempty"`
+	Names      []string `url:"names,omitempty"`
+	Name       string   `url:"name,omitempty"`
+	NameRegex  string   `url:"name-regex,omitempty"`
+	Groups     []string `url:"groups,omitempty"`
+	Origins    []string `url:"origins,omitempty"`
+	TagsKeys   []string `url:"tags-keys,omitempty"`
+	TagsValues []string `url:"tags-values,omitempty"`
+	EmptyTags  bool     `url:"empty-tags,omitempty"`
+	RepoURL    string   `url:"repo-url,omitempty"`
+}
+
 type ProjectBranchFilter struct {
-	ProjectID string `json:"project-id,omitempty"`
-	Limit     int    `json:"limit,omitempty"`
-	Offset    int    `json:"offset,omitempty"`
-	Name      string `json:"branch-name,omitempty"`
+	BaseFilter
+	ProjectID string `url:"project-id,omitempty"`
+	Name      string `url:"branch-name,omitempty"`
 }
 
 type ConfigurationSetting struct {
@@ -426,16 +484,15 @@ type Scan struct {
 }
 
 type ScanFilter struct {
-	ProjectID string    `json:"project-id"`
-	Limit     int       `json:"limit,omitempty"`
-	Offset    int       `json:"offset,omitempty"`
-	Sort      string    `json:"sort,omitempty"`
-	TagKeys   []string  `json:"tags-keys,omitempty"`
-	TagValues []string  `json:"tags-values,omitempty"`
-	Statuses  []string  `json:"statuses,omitempty"`
-	Branches  []string  `json:"branches,omitempty"`
-	FromDate  time.Time `json:"from-date,omitempty"`
-	ToDate    time.Time `json:"to-date,omitempty"`
+	BaseFilter
+	ProjectID string    `url:"project-id"`
+	Sort      string    `url:"sort,omitempty"`
+	TagKeys   []string  `url:"tags-keys,omitempty"`
+	TagValues []string  `url:"tags-values,omitempty"`
+	Statuses  []string  `url:"statuses,omitempty"`
+	Branches  []string  `url:"branches,omitempty"`
+	FromDate  time.Time `url:"from-date,omitempty"`
+	ToDate    time.Time `url:"to-date,omitempty"`
 }
 
 type ScanConfiguration struct {
@@ -665,6 +722,22 @@ type User struct {
 	FilledGroups bool        `json:"-"` // indicates if the user object has had the Groups array filled.
 	Roles        []Role      `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
 	FilledRoles  bool        `json:"-"` // indicates if the user object has had the Roles array filled.
+}
+
+type UserFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool   `url:"briefRepresentation,omitempty"` // only used by GetUser* (not GetUserCount)
+	Email               string `url:"email,omitempty"`
+	EmailVerified       bool   `url:"emailVerified,omitempty"`
+	Enabled             bool   `url:"enabled,omitempty"`
+	Exact               bool   `url:"exact,omitempty"` // only used by GetUser* (not GetUserCount)
+	FirstName           string `url:"firstName,omitempty"`
+	IDPAlias            string `url:"idpAlias,omitempty"`  // only used by GetUser* (not GetUserCount)
+	IDPUserId           string `url:"idpUserId,omitempty"` // only used by GetUser* (not GetUserCount)
+	Q                   string `url:"q,omitempty"`
+	Search              string `url:"search,omitempty"`
+	Username            string `url:"username,omitempty"`
+	Realm               string `url:"realm"`
 }
 
 type UserWithAttributes struct {

@@ -306,26 +306,8 @@ func (c *Cx1Client) InitializeClient() error {
 		c.logger.Warnf("Failed to get tenant flags: %s", err)
 	}
 
-	c.consts.MigrationPollingMaxSeconds = 300 // 5 min
-	c.consts.MigrationPollingDelaySeconds = 30
-
-	c.consts.AuditEnginePollingMaxSeconds = 300 // 5 min
-	c.consts.AuditEnginePollingDelaySeconds = 30
-
-	c.consts.AuditScanPollingMaxSeconds = 600 // 10 min
-	c.consts.AuditScanPollingDelaySeconds = 30
-
-	c.consts.AuditCompilePollingMaxSeconds = 600 // 10 min
-	c.consts.AuditCompilePollingDelaySeconds = 30
-
-	c.consts.AuditLanguagePollingMaxSeconds = 300 // 5 min
-	c.consts.AuditLanguagePollingDelaySeconds = 30
-
-	c.consts.ScanPollingMaxSeconds = 0
-	c.consts.ScanPollingDelaySeconds = 30
-
-	c.consts.ProjectApplicationLinkPollingDelaySeconds = 5
-	c.consts.ProjectApplicationLinkPollingMaxSeconds = 300 // 5 min
+	c.InitializeClientVars()
+	c.InitializePaginationSettings()
 
 	return nil
 }
@@ -398,15 +380,6 @@ func (c Cx1Client) CheckFlag(flag string) (bool, error) {
 	}
 
 	return setting, nil
-}
-
-func (c Cx1Client) GetClientVars() ClientVars {
-	c.logger.Debug("Retrieving client vars - polling limits set in seconds")
-	return c.consts
-}
-
-func (c *Cx1Client) SetClientVars(clientvars ClientVars) {
-	c.consts = clientvars
 }
 
 func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
