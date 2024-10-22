@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 // Get the first count Applications
@@ -76,7 +78,7 @@ func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
 // Returns the number of applications matching the filter and the array of matching applications
 // with one page (filter.Offset to filter.Offset+filter.Limit) of results
 func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []Application, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 
 	var ApplicationResponse struct {
 		BaseFilteredResponse
@@ -194,7 +196,8 @@ func (c Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
 
 func (c Cx1Client) GetApplicationCountFiltered(filter ApplicationFilter) (uint64, error) {
 	filter.Limit = 1
-	c.logger.Debugf("Get Cx1 Application count matching filter: %v", filter.UrlParams().Encode())
+	params, _ := query.Values(filter)
+	c.logger.Debugf("Get Cx1 Application count matching filter: %v", params.Encode())
 
 	count, _, err := c.GetApplicationsFiltered(filter)
 

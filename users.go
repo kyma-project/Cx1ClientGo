@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 func (c *Cx1Client) GetCurrentUser() (User, error) {
@@ -116,7 +119,7 @@ func (c Cx1Client) GetUserCount() (uint64, error) {
 }
 
 func (c Cx1Client) GetUserCountFiltered(filter UserFilter) (uint64, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 	c.logger.Debugf("Get Cx1 User count with filter %v", params.Encode())
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/count?%v", params.Encode()), nil, nil)
@@ -124,12 +127,8 @@ func (c Cx1Client) GetUserCountFiltered(filter UserFilter) (uint64, error) {
 		return 0, err
 	}
 
-	var CountResponse struct {
-		Count uint64 `json:"count"`
-	}
-
-	err = json.Unmarshal(response, &CountResponse)
-	return CountResponse.Count, err
+	count, err := strconv.ParseUint(string(response), 10, 64)
+	return count, err
 }
 
 // Underlying function used by many GetUsers* calls
@@ -137,7 +136,7 @@ func (c Cx1Client) GetUserCountFiltered(filter UserFilter) (uint64, error) {
 func (c Cx1Client) GetUsersFiltered(filter UserFilter) ([]User, error) {
 	var users []User
 	var uwa []UserWithAttributes
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 	if filter.Realm == "" {
 		filter.Realm = c.tenant
 	}
@@ -147,7 +146,7 @@ func (c Cx1Client) GetUsersFiltered(filter UserFilter) ([]User, error) {
 		return users, err
 	}
 
-	err = json.Unmarshal(response, &users)
+	err = json.Unmarshal(response, &uwa)
 	if err != nil {
 		return users, err
 	}
@@ -160,7 +159,6 @@ func (c Cx1Client) GetUsersFiltered(filter UserFilter) ([]User, error) {
 // returns all users matching the filter
 func (c Cx1Client) GetAllUsersFiltered(filter UserFilter) (uint64, []User, error) {
 	var users []User
-
 	count, err := c.GetUserCountFiltered(filter)
 	if err != nil {
 		return count, users, err

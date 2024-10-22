@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/go-querystring/query"
 	"golang.org/x/exp/slices"
 )
 
@@ -214,7 +215,7 @@ func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID strin
 // Returns the total number of matching results plus an array of projects with
 // one page of results (from filter.Offset to filter.Offset+filter.Limit)
 func (c Cx1Client) GetProjectsFiltered(filter ProjectFilter) (uint64, []Project, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 
 	var ProjectResponse struct {
 		BaseFilteredResponse
@@ -348,7 +349,7 @@ func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
 
 // retrieves a page (filter.Offset to filter.Offset+filter.Limit) of branches for a project
 func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 	branches := []string{}
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?%v", params.Encode()), nil, nil)
@@ -415,7 +416,7 @@ func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
 }
 
 func (c Cx1Client) GetProjectCountFiltered(filter ProjectFilter) (uint64, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 	filter.Limit = 1
 	c.logger.Debugf("Get Cx1 Project count matching filter: %v", params.Encode())
 	count, _, err := c.GetProjectsFiltered(filter)

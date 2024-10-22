@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/google/go-querystring/query"
 )
 
 func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
@@ -125,7 +127,7 @@ func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
 // returns the number of scans matching the filter and an array of those scans
 // returns one page of data (from filter.Offset to filter.Offset+filter.Limit)
 func (c Cx1Client) GetScansFiltered(filter ScanFilter) (uint64, []Scan, error) {
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 
 	var scanResponse struct {
 		BaseFilteredResponse
@@ -177,15 +179,30 @@ func (c Cx1Client) GetXScansFiltered(filter ScanFilter, count uint64) (uint64, [
 	return count, scans, err
 }
 
-func (s *ScanSummary) TotalCount() uint64 {
+func (s ScanSummary) TotalCount() uint64 {
 	var count uint64
 	count = 0
-
-	for _, c := range s.SASTCounters.StateCounters {
-		count += c.Counter
-	}
+	count += s.SASTCounters.TotalCounter
+	count += s.SCACounters.TotalCounter
+	count += s.SCAPackagesCounters.TotalCounter
+	count += s.KICSCounters.TotalCounter
+	count += s.APISecCounters.TotalCounter
+	count += s.ContainersCounters.TotalCounter
+	count += s.SCAContainersCounters.TotalPackagesCounters
 
 	return count
+}
+
+func (s ScanSummary) String() string {
+	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d KICS, %d API Security, and %d Containers results",
+		s.SASTCounters.TotalCounter,
+		s.SCACounters.TotalCounter,
+		s.SCAPackagesCounters.TotalCounter,
+		s.SCAContainersCounters.TotalPackagesCounters,
+		s.KICSCounters.TotalCounter,
+		s.APISecCounters.TotalCounter,
+		s.ContainersCounters.TotalCounter,
+	)
 }
 
 func (c Cx1Client) GetScanCount() (uint64, error) {
@@ -196,7 +213,8 @@ func (c Cx1Client) GetScanCount() (uint64, error) {
 
 func (c Cx1Client) GetScanCountFiltered(filter ScanFilter) (uint64, error) {
 	filter.Limit = 1
-	c.logger.Debugf("Get scan count matching filter: %v", filter.UrlParams().Encode())
+	params, _ := query.Values(filter)
+	c.logger.Debugf("Get scan count matching filter: %v", params.Encode())
 	count, _, err := c.GetScansFiltered(filter)
 	return count, err
 }
@@ -258,24 +276,25 @@ func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 }
 
 func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error) {
-	var ScansSummaries struct {
-		ScanSum    []ScanSummary `json:"scansSummaries"`
-		TotalCount uint64
-	}
-
 	scanIdsString := strings.Join(scanIDs, ",")
+	return c.GetScanSummariesFiltered(ScanSummaryFilter{
+		ScanIDs: scanIdsString,
+		Status:  true,
+	})
+}
 
-	params := url.Values{
-		"scan-ids":                {scanIdsString},
-		"include-queries":         {"false"},
-		"include-status-counters": {"true"},
-		"include-files":           {"false"},
+func (c Cx1Client) GetScanSummariesFiltered(filter ScanSummaryFilter) ([]ScanSummary, error) {
+	var ScansSummaries struct {
+		BaseFilteredResponse
+		ScanSum []ScanSummary `json:"scansSummaries"`
 	}
 
+	params, _ := query.Values(filter)
+	c.logger.Infof("GetAllScanSummariesFiltered for scan IDs %v: %v", filter.ScanIDs, params.Encode())
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode()), nil, http.Header{})
 	if err != nil {
-		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
-		return []ScanSummary{}, fmt.Errorf("failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
+		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", filter.ScanIDs, err)
+		return []ScanSummary{}, fmt.Errorf("failed to fetch metadata for scans with IDs %v: %s", filter.ScanIDs, err)
 	}
 
 	err = json.Unmarshal(data, &ScansSummaries)
@@ -284,7 +303,7 @@ func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error)
 		return []ScanSummary{}, err
 	}
 	if ScansSummaries.TotalCount == 0 {
-		return []ScanSummary{}, fmt.Errorf("failed to retrieve scan summaries for scans with IDs: %v", scanIdsString)
+		return []ScanSummary{}, fmt.Errorf("failed to retrieve scan summaries for scans with IDs: %v", filter.ScanIDs)
 	}
 
 	if len(ScansSummaries.ScanSum) == 0 {
@@ -293,10 +312,6 @@ func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error)
 	}
 
 	return ScansSummaries.ScanSum, nil
-}
-
-func (c Cx1Client) GetScanSummaryFiltered(filter ScanSummaryFilter) ([]ScanSummary, error) {
-
 }
 
 func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {

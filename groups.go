@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 func (g *Group) String() string {
@@ -190,7 +192,7 @@ func (c Cx1Client) GetGroupCount(search string, topLevel bool) (uint64, error) {
 // Returns the number of applications matching the filter and the array of matching applications
 func (c Cx1Client) GetGroupsFiltered(filter GroupFilter, fill bool) ([]Group, error) {
 	var groups []Group
-	params := filter.UrlParams()
+	params, _ := query.Values(filter)
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?%v", params.Encode()), nil, nil)
 	if err != nil {

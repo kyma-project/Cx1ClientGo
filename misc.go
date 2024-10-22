@@ -1,11 +1,5 @@
 package Cx1ClientGo
 
-import (
-	"net/url"
-
-	"github.com/google/go-querystring/query"
-)
-
 // miscellaneous functions (ClientVars & Pagination)
 
 func (c Cx1Client) GetClientVars() ClientVars {
@@ -60,16 +54,6 @@ func (f *BaseFilter) Bump() {
 	f.Offset += f.Limit
 }
 
-func (f BaseFilter) UrlParams() url.Values {
-	params, _ := query.Values(f)
-	return params
-}
-
 func (f *BaseIAMFilter) Bump() {
 	f.First += f.Max
-}
-
-func (f BaseIAMFilter) UrlParams() url.Values {
-	params, _ := query.Values(f)
-	return params
 }

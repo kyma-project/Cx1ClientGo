@@ -515,10 +515,12 @@ type ScanResultSet struct {
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
 	KICS         []ScanKICSResult
+	Containers   []ScanContainersResult
 }
 
 type ScanResultsFilter struct {
 	BaseFilter
+	ScanID             string   `url:"scan-id"`
 	Severity           []string `url:"severity"`
 	State              []string `url:"state"`
 	Status             []string `url:"status"`
@@ -541,6 +543,39 @@ type ScanResultBase struct {
 	FirstScanId     string
 	Description     string
 	// Comments			// currently doesn't do anything?
+}
+
+type ScanContainersResult struct {
+	ScanResultBase
+	Data                 ScanContainersResultData
+	VulnerabilityDetails ScanContainersResultDetails
+}
+
+type ScanContainersResultData struct {
+	PackageName    string
+	PackageVersion string
+	ImageName      string
+	ImageTag       string
+	ImageFilePath  string
+	ImageOrigin    string
+}
+
+type ScanContainersResultDetails struct {
+	CVSSScore float64
+	CveName   string
+	CweID     string
+	Cvss      struct {
+		Scope                 string
+		Score                 string
+		Severity              string
+		AttackVector          string `json:"attack_vector"`
+		IntegrityImpact       string `json:"integrity_impact"`
+		UserInteraction       string `json:"user_interaction"`
+		AttackComplexity      string `json:"attack_complexity"`
+		AvailabilityImpact    string `json:"availability_impact"`
+		PrivilegesRequired    string `json:"privileges_required"`
+		ConfidentialityImpact string `json:"confidentiality_impact"`
+	}
 }
 
 type ScanKICSResult struct {
@@ -678,23 +713,108 @@ type ScanSummary struct {
 	SASTCounters struct {
 		QueriesCounters        []ScanSummaryQueriesCounter
 		SinkFileCounters       []ScanSummaryFileCounter
-		SurceFileCounters      []ScanSummaryFileCounter
 		LanguageCounters       []ScanSummaryLanguageCounter
 		ComplianceCounters     []ScanSummaryComplianceCounter
 		SeverityCounters       []ScanSummarySeverityCounter
 		StatusCounters         []ScanSummaryStatusCounter
 		StateCounters          []ScanSummaryStateCounter
 		SeverityStatusCounters []ScanSummarySeverityStatusCounter
-		TotalCounter           uint64
-		FilesScannedCounter    uint64
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
 	}
 
-	// ignoring the other counters
-	// KICSCounters
-	// SCACounters
-	// SCAPackagesCounters
-	// SCAContainerCounters
-	// APISecCounters
+	KICSCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+
+		PlatformSummary []ScanSummaryPlatformCounter
+		CategorySummary []ScanSummaryCategoryCounter
+	}
+
+	SCACounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+	}
+
+	SCAPackagesCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+		OutdatedCounter     uint64
+		RiskLevelCounters   []ScanSummaryRiskLevelCounter
+		LicenseCounters     []ScanSummaryLicenseCounter
+		PackageCounters     []ScanSummaryPackageCounter
+	}
+
+	SCAContainersCounters struct {
+		TotalPackagesCounters           uint64
+		TotalVulnerabilitiesCounter     uint64
+		SeverityVulnerabilitiesCounters []ScanSummarySeverityCounter
+		StateVulnerabilityCounters      []ScanSummaryStateCounter
+		StatusVulnerabilityCounters     []ScanSummaryStatusCounter
+		AgeVulnerabilityCounters        []ScanSummaryAgeCounter
+		PackageVulnerabilitiesCounters  []ScanSummaryPackageCounter
+	}
+
+	APISecCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+		RiskLevel           string
+		APISecTotal         uint64
+	}
+
+	MicroEnginesCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+	}
+
+	ContainersCounters struct {
+		TotalPackagesCounter   uint64
+		TotalCounter           uint64
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		AgeCounters            []ScanSummaryAgeCounter
+		PackageCounters        []ScanSummaryContainerPackageCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+	}
 }
 
 type ScanSummaryAgeCounter struct {
@@ -714,12 +834,29 @@ type ScanSummaryLanguageCounter struct {
 	Language string
 	Counter  uint64
 }
+type ScanSummaryLicenseCounter struct {
+	License string
+	Counter uint64
+}
+type ScanSummaryPackageCounter struct {
+	Package string
+	Counter uint64
+}
+type ScanSummaryContainerPackageCounter struct {
+	Package     string
+	Counter     uint64
+	IsMalicious bool
+}
 type ScanSummaryQueriesCounter struct {
 	QueryID        uint64                     `json:"queryID"`
 	Name           uint64                     `json:"queryName"`
 	Severity       string                     `json:"severity"`
 	StatusCounters []ScanSummaryStatusCounter `json:"statusCounters"`
 	Counter        uint64                     `json:"counter"`
+}
+type ScanSummaryRiskLevelCounter struct {
+	RiskLevel string
+	Counter   uint64
 }
 type ScanSummarySeverityCounter struct {
 	Severity string
@@ -739,9 +876,18 @@ type ScanSummaryStatusCounter struct {
 	Counter uint64
 }
 
+type ScanSummaryPlatformCounter struct {
+	Platform string
+	Counter  uint64
+}
+type ScanSummaryCategoryCounter struct {
+	Category string
+	Counter  uint64
+}
+
 type ScanSummaryFilter struct {
 	BaseFilter
-	ScanIDs        []string `url:"scan-ids"`
+	ScanIDs        string   `url:"scan-ids"` // comma-separated list of scan ids
 	SeverityStatus bool     `url:"include-severity-status"`
 	Status         bool     `url:"include-status-counters"`
 	Queries        bool     `url:"include-queries"`
