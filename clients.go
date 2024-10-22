@@ -75,6 +75,26 @@ func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
 	return client, fmt.Errorf("no such client %v found", clientName)
 }
 
+func (c Cx1Client) GetClientSecret(client *OIDCClient) (string, error) {
+	c.logger.Debugf("Getting OIDC client secret for %v", client.String())
+
+	var responseBody struct {
+		Type  string
+		Value string
+	}
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v/client-secret", client.ID), nil, nil)
+	if err != nil {
+		return "", err
+	}
+
+	err = json.Unmarshal(response, &responseBody)
+	if err == nil {
+		client.ClientSecret = responseBody.Value
+	}
+	return responseBody.Value, err
+}
+
 func (c Cx1Client) CreateClient(name string, notificationEmails []string, secretExpiration int) (OIDCClient, error) {
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
