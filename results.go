@@ -5,120 +5,100 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSet, error) {
-	c.logger.Debugf("Get Cx1 Scan Results for scan %v", scanID)
-	var resultResponse struct {
-		Results    []map[string]interface{}
-		TotalCount int
-	}
+	c.logger.Debugf("Get %d Cx1 Scan Results for scan %v", limit, scanID)
 
-	var ResultSet ScanResultSet
+	_, results, err := c.GetXScanResultsFiltered(ScanResultsFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Results},
+		ScanID:     scanID,
+	}, limit)
 
-	params := url.Values{
-		"scan-id":  {scanID},
-		"limit":    {fmt.Sprintf("%d", limit)},
-		"state":    []string{},
-		"severity": []string{},
-		"status":   []string{},
-	}
+	return results, err
+}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
-	if err != nil && len(response) == 0 {
-		c.logger.Tracef("Failed to retrieve scan results for scan ID %v", scanID)
-		return ResultSet, err
-	}
+func (c Cx1Client) GetAllScanResultsByID(scanID string) (ScanResultSet, error) {
+	c.logger.Debugf("Get all Cx1 Scan Results for scan %v", scanID)
 
-	dec := json.NewDecoder(bytes.NewReader(response))
-	dec.UseNumber()
-	err = dec.Decode(&resultResponse)
-	if err != nil {
-		c.logger.Tracef("Failed while parsing response: %s", err)
-		c.logger.Tracef("Response contents: %s", string(response))
-		return ResultSet, err
-	}
-	c.logger.Debugf("Retrieved %d results", resultResponse.TotalCount)
+	_, results, err := c.GetAllScanResultsFiltered(ScanResultsFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Results},
+		ScanID:     scanID,
+	})
 
-	if len(resultResponse.Results) != resultResponse.TotalCount {
-		c.logger.Warnf("Expected results total count %d but parsed only %d", resultResponse.TotalCount, len(resultResponse.Results))
-		c.logger.Tracef("Response was: %v", string(response))
-	}
-
-	for _, r := range resultResponse.Results {
-		//c.logger.Infof("Result %v: %v", r["similarityId"].(string), r["type"].(string))
-		jsonResult, _ := json.Marshal(r)
-		switch r["type"].(string) {
-		case "sast":
-			var SASTResult ScanSASTResult
-			err := json.Unmarshal(jsonResult, &SASTResult)
-			if err != nil {
-				c.logger.Warnf("Failed to unmarshal result %v to SAST type: %s", r["similarityId"].(string), err)
-			} else {
-				ResultSet.SAST = append(ResultSet.SAST, SASTResult)
-			}
-		case "sca":
-			var SCAResult ScanSCAResult
-			err := json.Unmarshal(jsonResult, &SCAResult)
-			if err != nil {
-				c.logger.Warnf("Failed to unmarshal result %v to SCA type: %s", r["similarityId"].(string), err)
-			} else {
-				ResultSet.SCA = append(ResultSet.SCA, SCAResult)
-			}
-		case "kics":
-			var KICSResult ScanKICSResult
-			err := json.Unmarshal(jsonResult, &KICSResult)
-			if err != nil {
-				c.logger.Warnf("Failed to unmarshal result %v to KICS type: %s", r["similarityId"].(string), err)
-			} else {
-				ResultSet.KICS = append(ResultSet.KICS, KICSResult)
-			}
-		case "sca-container":
-			var SCACResult ScanSCAContainerResult
-			err := json.Unmarshal(jsonResult, &SCACResult)
-			if err != nil {
-				c.logger.Warnf("Failed to unmarshal result %v to SCAContainer type: %s", r["similarityId"].(string), err)
-			} else {
-				ResultSet.SCAContainer = append(ResultSet.SCAContainer, SCACResult)
-			}
-		default:
-			c.logger.Warnf("Unable to unmarshal result %v of unknown type %v", r["similarityId"].(string), r["type"].(string))
-		}
-	}
-
-	return ResultSet, nil
+	return results, err
 }
 
 func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 	c.logger.Debugf("Get Cx1 Scan Results count for scan %v", scanID)
-	var resultResponse struct {
-		//Results    []ScanResult
-		TotalCount uint64
-	}
+	count, _, err := c.GetScanResultsFiltered(ScanResultsFilter{
+		BaseFilter: BaseFilter{Limit: 0},
+		ScanID:     scanID,
+	})
 
-	params := url.Values{
-		"scan-id":  {scanID},
-		"limit":    {fmt.Sprintf("%d", 0)},
-		"state":    []string{},
-		"severity": []string{},
-		"status":   []string{},
-	}
+	return count, err
+}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
-	if err != nil && len(response) == 0 {
-		c.logger.Tracef("Failed to retrieve scan results for scan ID %v", scanID)
-		return 0, err
-	}
+// returns one 'page' of scan results matching the filter
+// returns items (filter.Offset*filter.Limit) to (filter.Offset + 1)*filter.Limit
+// returns the count of items retrieved, however some items may not be parsed into the result
+// set depending on support in cx1clientgo
+func (c Cx1Client) GetScanResultsFiltered(filter ScanResultsFilter) (uint64, ScanResultSet, error) {
+	params, _ := query.Values(filter)
 
-	err = json.Unmarshal(response, &resultResponse)
+	results := ScanResultSet{}
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Tracef("Failed while parsing response: %s", err)
-		c.logger.Tracef("Response contents: %s", string(response))
-		return 0, err
+		err = fmt.Errorf("failed to fetch scans matching filter %v: %s", params.Encode(), err)
+		c.logger.Tracef("Error: %s", err)
+		return 0, results, err
 	}
-	return resultResponse.TotalCount, nil
+
+	count, results, err := c.parseScanResults(data)
+	return count, results, err
+}
+
+func (s *ScanResultsFilter) Bump() { // this one does offset in pages rather than items
+	s.Offset++
+}
+
+// gets all of the results available matching a filter
+// the counter returned represents the total number of results which were parsed
+// this may not include some of the returned results depending on Cx1ClientGo support
+func (c Cx1Client) GetAllScanResultsFiltered(filter ScanResultsFilter) (uint64, ScanResultSet, error) {
+	var results ScanResultSet
+
+	count, rs, err := c.GetScanResultsFiltered(filter)
+	results = rs
+
+	for err == nil && count > (filter.Offset+1)*filter.Limit && filter.Limit > 0 {
+		filter.Bump()
+		_, rs, err = c.GetScanResultsFiltered(filter)
+		results.Append(&rs)
+	}
+
+	return rs.Count(), results, err
+}
+
+// will return at least X results matching the filter
+// May return more due to paging eg: requesting 101 with a 100-item page can return 200 results
+func (c Cx1Client) GetXScanResultsFiltered(filter ScanResultsFilter, desiredcount uint64) (uint64, ScanResultSet, error) {
+	var results ScanResultSet
+
+	_, rs, err := c.GetScanResultsFiltered(filter)
+	results = rs
+
+	for err == nil && desiredcount > (filter.Offset+1)*filter.Limit && filter.Limit > 0 {
+		filter.Bump()
+		_, rs, err = c.GetScanResultsFiltered(filter)
+		results.Append(&rs)
+	}
+
+	return rs.Count(), results, err
 }
 
 // convenience function
@@ -249,6 +229,12 @@ func (r ScanKICSResult) String() string {
 func (r ScanSCAResult) String() string {
 	return fmt.Sprintf("%v - %v (%v) - recommended version %v: %v", r.Data.PackageIdentifier, r.Data.PublishedAt, r.SimilarityID, r.Data.RecommendedVersion, r.Data.GetType("Advisory").URL)
 }
+func (r ScanSCAContainerResult) String() string {
+	return fmt.Sprintf("%v %v - %v (%v)", r.Data.PackageName, r.Data.PackageVersion, r.Data.PublishedAt, r.SimilarityID)
+}
+func (r ScanContainersResult) String() string {
+	return fmt.Sprintf("%v %v / %v #%v (%v)", r.Data.PackageName, r.Data.PackageVersion, r.Data.ImageName, r.Data.ImageTag, r.SimilarityID)
+}
 
 func (r ScanSCAResultData) GetType(packageDataType string) ScanSCAResultPackageData {
 	for _, p := range r.PackageData {
@@ -296,7 +282,29 @@ func (c Cx1Client) GetScanSASTResultSummary(results *ScanResultSet) ScanResultSu
 }
 
 func (s ScanResultSet) String() string {
-	return fmt.Sprintf("Result set with %d SAST, %d SCA, %d SCAContainer, and %d KICS results", len(s.SAST), len(s.SCA), len(s.SCAContainer), len(s.KICS))
+	return fmt.Sprintf("Result set with %d SAST, %d SCA, %d SCAContainer, %d KICS, and %d Containers results", len(s.SAST), len(s.SCA), len(s.SCAContainer), len(s.KICS), len(s.Containers))
+}
+
+func (s ScanResultSet) Count() uint64 {
+	return uint64(len(s.SAST) + len(s.SCA) + len(s.SCAContainer) + len(s.KICS) + len(s.Containers))
+}
+
+func (s *ScanResultSet) Append(results *ScanResultSet) {
+	if len(results.KICS) > 0 {
+		s.KICS = append(s.KICS, results.KICS...)
+	}
+	if len(results.SCA) > 0 {
+		s.SCA = append(s.SCA, results.SCA...)
+	}
+	if len(results.SCAContainer) > 0 {
+		s.SCAContainer = append(s.SCAContainer, results.SCAContainer...)
+	}
+	if len(results.SAST) > 0 {
+		s.SAST = append(s.SAST, results.SAST...)
+	}
+	if len(results.Containers) > 0 {
+		s.Containers = append(s.Containers, results.Containers...)
+	}
 }
 
 func (s ScanResultStatusSummary) Total() uint64 {
@@ -314,4 +322,84 @@ func (s ScanResultSummary) String() string {
 			s.High.Urgent+s.Medium.Urgent+s.Low.Urgent+s.Information.Urgent,
 			s.High.ProposedNotExploitable+s.Medium.ProposedNotExploitable+s.Low.ProposedNotExploitable+s.Information.ProposedNotExploitable,
 			s.High.NotExploitable+s.Medium.NotExploitable+s.Low.NotExploitable+s.Information.NotExploitable))
+}
+
+// Note: response.TotalCount may be greater than the resultset, due to limited cx1clientgo engine support
+func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, error) {
+	var resultResponse struct {
+		Results    []map[string]interface{}
+		TotalCount uint64
+	}
+
+	var ResultSet ScanResultSet
+
+	dec := json.NewDecoder(bytes.NewReader(response))
+	dec.UseNumber()
+	err := dec.Decode(&resultResponse)
+	if err != nil {
+		c.logger.Tracef("Failed while parsing response: %s", err)
+		c.logger.Tracef("Response contents: %s", string(response))
+		return resultResponse.TotalCount, ResultSet, err
+	}
+	//c.logger.Debugf("Retrieved %d results", resultResponse.TotalCount)
+
+	/*
+		if uint64(len(resultResponse.Results)) != resultResponse.TotalCount {
+			c.logger.Warnf("Expected results total count %d but parsed only %d", resultResponse.TotalCount, len(resultResponse.Results))
+			c.logger.Tracef("Response was: %v", string(response))
+		}
+	*/
+
+	for _, r := range resultResponse.Results {
+		//c.logger.Infof("Result %v: %v", r["similarityId"].(string), r["type"].(string))
+		jsonResult, _ := json.Marshal(r)
+		switch r["type"].(string) {
+		case "sast":
+			var SASTResult ScanSASTResult
+			err := json.Unmarshal(jsonResult, &SASTResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SAST type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SAST = append(ResultSet.SAST, SASTResult)
+			}
+		case "sca":
+			var SCAResult ScanSCAResult
+			err := json.Unmarshal(jsonResult, &SCAResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SCA type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SCA = append(ResultSet.SCA, SCAResult)
+			}
+		case "kics":
+			var KICSResult ScanKICSResult
+			err := json.Unmarshal(jsonResult, &KICSResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to KICS type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.KICS = append(ResultSet.KICS, KICSResult)
+			}
+		case "sca-container":
+			var SCACResult ScanSCAContainerResult
+			err := json.Unmarshal(jsonResult, &SCACResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SCAContainer type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SCAContainer = append(ResultSet.SCAContainer, SCACResult)
+			}
+		case "containers":
+			var ContainerResult ScanContainersResult
+			err := json.Unmarshal(jsonResult, &ContainerResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to Containers type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.Containers = append(ResultSet.Containers, ContainerResult)
+			}
+		default:
+			c.logger.Warnf("Unable to unmarshal result %v of unknown type %v", r["similarityId"].(string), r["type"].(string))
+		}
+	}
+
+	c.logger.Debugf("Retrieved %d of %d results", ResultSet.Count(), resultResponse.TotalCount)
+
+	return resultResponse.TotalCount, ResultSet, nil
 }

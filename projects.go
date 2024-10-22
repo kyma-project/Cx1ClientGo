@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
+	"github.com/google/go-querystring/query"
 	"golang.org/x/exp/slices"
 )
 
@@ -123,44 +123,26 @@ func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applica
 	return project, nil
 }
 
-func (p *Project) String() string {
-	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
+// Get up to count # of projects
+// behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
+func (c Cx1Client) GetProjects(count uint64) ([]Project, error) {
+	c.logger.Debugf("Get %d Cx1 Projects", count)
+	_, projects, err := c.GetXProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+	}, count)
+
+	return projects, err
 }
 
-func (p *Project) GetTags() string {
-	str := ""
-	for key, val := range p.Tags {
-		if str == "" {
-			str = key + " = " + val
-		} else {
-			str = str + ", " + key + " = " + val
-		}
-	}
-	return str
-}
-
-func (c Cx1Client) GetProjects(limit uint64) ([]Project, error) {
-	c.logger.Debug("Get Cx1 Projects")
-	var ProjectResponse struct {
-		TotalCount    uint64
-		FilteredCount uint64
-		Projects      []Project
-	}
-
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", limit)},
-		//"name":  {projectname},
-	}
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/?%v", body.Encode()), nil, nil)
-	if err != nil {
-		return ProjectResponse.Projects, err
-	}
-
-	err = json.Unmarshal(response, &ProjectResponse)
-	c.logger.Tracef("Retrieved %d projects", len(ProjectResponse.Projects))
-	return ProjectResponse.Projects, err
+// Get all of the projects
+// behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
+// behaves the same as GetProjects(# of projects in the environment)
+func (c Cx1Client) GetAllProjects() ([]Project, error) {
+	c.logger.Debug("Get All Cx1 Projects")
+	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+	})
+	return projects, err
 }
 
 func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
@@ -181,92 +163,105 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	return project, err
 }
 
-func (c Cx1Client) GetProjectByName(projectname string) (Project, error) {
-	count, err := c.GetProjectCountByName(projectname)
-	if err != nil {
-		return Project{}, err
-	}
+// case-sensitive exact match for a project name
+func (c Cx1Client) GetProjectByName(name string) (Project, error) {
+	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+		Names:      []string{name},
+	})
 
-	projects, err := c.GetProjectsByName(projectname, count)
 	if err != nil {
 		return Project{}, err
 	}
 
 	for _, p := range projects {
-		if p.Name == projectname {
+		if p.Name == name {
 			err = c.GetProjectConfiguration(&p)
 			return p, err
 		}
 	}
 
-	return Project{}, fmt.Errorf("no project matching %v found", projectname)
+	return Project{}, fmt.Errorf("no project matching %v found", name)
 }
 
-func (c Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Project, error) {
-	c.logger.Debugf("Get Cx1 Projects By Name: %v", projectname)
+// Get all projects with names matching the search 'name'
+// As of 2024-10-17 this function no longer takes a specific limit as a parameter
+// To set limits, offsets, and other parameters directly, use GetProjectsFiltered
+func (c Cx1Client) GetProjectsByName(name string) ([]Project, error) {
+	c.logger.Debugf("Get Cx1 Projects By Name: %v", name)
 
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", limit)},
-		"name":  {projectname},
-	}
+	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+		Name:       name,
+	})
 
-	var ProjectResponse struct {
-		TotalCount    uint64
-		FilteredCount uint64
-		Projects      []Project
-	}
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
-	if err != nil {
-		return ProjectResponse.Projects, err
-	}
-
-	err = json.Unmarshal(response, &ProjectResponse)
-	if err != nil {
-		c.logger.Tracef("Error getting project: %s", err)
-		c.logger.Tracef("Failed to unmarshal: %v", string(response))
-		return ProjectResponse.Projects, err
-	}
-
-	c.logger.Tracef("Retrieved %d projects", len(ProjectResponse.Projects))
-
-	return ProjectResponse.Projects, nil
+	return projects, err
 }
 
+// Get all projects in the group 'groupID' with names matching the search 'name'
 func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
-	var projectResponse struct {
-		TotalCount    int       `json:"totalCount"`
-		FilteredCount int       `json:"filteredCount"`
-		Projects      []Project `json:"projects"`
+	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+		Name:       projectName,
+		Groups:     []string{groupID},
+	})
+
+	return projects, err
+}
+
+// Underlying function used by many GetApplications* calls
+// Returns the total number of matching results plus an array of projects with
+// one page of results (from filter.Offset to filter.Offset+filter.Limit)
+func (c Cx1Client) GetProjectsFiltered(filter ProjectFilter) (uint64, []Project, error) {
+	params, _ := query.Values(filter)
+
+	var ProjectResponse struct {
+		BaseFilteredResponse
+		Projects []Project
 	}
 
-	var data []byte
-	var err error
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", params.Encode()), nil, nil)
 
-	body := url.Values{}
-	if len(groupID) > 0 {
-		body.Add("groups", groupID)
-	}
-	if len(projectName) > 0 {
-		body.Add("name", projectName)
-	}
-
-	if len(body) > 0 {
-		data, err = c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/?%v", body.Encode()), nil, nil)
-	} else {
-		data, err = c.sendRequest(http.MethodGet, "/projects/", nil, nil)
-	}
 	if err != nil {
-		return projectResponse.Projects, fmt.Errorf("fetching project %v failed: %s", projectName, err)
+		return ProjectResponse.FilteredTotalCount, ProjectResponse.Projects, err
 	}
 
-	err = json.Unmarshal(data, &projectResponse)
-	c.logger.Tracef("Retrieved %d projects matching %v in group ID %v", len(projectResponse.Projects), projectName, groupID)
+	err = json.Unmarshal(response, &ProjectResponse)
+	return ProjectResponse.FilteredTotalCount, ProjectResponse.Projects, err
+}
 
-	return projectResponse.Projects, err
+// Retrieves all projects matching the filter
+func (c Cx1Client) GetAllProjectsFiltered(filter ProjectFilter) (uint64, []Project, error) {
+	var projects []Project
+
+	count, err := c.GetProjectCountFiltered(filter)
+	if err != nil {
+		return count, projects, err
+	}
+	_, projects, err = c.GetXProjectsFiltered(filter, count)
+	return count, projects, err
+}
+
+// Retrieves the top 'count' projects matching the filter
+func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uint64, []Project, error) {
+	var projects []Project
+
+	_, projs, err := c.GetProjectsFiltered(filter)
+	projects = projs
+
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 && uint64(len(projects)) < count {
+		filter.Bump()
+		_, projs, err = c.GetProjectsFiltered(filter)
+		projects = append(projects, projs...)
+	}
+
+	if uint64(len(projects)) > count {
+		return count, projects[:count], err
+	}
+
+	return count, projects, err
 }
 
 // convenience
@@ -344,24 +339,22 @@ func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+// retrieves all branches for a project
 func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
-	filter := ProjectBranchFilter{
-		Limit:     1000,
-		ProjectID: projectID,
-	}
-
-	return c.GetProjectBranchesFiltered(filter)
+	return c.GetAllProjectBranchesFiltered(ProjectBranchFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Branches},
+		ProjectID:  projectID,
+	})
 }
 
+// retrieves a page (filter.Offset to filter.Offset+filter.Limit) of branches for a project
 func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
-	query := url.Values{}
+	params, _ := query.Values(filter)
 	branches := []string{}
 
-	filter.AddURLValues(&query)
-
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?%v", query.Encode()), nil, nil)
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/branches?%v", params.Encode()), nil, nil)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch branches matching filter %v: %s", query, err)
+		err = fmt.Errorf("failed to fetch branches matching filter %v: %s", params, err)
 		c.logger.Tracef("Error: %s", err)
 		return branches, err
 	}
@@ -370,19 +363,68 @@ func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]str
 	return branches, err
 }
 
-func (f ProjectBranchFilter) AddURLValues(params *url.Values) {
-	if f.Offset != 0 {
-		params.Add("offset", strconv.Itoa(f.Offset))
+// returns all of a project's branches matching a filter
+func (c Cx1Client) GetAllProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
+	var branches []string
+
+	bs, err := c.GetProjectBranchesFiltered(filter)
+	branches = bs
+
+	for err == nil && filter.Limit == uint64(len(bs)) && filter.Limit > 0 {
+		filter.Bump()
+		bs, err = c.GetProjectBranchesFiltered(filter)
+		branches = append(branches, bs...)
 	}
-	if f.Limit != 0 {
-		params.Add("limit", strconv.Itoa(f.Limit))
+
+	return branches, err
+}
+
+// retrieves the first X of a project's branches matching a filter
+func (c Cx1Client) GetXProjectBranchesFiltered(filter ProjectBranchFilter, count uint64) ([]string, error) {
+	var branches []string
+
+	bs, err := c.GetProjectBranchesFiltered(filter)
+	branches = bs
+
+	for err == nil && filter.Limit == uint64(len(bs)) && filter.Limit > 0 && uint64(len(branches)) < count {
+		filter.Bump()
+		bs, err = c.GetProjectBranchesFiltered(filter)
+		branches = append(branches, bs...)
 	}
-	if f.ProjectID != "" {
-		params.Add("project-id", f.ProjectID)
+
+	if uint64(len(branches)) > count {
+		return branches[:count], err
 	}
-	if f.Name != "" {
-		params.Add("branch-name", f.ProjectID)
-	}
+
+	return branches, err
+}
+
+func (c Cx1Client) GetProjectCount() (uint64, error) {
+	c.logger.Debug("Get Cx1 Projects Count")
+	count, _, err := c.GetProjectsFiltered(ProjectFilter{BaseFilter: BaseFilter{Limit: 1}})
+	return count, err
+}
+
+// returns the number of projects with names matching a search string 'name'
+func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
+	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
+	count, _, err := c.GetProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: 1},
+		Name:       name,
+	})
+	return count, err
+}
+
+func (c Cx1Client) GetProjectCountFiltered(filter ProjectFilter) (uint64, error) {
+	params, _ := query.Values(filter)
+	filter.Limit = 1
+	c.logger.Debugf("Get Cx1 Project count matching filter: %v", params.Encode())
+	count, _, err := c.GetProjectsFiltered(filter)
+	return count, err
+}
+
+func (c Cx1Client) ProjectLink(p *Project) string {
+	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
 func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowOverride bool) error {
@@ -421,113 +463,6 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 	// TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
-}
-
-func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		ProjectID: projectID,
-		Limit:     limit,
-		Sort:      "+created_at",
-	}
-	return c.GetScansFiltered(scanFilter)
-}
-
-func (f ScanFilter) AddURLValues(params *url.Values) {
-	if f.Offset != 0 {
-		params.Add("offset", strconv.Itoa(f.Offset))
-	}
-	if f.Limit != 0 {
-		params.Add("limit", strconv.Itoa(f.Limit))
-	}
-	if f.ProjectID != "" {
-		params.Add("project-id", f.ProjectID)
-	}
-	if f.Sort != "" {
-		params.Add("sort", f.Sort)
-	}
-	for _, b := range f.Branches {
-		params.Add("branches", b)
-	}
-	for _, k := range f.TagKeys {
-		params.Add("tags-keys", k)
-	}
-	for _, v := range f.TagValues {
-		params.Add("tags-values", v)
-	}
-	for _, s := range f.Statuses {
-		params.Add("statuses", s)
-	}
-	if !f.FromDate.IsZero() {
-		params.Add("from-date", f.FromDate.Format(time.RFC3339))
-	}
-	if !f.ToDate.IsZero() {
-		params.Add("to-date", f.ToDate.Format(time.RFC3339))
-	}
-}
-
-func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
-	filter.ProjectID = projectID
-	return c.GetLastScansFiltered(filter)
-}
-
-func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, status []string) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		ProjectID: projectID,
-		Limit:     limit,
-		Statuses:  status,
-	}
-	return c.GetLastScansFiltered(scanFilter)
-}
-
-// convenience
-func (c Cx1Client) GetProjectCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects")
-	var ProjectResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-	}
-
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", 1)},
-		//"sort":       {"+created_at"},
-	}
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return 0, err
-	}
-
-	err = json.Unmarshal(response, &ProjectResponse)
-	return ProjectResponse.TotalCount, err
-}
-
-func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
-	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
-	var ProjectResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-	}
-
-	body := url.Values{
-		//"offset":     {fmt.Sprintf("%d", 0)},
-		"limit": {fmt.Sprintf("%d", 1)},
-		"name":  {name},
-	}
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
-
-	if err != nil {
-		return 0, err
-	}
-
-	err = json.Unmarshal(response, &ProjectResponse)
-	return ProjectResponse.FilteredTotalCount, err
-}
-
-func (c Cx1Client) ProjectLink(p *Project) string {
-	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
 func (c Cx1Client) UpdateProject(project *Project) error {
@@ -614,8 +549,18 @@ func getConfigurationByName(config *[]ConfigurationSetting, configKey string) *C
 	return nil
 }
 
-/* misc future stuff
+func (p *Project) String() string {
+	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
+}
 
-Listing of files in a scan:
-	https://deu.ast.checkmarx.net/api/repostore/project-tree/74328f1f-94ec-452f-8f1a-047d76f6764e
-*/
+func (p *Project) GetTags() string {
+	str := ""
+	for key, val := range p.Tags {
+		if str == "" {
+			str = key + " = " + val
+		} else {
+			str = str + ", " + key + " = " + val
+		}
+	}
+	return str
+}

@@ -41,9 +41,11 @@ func main() {
 	}
 
 	scanFilter := makeScanFilter(logger, filters)
-	scans, err := cx1Client.GetScansFiltered(scanFilter)
+	count, scans, err := cx1Client.GetAllScansFiltered(scanFilter)
 	if err != nil {
 		logger.Fatalf("Error retrieving scans: %s", err)
+	} else {
+		logger.Infof("Retrieved %d scans", count)
 	}
 
 	for _, scan := range scans {
@@ -55,7 +57,8 @@ func main() {
 }
 
 func makeScanFilter(logger *logrus.Logger, filters []string) Cx1ClientGo.ScanFilter {
-	scanFilter := Cx1ClientGo.ScanFilter {}
+	scanFilter := Cx1ClientGo.ScanFilter{}
+	limitOverride := false
 	for _, filter := range filters {
 		parts := strings.SplitN(filter, "=", 2)
 		if len(parts) != 2 {
@@ -65,20 +68,21 @@ func makeScanFilter(logger *logrus.Logger, filters []string) Cx1ClientGo.ScanFil
 		case "projectid":
 			scanFilter.ProjectID = parts[1]
 		case "limit":
-			limit, err := strconv.Atoi(parts[1])
+			limit, err := strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
 				logger.Errorf("%s: cannot convert to integer: %s",
 					parts[1], err.Error())
 			} else {
 				scanFilter.Limit = limit
+				limitOverride = true
 			}
 		case "offset":
-			limit, err := strconv.Atoi(parts[1])
+			offset, err := strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
 				logger.Errorf("%s: cannot convert to integer: %s",
 					parts[1], err.Error())
 			} else {
-				scanFilter.Offset = limit
+				scanFilter.Offset = offset
 			}
 		case "sort":
 			scanFilter.Sort = parts[1]
@@ -109,6 +113,10 @@ func makeScanFilter(logger *logrus.Logger, filters []string) Cx1ClientGo.ScanFil
 		default:
 			logger.Errorf("%s: unrecognised filter", parts[0])
 		}
+	}
+
+	if !limitOverride {
+		scanFilter.Limit = 20
 	}
 	return scanFilter
 }

@@ -11,15 +11,16 @@ import (
 type Cx1Client struct {
 	httpClient *http.Client
 	//authToken  string
-	baseUrl string
-	iamUrl  string
-	tenant  string
-	logger  *logrus.Logger
-	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
-	consts  ClientVars
-	claims  Cx1Claims
-	user    *User
-	version *VersionInfo
+	baseUrl    string
+	iamUrl     string
+	tenant     string
+	logger     *logrus.Logger
+	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts     ClientVars
+	pagination PaginationSettings
+	claims     Cx1Claims
+	user       *User
+	version    *VersionInfo
 }
 
 type Cx1Claims struct {
@@ -70,6 +71,32 @@ type ClientVars struct {
 	ProjectApplicationLinkPollingDelaySeconds int
 }
 
+// Related to pagination and filtering
+type PaginationSettings struct {
+	Applications uint64
+	Branches     uint64
+	Groups       uint64
+	Projects     uint64
+	Results      uint64
+	Scans        uint64
+	Users        uint64
+}
+
+type BaseFilter struct {
+	Offset uint64 `url:"offset"` // offset is set automatically for pagination
+	Limit  uint64 `url:"limit"`  // limit is set automatically for pagination, should generally not be 0
+}
+
+type BaseIAMFilter struct {
+	First uint64 `url:"first"` // offset is set automatically for pagination
+	Max   uint64 `url:"max"`   // limit is set automatically for pagination, should generally not be 0
+}
+
+type BaseFilteredResponse struct {
+	TotalCount         uint64 `json:"totalCount"`
+	FilteredTotalCount uint64 `json:"filteredTotalCount"`
+}
+
 type AccessAssignment struct {
 	TenantID     string               `json:"tenantID"`
 	EntityID     string               `json:"entityID"`
@@ -103,6 +130,13 @@ type Application struct {
 	ProjectIds    []string          `json:"projectIds"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
+}
+
+type ApplicationFilter struct {
+	BaseFilter
+	Name       string   `url:"name,omitempty"`
+	TagsKeys   []string `url:"tags-keys,omitempty"`
+	TagsValues []string `url:"tags-values,omitempty"`
 }
 
 type ApplicationRule struct {
@@ -233,13 +267,24 @@ type DataImportStatus struct {
 }
 
 type Group struct {
-	GroupID       string              `json:"id"`
-	Name          string              `json:"name"`
-	Path          string              `json:"path"`
-	SubGroups     []Group             `json:"subGroups"`
-	SubGroupCount int                 `json:"subGroupCount"`
-	ClientRoles   map[string][]string `json:"clientRoles"`
-	Filled        bool                `json:"-"`
+	GroupID         string              `json:"id"`
+	Name            string              `json:"name"`
+	Path            string              `json:"path"`
+	SubGroups       []Group             `json:"subGroups"`
+	SubGroupCount   uint64              `json:"subGroupCount"`
+	DescendentCount uint64              `json:"-"`
+	ClientRoles     map[string][]string `json:"clientRoles"`
+	Filled          bool                `json:"-"`
+}
+
+type GroupFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool   `url:"briefRepresentation,omitempty"`
+	Exact               bool   `url:"exact,omitempty"`
+	PopulateHierarchy   bool   `url:"populateHierarchy,omitempty"`
+	Q                   bool   `url:"q,omitempty"`
+	Search              string `url:"search,omitempty"` // used in both GetGroup and GetGroupCount
+	Top                 bool   `url:"-"`                // used only in GetGroupCount
 }
 
 type OIDCClient struct {
@@ -284,11 +329,24 @@ type Project struct {
 	Configuration []ConfigurationSetting `json:"-"`
 }
 
+type ProjectFilter struct {
+	BaseFilter
+	ProjectIDs []string `url:"ids,omitempty"`
+	Names      []string `url:"names,omitempty"`
+	Name       string   `url:"name,omitempty"`
+	NameRegex  string   `url:"name-regex,omitempty"`
+	Groups     []string `url:"groups,omitempty"`
+	Origins    []string `url:"origins,omitempty"`
+	TagsKeys   []string `url:"tags-keys,omitempty"`
+	TagsValues []string `url:"tags-values,omitempty"`
+	EmptyTags  bool     `url:"empty-tags,omitempty"`
+	RepoURL    string   `url:"repo-url,omitempty"`
+}
+
 type ProjectBranchFilter struct {
-	ProjectID string `json:"project-id,omitempty"`
-	Limit     int    `json:"limit,omitempty"`
-	Offset    int    `json:"offset,omitempty"`
-	Name      string `json:"branch-name,omitempty"`
+	BaseFilter
+	ProjectID string `url:"project-id,omitempty"`
+	Name      string `url:"branch-name,omitempty"`
 }
 
 type ConfigurationSetting struct {
@@ -426,16 +484,15 @@ type Scan struct {
 }
 
 type ScanFilter struct {
-	ProjectID string    `json:"project-id"`
-	Limit     int       `json:"limit,omitempty"`
-	Offset    int       `json:"offset,omitempty"`
-	Sort      string    `json:"sort,omitempty"`
-	TagKeys   []string  `json:"tags-keys,omitempty"`
-	TagValues []string  `json:"tags-values,omitempty"`
-	Statuses  []string  `json:"statuses,omitempty"`
-	Branches  []string  `json:"branches,omitempty"`
-	FromDate  time.Time `json:"from-date,omitempty"`
-	ToDate    time.Time `json:"to-date,omitempty"`
+	BaseFilter
+	ProjectID string    `url:"project-id"`
+	Sort      []string  `url:"sort,omitempty"` // Available values : -created_at, +created_at, -status, +status, +branch, -branch, +initiator, -initiator, +user_agent, -user_agent, +name, -name
+	TagKeys   []string  `url:"tags-keys,omitempty"`
+	TagValues []string  `url:"tags-values,omitempty"`
+	Statuses  []string  `url:"statuses,omitempty"`
+	Branches  []string  `url:"branches,omitempty"`
+	FromDate  time.Time `url:"from-date,omitempty"`
+	ToDate    time.Time `url:"to-date,omitempty"`
 }
 
 type ScanConfiguration struct {
@@ -458,6 +515,17 @@ type ScanResultSet struct {
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
 	KICS         []ScanKICSResult
+	Containers   []ScanContainersResult
+}
+
+type ScanResultsFilter struct {
+	BaseFilter
+	ScanID             string   `url:"scan-id"`
+	Severity           []string `url:"severity"`
+	State              []string `url:"state"`
+	Status             []string `url:"status"`
+	ExcludeResultTypes []string `url:"exclude-result-types"` // Available values : DEV_AND_TEST, NONE
+	Sort               []string `url:"sort"`                 //Available values : -severity, +severity, -status, +status, -state, +state, -type, +type, -firstfoundat, +firstfoundat, -foundat, +foundat, -firstscanid, +firstscanid
 }
 
 // generic data common to all
@@ -475,6 +543,39 @@ type ScanResultBase struct {
 	FirstScanId     string
 	Description     string
 	// Comments			// currently doesn't do anything?
+}
+
+type ScanContainersResult struct {
+	ScanResultBase
+	Data                 ScanContainersResultData
+	VulnerabilityDetails ScanContainersResultDetails
+}
+
+type ScanContainersResultData struct {
+	PackageName    string
+	PackageVersion string
+	ImageName      string
+	ImageTag       string
+	ImageFilePath  string
+	ImageOrigin    string
+}
+
+type ScanContainersResultDetails struct {
+	CVSSScore float64
+	CveName   string
+	CweID     string
+	Cvss      struct {
+		Scope                 string
+		Score                 string
+		Severity              string
+		AttackVector          string `json:"attack_vector"`
+		IntegrityImpact       string `json:"integrity_impact"`
+		UserInteraction       string `json:"user_interaction"`
+		AttackComplexity      string `json:"attack_complexity"`
+		AvailabilityImpact    string `json:"availability_impact"`
+		PrivilegesRequired    string `json:"privileges_required"`
+		ConfidentialityImpact string `json:"confidentiality_impact"`
+	}
 }
 
 type ScanKICSResult struct {
@@ -610,37 +711,190 @@ type ScanSummary struct {
 	TenantID     string
 	ScanID       string
 	SASTCounters struct {
-		//QueriesCounters           []?
-		//SinkFileCounters          []?
-		LanguageCounters []struct {
-			Language string
-			Counter  uint64
-		}
-		ComplianceCounters []struct {
-			Compliance string
-			Counter    uint64
-		}
-		SeverityCounters []struct {
-			Severity string
-			Counter  uint64
-		}
-		StatusCounters []struct {
-			Status  string
-			Counter uint64
-		}
-		StateCounters []struct {
-			State   string
-			Counter uint64
-		}
+		QueriesCounters        []ScanSummaryQueriesCounter
+		SinkFileCounters       []ScanSummaryFileCounter
+		LanguageCounters       []ScanSummaryLanguageCounter
+		ComplianceCounters     []ScanSummaryComplianceCounter
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
 		TotalCounter        uint64
 		FilesScannedCounter uint64
 	}
-	// ignoring the other counters
-	// KICSCounters
-	// SCACounters
-	// SCAPackagesCounters
-	// SCAContainerCounters
-	// APISecCounters
+
+	KICSCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+
+		PlatformSummary []ScanSummaryPlatformCounter
+		CategorySummary []ScanSummaryCategoryCounter
+	}
+
+	SCACounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+	}
+
+	SCAPackagesCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+		OutdatedCounter     uint64
+		RiskLevelCounters   []ScanSummaryRiskLevelCounter
+		LicenseCounters     []ScanSummaryLicenseCounter
+		PackageCounters     []ScanSummaryPackageCounter
+	}
+
+	SCAContainersCounters struct {
+		TotalPackagesCounters           uint64
+		TotalVulnerabilitiesCounter     uint64
+		SeverityVulnerabilitiesCounters []ScanSummarySeverityCounter
+		StateVulnerabilityCounters      []ScanSummaryStateCounter
+		StatusVulnerabilityCounters     []ScanSummaryStatusCounter
+		AgeVulnerabilityCounters        []ScanSummaryAgeCounter
+		PackageVulnerabilitiesCounters  []ScanSummaryPackageCounter
+	}
+
+	APISecCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+		RiskLevel           string
+		APISecTotal         uint64
+	}
+
+	MicroEnginesCounters struct {
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		SourceFileCounters     []ScanSummaryFileCounter
+		AgeCounters            []ScanSummaryAgeCounter
+
+		TotalCounter        uint64
+		FilesScannedCounter uint64
+	}
+
+	ContainersCounters struct {
+		TotalPackagesCounter   uint64
+		TotalCounter           uint64
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		AgeCounters            []ScanSummaryAgeCounter
+		PackageCounters        []ScanSummaryContainerPackageCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+	}
+}
+
+type ScanSummaryAgeCounter struct {
+	Age              string
+	SeverityCounters []ScanSummarySeverityCounter
+	Counter          uint64
+}
+type ScanSummaryComplianceCounter struct {
+	Compliance string
+	Counter    uint64
+}
+type ScanSummaryFileCounter struct {
+	File    string
+	Counter uint64
+}
+type ScanSummaryLanguageCounter struct {
+	Language string
+	Counter  uint64
+}
+type ScanSummaryLicenseCounter struct {
+	License string
+	Counter uint64
+}
+type ScanSummaryPackageCounter struct {
+	Package string
+	Counter uint64
+}
+type ScanSummaryContainerPackageCounter struct {
+	Package     string
+	Counter     uint64
+	IsMalicious bool
+}
+type ScanSummaryQueriesCounter struct {
+	QueryID        uint64                     `json:"queryID"`
+	Name           uint64                     `json:"queryName"`
+	Severity       string                     `json:"severity"`
+	StatusCounters []ScanSummaryStatusCounter `json:"statusCounters"`
+	Counter        uint64                     `json:"counter"`
+}
+type ScanSummaryRiskLevelCounter struct {
+	RiskLevel string
+	Counter   uint64
+}
+type ScanSummarySeverityCounter struct {
+	Severity string
+	Counter  uint64
+}
+type ScanSummarySeverityStatusCounter struct {
+	Severity string
+	Status   string
+	Counter  uint64
+}
+type ScanSummaryStateCounter struct {
+	State   string
+	Counter uint64
+}
+type ScanSummaryStatusCounter struct {
+	Status  string
+	Counter uint64
+}
+
+type ScanSummaryPlatformCounter struct {
+	Platform string
+	Counter  uint64
+}
+type ScanSummaryCategoryCounter struct {
+	Category string
+	Counter  uint64
+}
+
+type ScanSummaryFilter struct {
+	BaseFilter
+	ScanIDs        string   `url:"scan-ids"` // comma-separated list of scan ids
+	SeverityStatus bool     `url:"include-severity-status"`
+	Status         bool     `url:"include-status-counters"`
+	Queries        bool     `url:"include-queries"`
+	Files          bool     `url:"include-files"`
+	Predicates     bool     `url:"apply-predicates"`
+	Language       string   `url:"language"`
+	ExcludeTypes   []string `url:"exclude-result-types"` // DEV_AND_TEST, NONE
 }
 
 type Status struct {
@@ -665,6 +919,22 @@ type User struct {
 	FilledGroups bool        `json:"-"` // indicates if the user object has had the Groups array filled.
 	Roles        []Role      `json:"-"` // only returned from /users/{id}/role-mappings. Use GetUserRoles to fill.
 	FilledRoles  bool        `json:"-"` // indicates if the user object has had the Roles array filled.
+}
+
+type UserFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool   `url:"briefRepresentation,omitempty"` // only used by GetUser* (not GetUserCount)
+	Email               string `url:"email,omitempty"`
+	EmailVerified       bool   `url:"emailVerified,omitempty"`
+	Enabled             bool   `url:"enabled,omitempty"`
+	Exact               bool   `url:"exact,omitempty"` // only used by GetUser* (not GetUserCount)
+	FirstName           string `url:"firstName,omitempty"`
+	IDPAlias            string `url:"idpAlias,omitempty"`  // only used by GetUser* (not GetUserCount)
+	IDPUserId           string `url:"idpUserId,omitempty"` // only used by GetUser* (not GetUserCount)
+	Q                   string `url:"q,omitempty"`
+	Search              string `url:"search,omitempty"`
+	Username            string `url:"username,omitempty"`
+	Realm               string `url:"realm"`
 }
 
 type UserWithAttributes struct {

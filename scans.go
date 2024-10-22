@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/google/go-querystring/query"
 )
 
 func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
@@ -49,21 +51,172 @@ func (c Cx1Client) CancelScanByID(scanID string) error {
 	return nil
 }
 
+func (c Cx1Client) GetAllScans() ([]Scan, error) {
+	_, scans, err := c.GetAllScansFiltered(ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+	})
+	return scans, err
+}
+
 func (c Cx1Client) GetScansByProjectIDAndBranch(projectID string, branch string) ([]Scan, error) {
+	filter := ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		ProjectID:  projectID,
+		Branches:   []string{branch},
+	}
+	_, scans, err := c.GetAllScansFiltered(filter)
+	return scans, err
+}
+
+func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
+	filter := ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		Statuses:   status,
+		Sort:       []string{"+created_at"},
+	}
+	_, scans, err := c.GetAllScansFiltered(filter)
+	return scans, err
+}
+
+func (c Cx1Client) GetScansByStatus(status []string) ([]Scan, error) {
+	filter := ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		Statuses:   status,
+	}
+	_, scans, err := c.GetAllScansFiltered(filter)
+	return scans, err
+}
+
+func (c Cx1Client) GetLastScansByID(projectID string, limit uint64) ([]Scan, error) {
+	_, scans, err := c.GetXScansFiltered(ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		ProjectID:  projectID,
+		Sort:       []string{"+created_at"},
+	}, limit)
+	return scans, err
+}
+
+// function will be deprecated, use Get*ScansFiltered
+func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
+	c.depwarn("GetLastScansByIDFiltered", "GetScansFiltered")
+	_, scans, err := c.GetScansFiltered(ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		ProjectID:  projectID,
+		Sort:       []string{"+created_at"},
+	})
+	return scans, err
+}
+
+func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit uint64, status []string) ([]Scan, error) {
+	_, scans, err := c.GetXScansFiltered(ScanFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
+		ProjectID:  projectID,
+		Statuses:   status,
+		Sort:       []string{"+created_at"},
+	}, limit)
+	return scans, err
+}
+
+func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
+	c.depwarn("GetLastScansFiltered", "GetScansFiltered")
+	filter.Sort = []string{"+created_at"}
+	_, scans, err := c.GetAllScansFiltered(filter)
+	return scans, err
+}
+
+// returns the number of scans matching the filter and an array of those scans
+// returns one page of data (from filter.Offset to filter.Offset+filter.Limit)
+func (c Cx1Client) GetScansFiltered(filter ScanFilter) (uint64, []Scan, error) {
+	params, _ := query.Values(filter)
+
 	var scanResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-		Scans              []Scan
+		BaseFilteredResponse
+		Scans []Scan
 	}
 
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?project-id=%v&branch=%v", projectID, branch), nil, nil)
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", params.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Tracef("Failed to fetch scan by Project ID %v: %s", projectID, err)
-		return scanResponse.Scans, fmt.Errorf("failed to fetch scan with Project ID %v: %s", projectID, err)
+		err = fmt.Errorf("failed to fetch scans matching filter %v: %s", params, err)
+		c.logger.Tracef("Error: %s", err)
+		return scanResponse.FilteredTotalCount, scanResponse.Scans, err
 	}
 
-	json.Unmarshal([]byte(data), &scanResponse)
-	return scanResponse.Scans, nil
+	err = json.Unmarshal(data, &scanResponse)
+	return scanResponse.FilteredTotalCount, scanResponse.Scans, err
+}
+
+func (c Cx1Client) GetAllScansFiltered(filter ScanFilter) (uint64, []Scan, error) {
+	var scans []Scan
+
+	count, ss, err := c.GetScansFiltered(filter)
+	scans = ss
+
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 {
+		filter.Bump()
+		_, ss, err = c.GetScansFiltered(filter)
+		scans = append(scans, ss...)
+	}
+
+	return count, scans, err
+}
+
+func (c Cx1Client) GetXScansFiltered(filter ScanFilter, count uint64) (uint64, []Scan, error) {
+	var scans []Scan
+
+	_, ss, err := c.GetScansFiltered(filter)
+	scans = ss
+
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 {
+		filter.Bump()
+		_, ss, err = c.GetScansFiltered(filter)
+		scans = append(scans, ss...)
+	}
+
+	if uint64(len(scans)) > count {
+		return count, scans[:count], err
+	}
+
+	return count, scans, err
+}
+
+func (s ScanSummary) TotalCount() uint64 {
+	var count uint64
+	count = 0
+	count += s.SASTCounters.TotalCounter
+	count += s.SCACounters.TotalCounter
+	count += s.SCAPackagesCounters.TotalCounter
+	count += s.KICSCounters.TotalCounter
+	count += s.APISecCounters.TotalCounter
+	count += s.ContainersCounters.TotalCounter
+	count += s.SCAContainersCounters.TotalPackagesCounters
+
+	return count
+}
+
+func (s ScanSummary) String() string {
+	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d KICS, %d API Security, and %d Containers results",
+		s.SASTCounters.TotalCounter,
+		s.SCACounters.TotalCounter,
+		s.SCAPackagesCounters.TotalCounter,
+		s.SCAContainersCounters.TotalPackagesCounters,
+		s.KICSCounters.TotalCounter,
+		s.APISecCounters.TotalCounter,
+		s.ContainersCounters.TotalCounter,
+	)
+}
+
+func (c Cx1Client) GetScanCount() (uint64, error) {
+	c.logger.Debug("Get scan count")
+	count, _, err := c.GetScansFiltered(ScanFilter{BaseFilter: BaseFilter{Limit: 1}})
+	return count, err
+}
+
+func (c Cx1Client) GetScanCountFiltered(filter ScanFilter) (uint64, error) {
+	filter.Limit = 1
+	params, _ := query.Values(filter)
+	c.logger.Debugf("Get scan count matching filter: %v", params.Encode())
+	count, _, err := c.GetScansFiltered(filter)
+	return count, err
 }
 
 func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
@@ -77,59 +230,6 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 
 	json.Unmarshal(data, &scanmeta)
 	return scanmeta, nil
-}
-
-func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		Statuses: status,
-		Sort:     "+created_at",
-	}
-	return c.GetScansFiltered(scanFilter)
-}
-
-func (c Cx1Client) GetScansByStatus(status []string) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		Statuses: status,
-	}
-	return c.GetScansFiltered(scanFilter)
-}
-
-func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
-	filter.Sort = "+created_at"
-	return c.GetScansFiltered(filter)
-}
-
-func (c Cx1Client) GetScansFiltered(filter ScanFilter) ([]Scan, error) {
-	query := url.Values{}
-
-	var scanResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-		Scans              []Scan
-	}
-
-	filter.AddURLValues(&query)
-
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", query.Encode()), nil, nil)
-	if err != nil {
-		err = fmt.Errorf("failed to fetch scans matching filter %v: %s", query, err)
-		c.logger.Tracef("Error: %s", err)
-		return scanResponse.Scans, err
-	}
-
-	err = json.Unmarshal(data, &scanResponse)
-	return scanResponse.Scans, err
-}
-
-func (s *ScanSummary) TotalCount() uint64 {
-	var count uint64
-	count = 0
-
-	for _, c := range s.SASTCounters.StateCounters {
-		count += c.Counter
-	}
-
-	return count
 }
 
 func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]ConfigurationSetting, error) {
@@ -176,24 +276,25 @@ func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 }
 
 func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error) {
-	var ScansSummaries struct {
-		ScanSum    []ScanSummary `json:"scansSummaries"`
-		TotalCount uint64
-	}
-
 	scanIdsString := strings.Join(scanIDs, ",")
+	return c.GetScanSummariesFiltered(ScanSummaryFilter{
+		ScanIDs: scanIdsString,
+		Status:  true,
+	})
+}
 
-	params := url.Values{
-		"scan-ids":                {scanIdsString},
-		"include-queries":         {"false"},
-		"include-status-counters": {"true"},
-		"include-files":           {"false"},
+func (c Cx1Client) GetScanSummariesFiltered(filter ScanSummaryFilter) ([]ScanSummary, error) {
+	var ScansSummaries struct {
+		BaseFilteredResponse
+		ScanSum []ScanSummary `json:"scansSummaries"`
 	}
 
+	params, _ := query.Values(filter)
+	c.logger.Infof("GetAllScanSummariesFiltered for scan IDs %v: %v", filter.ScanIDs, params.Encode())
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode()), nil, http.Header{})
 	if err != nil {
-		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
-		return []ScanSummary{}, fmt.Errorf("failed to fetch metadata for scans with IDs %v: %s", scanIdsString, err)
+		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", filter.ScanIDs, err)
+		return []ScanSummary{}, fmt.Errorf("failed to fetch metadata for scans with IDs %v: %s", filter.ScanIDs, err)
 	}
 
 	err = json.Unmarshal(data, &ScansSummaries)
@@ -202,7 +303,7 @@ func (c Cx1Client) GetScanSummariesByID(scanIDs []string) ([]ScanSummary, error)
 		return []ScanSummary{}, err
 	}
 	if ScansSummaries.TotalCount == 0 {
-		return []ScanSummary{}, fmt.Errorf("failed to retrieve scan summaries for scans with IDs: %v", scanIdsString)
+		return []ScanSummary{}, fmt.Errorf("failed to retrieve scan summaries for scans with IDs: %v", filter.ScanIDs)
 	}
 
 	if len(ScansSummaries.ScanSum) == 0 {
@@ -476,3 +577,9 @@ func (s *Scan) String() string {
 func (s ScanStatusSummary) String() string {
 	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
 }
+
+/* misc future stuff
+
+Listing of files in a scan:
+	https://deu.ast.checkmarx.net/api/repostore/project-tree/74328f1f-94ec-452f-8f1a-047d76f6764e
+*/

@@ -52,7 +52,7 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
-		c.Projects, err = client.GetProjects(0)
+		c.Projects, err = client.GetAllProjects()
 		c.ProjectRefresh = false
 	}
 	return err
@@ -63,7 +63,7 @@ func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
 	var err error
 	if !c.ApplicationRefresh {
 		c.ApplicationRefresh = true
-		c.Applications, err = client.GetApplications(0)
+		c.Applications, err = client.GetAllApplications()
 		c.ApplicationRefresh = false
 	}
 	return err
@@ -96,7 +96,7 @@ func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
 	var err error
 	if !c.UserRefresh {
 		c.UserRefresh = true
-		c.Users, err = client.GetUsers()
+		c.Users, err = client.GetAllUsers()
 		c.UserRefresh = false
 	}
 	return err
