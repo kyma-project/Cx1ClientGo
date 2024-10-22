@@ -44,7 +44,7 @@ func (c *Cx1Client) InitializePaginationSettings() {
 		Branches:     20,
 		Groups:       50,
 		Projects:     20,
-		Results:      20,
+		Results:      50,
 		Scans:        20,
 		Users:        50,
 	}
