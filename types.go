@@ -83,13 +83,13 @@ type PaginationSettings struct {
 }
 
 type BaseFilter struct {
-	Offset uint64 `url:"offset"`
-	Limit  uint64 `url:"limit"`
+	Offset uint64 `url:"offset"` // offset is set automatically for pagination
+	Limit  uint64 `url:"limit"`  // limit is set automatically for pagination, should generally not be 0
 }
 
 type BaseIAMFilter struct {
-	First uint64 `url:"first"`
-	Max   uint64 `url:"max"`
+	First uint64 `url:"first"` // offset is set automatically for pagination
+	Max   uint64 `url:"max"`   // limit is set automatically for pagination, should generally not be 0
 }
 
 type BaseFilteredResponse struct {
@@ -486,7 +486,7 @@ type Scan struct {
 type ScanFilter struct {
 	BaseFilter
 	ProjectID string    `url:"project-id"`
-	Sort      string    `url:"sort,omitempty"`
+	Sort      []string  `url:"sort,omitempty"` // Available values : -created_at, +created_at, -status, +status, +branch, -branch, +initiator, -initiator, +user_agent, -user_agent, +name, -name
 	TagKeys   []string  `url:"tags-keys,omitempty"`
 	TagValues []string  `url:"tags-values,omitempty"`
 	Statuses  []string  `url:"statuses,omitempty"`
@@ -515,6 +515,15 @@ type ScanResultSet struct {
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
 	KICS         []ScanKICSResult
+}
+
+type ScanResultsFilter struct {
+	BaseFilter
+	Severity           []string `url:"severity"`
+	State              []string `url:"state"`
+	Status             []string `url:"status"`
+	ExcludeResultTypes []string `url:"exclude-result-types"` // Available values : DEV_AND_TEST, NONE
+	Sort               []string `url:"sort"`                 //Available values : -severity, +severity, -status, +status, -state, +state, -type, +type, -firstfoundat, +firstfoundat, -foundat, +foundat, -firstscanid, +firstscanid
 }
 
 // generic data common to all
@@ -667,37 +676,79 @@ type ScanSummary struct {
 	TenantID     string
 	ScanID       string
 	SASTCounters struct {
-		//QueriesCounters           []?
-		//SinkFileCounters          []?
-		LanguageCounters []struct {
-			Language string
-			Counter  uint64
-		}
-		ComplianceCounters []struct {
-			Compliance string
-			Counter    uint64
-		}
-		SeverityCounters []struct {
-			Severity string
-			Counter  uint64
-		}
-		StatusCounters []struct {
-			Status  string
-			Counter uint64
-		}
-		StateCounters []struct {
-			State   string
-			Counter uint64
-		}
-		TotalCounter        uint64
-		FilesScannedCounter uint64
+		QueriesCounters        []ScanSummaryQueriesCounter
+		SinkFileCounters       []ScanSummaryFileCounter
+		SurceFileCounters      []ScanSummaryFileCounter
+		LanguageCounters       []ScanSummaryLanguageCounter
+		ComplianceCounters     []ScanSummaryComplianceCounter
+		SeverityCounters       []ScanSummarySeverityCounter
+		StatusCounters         []ScanSummaryStatusCounter
+		StateCounters          []ScanSummaryStateCounter
+		SeverityStatusCounters []ScanSummarySeverityStatusCounter
+		TotalCounter           uint64
+		FilesScannedCounter    uint64
 	}
+
 	// ignoring the other counters
 	// KICSCounters
 	// SCACounters
 	// SCAPackagesCounters
 	// SCAContainerCounters
 	// APISecCounters
+}
+
+type ScanSummaryAgeCounter struct {
+	Age              string
+	SeverityCounters []ScanSummarySeverityCounter
+	Counter          uint64
+}
+type ScanSummaryComplianceCounter struct {
+	Compliance string
+	Counter    uint64
+}
+type ScanSummaryFileCounter struct {
+	File    string
+	Counter uint64
+}
+type ScanSummaryLanguageCounter struct {
+	Language string
+	Counter  uint64
+}
+type ScanSummaryQueriesCounter struct {
+	QueryID        uint64                     `json:"queryID"`
+	Name           uint64                     `json:"queryName"`
+	Severity       string                     `json:"severity"`
+	StatusCounters []ScanSummaryStatusCounter `json:"statusCounters"`
+	Counter        uint64                     `json:"counter"`
+}
+type ScanSummarySeverityCounter struct {
+	Severity string
+	Counter  uint64
+}
+type ScanSummarySeverityStatusCounter struct {
+	Severity string
+	Status   string
+	Counter  uint64
+}
+type ScanSummaryStateCounter struct {
+	State   string
+	Counter uint64
+}
+type ScanSummaryStatusCounter struct {
+	Status  string
+	Counter uint64
+}
+
+type ScanSummaryFilter struct {
+	BaseFilter
+	ScanIDs        []string `url:"scan-ids"`
+	SeverityStatus bool     `url:"include-severity-status"`
+	Status         bool     `url:"include-status-counters"`
+	Queries        bool     `url:"include-queries"`
+	Files          bool     `url:"include-files"`
+	Predicates     bool     `url:"apply-predicates"`
+	Language       string   `url:"language"`
+	ExcludeTypes   []string `url:"exclude-result-types"` // DEV_AND_TEST, NONE
 }
 
 type Status struct {

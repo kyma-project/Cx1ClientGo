@@ -8,10 +8,19 @@ import (
 	"strings"
 )
 
-// Get All Applications
-// As of 2024-10-17 this function no longer takes a specific limit as a parameter
-// To set limits, offsets, and other parameters directly, use GetApplicationsFiltered
-func (c Cx1Client) GetApplications() ([]Application, error) {
+// Get the first count Applications
+// uses the pagination behind the scenes
+func (c Cx1Client) GetApplications(count uint64) ([]Application, error) {
+	c.logger.Debug("Get Cx1 Applications")
+
+	_, applications, err := c.GetXApplicationsFiltered(ApplicationFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
+	}, count)
+
+	return applications, err
+}
+
+func (c Cx1Client) GetAllApplications() ([]Application, error) {
 	c.logger.Debug("Get Cx1 Applications")
 
 	_, applications, err := c.GetAllApplicationsFiltered(ApplicationFilter{
@@ -47,6 +56,7 @@ func (c Cx1Client) GetApplicationsByName(name string) ([]Application, error) {
 	return applications, err
 }
 
+// returns the application matching exactly (case sensitive) the name
 func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
 	apps, err := c.GetApplicationsByName(name)
 	if err != nil {
@@ -64,6 +74,7 @@ func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
 
 // Underlying function used by many GetApplications* calls
 // Returns the number of applications matching the filter and the array of matching applications
+// with one page (filter.Offset to filter.Offset+filter.Limit) of results
 func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []Application, error) {
 	params := filter.UrlParams()
 
@@ -82,45 +93,39 @@ func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []
 	return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
 }
 
+// retrieves all applications matching the filter
+// using pagination set via filter.Limit or Get/SetPaginationSettings
 func (c Cx1Client) GetAllApplicationsFiltered(filter ApplicationFilter) (uint64, []Application, error) {
 	var applications []Application
 
-	count, apps, err := c.GetApplicationsFiltered(filter)
+	count, err := c.GetApplicationCountFiltered(filter)
+	if err != nil {
+		return count, applications, err
+	}
+
+	return c.GetXApplicationsFiltered(filter, count)
+}
+
+// retrieves the first X applications matching the filter
+// using pagination set via filter.Limit or Get/SetPaginationSettings
+func (c Cx1Client) GetXApplicationsFiltered(filter ApplicationFilter, count uint64) (uint64, []Application, error) {
+	var applications []Application
+
+	_, apps, err := c.GetApplicationsFiltered(filter)
 	applications = apps
 
-	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 {
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 && uint64(len(applications)) < count {
 		filter.Bump()
-		count, apps, err = c.GetApplicationsFiltered(filter)
+		_, apps, err = c.GetApplicationsFiltered(filter)
 		applications = append(applications, apps...)
+	}
+
+	if uint64(len(applications)) > count {
+		return count, applications[:count], err
 	}
 
 	return count, applications, err
 }
-
-/*
-func (f ApplicationFilter) UrlParams() url.Values {
-	params := url.Values{}
-	params.Add("offset", strconv.FormatUint(f.Offset, 10))
-	params.Add("limit", strconv.FormatUint(f.Limit, 10))
-	if f.Name != "" {
-		params.Add("name", f.Name)
-	}
-
-	if len(f.TagsKeys) > 0 {
-		for _, v := range f.TagsKeys {
-			params.Add("tags-keys", v)
-		}
-	}
-
-	if len(f.TagsValues) > 0 {
-		for _, v := range f.TagsValues {
-			params.Add("tags-values", v)
-		}
-	}
-
-	return params
-}
-*/
 
 func (c Cx1Client) CreateApplication(appname string) (Application, error) {
 	c.logger.Debugf("Create Application: %v", appname)
@@ -177,12 +182,21 @@ func (c Cx1Client) GetApplicationCount() (uint64, error) {
 }
 
 func (c Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
-	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
+	c.logger.Debugf("Get Cx1 Application count by name: %v", name)
 
 	count, _, err := c.GetApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: 1},
 		Name:       name,
 	})
+
+	return count, err
+}
+
+func (c Cx1Client) GetApplicationCountFiltered(filter ApplicationFilter) (uint64, error) {
+	filter.Limit = 1
+	c.logger.Debugf("Get Cx1 Application count matching filter: %v", filter.UrlParams().Encode())
+
+	count, _, err := c.GetApplicationsFiltered(filter)
 
 	return count, err
 }

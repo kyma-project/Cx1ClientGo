@@ -32,8 +32,19 @@ func (c Cx1Client) Whoami() (WhoAmI, error) {
 	return me, err
 }
 
-func (c Cx1Client) GetUsers() ([]User, error) {
-	c.logger.Debug("Get Cx1 Users")
+// retrieves the first 'count' users
+func (c Cx1Client) GetUsers(count uint64) ([]User, error) {
+	c.logger.Debugf("Get %d Cx1 Users", count)
+
+	_, users, err := c.GetXUsersFiltered(UserFilter{
+		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
+		BriefRepresentation: false,
+	}, count)
+	return users, err
+}
+
+func (c Cx1Client) GetAllUsers() ([]User, error) {
+	c.logger.Debug("Get all Cx1 Users")
 
 	_, users, err := c.GetAllUsersFiltered(UserFilter{
 		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
@@ -98,7 +109,13 @@ func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 	return users[0], err
 }
 
-func (c Cx1Client) GetUserCount(filter UserFilter) (uint64, error) {
+func (c Cx1Client) GetUserCount() (uint64, error) {
+	c.logger.Debugf("Get Cx1 User count")
+
+	return c.GetUserCountFiltered(UserFilter{BaseIAMFilter: BaseIAMFilter{Max: 1}})
+}
+
+func (c Cx1Client) GetUserCountFiltered(filter UserFilter) (uint64, error) {
 	params := filter.UrlParams()
 	c.logger.Debugf("Get Cx1 User count with filter %v", params.Encode())
 
@@ -141,32 +158,35 @@ func (c Cx1Client) GetUsersFiltered(filter UserFilter) ([]User, error) {
 }
 
 // returns all users matching the filter
-// fill parameter will?
 func (c Cx1Client) GetAllUsersFiltered(filter UserFilter) (uint64, []User, error) {
 	var users []User
 
-	count, err := c.GetUserCount(filter)
+	count, err := c.GetUserCountFiltered(filter)
 	if err != nil {
 		return count, users, err
 	}
+	return c.GetXUsersFiltered(filter, count)
+}
+
+// returns first X users matching the filter
+func (c Cx1Client) GetXUsersFiltered(filter UserFilter, count uint64) (uint64, []User, error) {
+	var users []User
+
 	gs, err := c.GetUsersFiltered(filter)
 	users = gs
 
-	for err == nil && count > filter.Max+filter.First && filter.Max > 0 {
+	for err == nil && count > filter.Max+filter.First && filter.Max > 0 && uint64(len(users)) < count {
 		filter.Bump()
 		gs, err = c.GetUsersFiltered(filter)
 		users = append(users, gs...)
 	}
 
+	if uint64(len(users)) > count {
+		return count, users[:count], err
+	}
+
 	return count, users, err
 }
-
-/*
-func (f UserFilter) UrlParams() url.Values {
-	params, _ := query.Values(f)
-	return params
-}
-*/
 
 func (c Cx1Client) CreateUser(newuser User) (User, error) {
 	c.logger.Debugf("Creating a new user %v", newuser.String())

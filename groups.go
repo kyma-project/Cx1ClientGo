@@ -109,6 +109,10 @@ func (c Cx1Client) GetGroups() ([]Group, error) {
 	return groups, err
 }
 
+func (c Cx1Client) GetAllGroups() ([]Group, error) {
+	return c.GetGroups()
+}
+
 // will return the first group matching 'groupname'
 // the group is not "filled": the subgroups array will be empty (use FillGroup/GetGroupChildren)
 func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
@@ -227,19 +231,6 @@ func (c Cx1Client) GetAllGroupsFiltered(filter GroupFilter, fill bool) (uint64, 
 
 	return count, groups, err
 }
-
-/*
-func (f GroupFilter) UrlParams() url.Values {
-	params := url.Values{}
-	params.Add("first", strconv.FormatUint(f.First, 10))
-	params.Add("max", strconv.FormatUint(f.Max, 10))
-	if f.Search != "" {
-		params.Add("search", f.Search)
-	}
-
-	return params
-}
-*/
 
 func (c Cx1Client) DeleteGroup(group *Group) error {
 	c.logger.Debugf("Deleting Group %v...", group.String())

@@ -122,31 +122,25 @@ func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applica
 	return project, nil
 }
 
-func (p *Project) String() string {
-	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
+// Get up to count # of projects
+// behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
+func (c Cx1Client) GetProjects(count uint64) ([]Project, error) {
+	c.logger.Debugf("Get %d Cx1 Projects", count)
+	_, projects, err := c.GetXProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+	}, count)
+
+	return projects, err
 }
 
-func (p *Project) GetTags() string {
-	str := ""
-	for key, val := range p.Tags {
-		if str == "" {
-			str = key + " = " + val
-		} else {
-			str = str + ", " + key + " = " + val
-		}
-	}
-	return str
-}
-
-// Get all projects
-// As of 2024-10-17 this function no longer takes a specific limit as a parameter
-// To set limits, offsets, and other parameters directly, use GetProjectsFiltered
-func (c Cx1Client) GetProjects() ([]Project, error) {
-	c.logger.Debug("Get Cx1 Projects")
+// Get all of the projects
+// behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
+// behaves the same as GetProjects(# of projects in the environment)
+func (c Cx1Client) GetAllProjects() ([]Project, error) {
+	c.logger.Debug("Get All Cx1 Projects")
 	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
 	})
-
 	return projects, err
 }
 
@@ -168,23 +162,28 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	return project, err
 }
 
-func (c Cx1Client) GetProjectByName(projectname string) (Project, error) {
-	projects, err := c.GetProjectsByName(projectname)
+// case-sensitive exact match for a project name
+func (c Cx1Client) GetProjectByName(name string) (Project, error) {
+	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
+		Names:      []string{name},
+	})
+
 	if err != nil {
 		return Project{}, err
 	}
 
 	for _, p := range projects {
-		if p.Name == projectname {
+		if p.Name == name {
 			err = c.GetProjectConfiguration(&p)
 			return p, err
 		}
 	}
 
-	return Project{}, fmt.Errorf("no project matching %v found", projectname)
+	return Project{}, fmt.Errorf("no project matching %v found", name)
 }
 
-// Get all projects matching the name 'name'
+// Get all projects with names matching the search 'name'
 // As of 2024-10-17 this function no longer takes a specific limit as a parameter
 // To set limits, offsets, and other parameters directly, use GetProjectsFiltered
 func (c Cx1Client) GetProjectsByName(name string) ([]Project, error) {
@@ -198,6 +197,7 @@ func (c Cx1Client) GetProjectsByName(name string) ([]Project, error) {
 	return projects, err
 }
 
+// Get all projects in the group 'groupID' with names matching the search 'name'
 func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
@@ -211,7 +211,8 @@ func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID strin
 }
 
 // Underlying function used by many GetApplications* calls
-// Returns the number of applications matching the filter and the array of matching applications
+// Returns the total number of matching results plus an array of projects with
+// one page of results (from filter.Offset to filter.Offset+filter.Limit)
 func (c Cx1Client) GetProjectsFiltered(filter ProjectFilter) (uint64, []Project, error) {
 	params := filter.UrlParams()
 
@@ -230,16 +231,33 @@ func (c Cx1Client) GetProjectsFiltered(filter ProjectFilter) (uint64, []Project,
 	return ProjectResponse.FilteredTotalCount, ProjectResponse.Projects, err
 }
 
+// Retrieves all projects matching the filter
 func (c Cx1Client) GetAllProjectsFiltered(filter ProjectFilter) (uint64, []Project, error) {
 	var projects []Project
 
-	count, projs, err := c.GetProjectsFiltered(filter)
+	count, err := c.GetProjectCountFiltered(filter)
+	if err != nil {
+		return count, projects, err
+	}
+	_, projects, err = c.GetXProjectsFiltered(filter, count)
+	return count, projects, err
+}
+
+// Retrieves the top 'count' projects matching the filter
+func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uint64, []Project, error) {
+	var projects []Project
+
+	_, projs, err := c.GetProjectsFiltered(filter)
 	projects = projs
 
-	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 {
+	for err == nil && count > filter.Offset+filter.Limit && filter.Limit > 0 && uint64(len(projects)) < count {
 		filter.Bump()
 		_, projs, err = c.GetProjectsFiltered(filter)
 		projects = append(projects, projs...)
+	}
+
+	if uint64(len(projects)) > count {
+		return count, projects[:count], err
 	}
 
 	return count, projects, err
@@ -320,6 +338,7 @@ func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+// retrieves all branches for a project
 func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
 	return c.GetAllProjectBranchesFiltered(ProjectBranchFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Branches},
@@ -327,6 +346,7 @@ func (c Cx1Client) GetProjectBranchesByID(projectID string) ([]string, error) {
 	})
 }
 
+// retrieves a page (filter.Offset to filter.Offset+filter.Limit) of branches for a project
 func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
 	params := filter.UrlParams()
 	branches := []string{}
@@ -342,6 +362,7 @@ func (c Cx1Client) GetProjectBranchesFiltered(filter ProjectBranchFilter) ([]str
 	return branches, err
 }
 
+// returns all of a project's branches matching a filter
 func (c Cx1Client) GetAllProjectBranchesFiltered(filter ProjectBranchFilter) ([]string, error) {
 	var branches []string
 
@@ -355,6 +376,54 @@ func (c Cx1Client) GetAllProjectBranchesFiltered(filter ProjectBranchFilter) ([]
 	}
 
 	return branches, err
+}
+
+// retrieves the first X of a project's branches matching a filter
+func (c Cx1Client) GetXProjectBranchesFiltered(filter ProjectBranchFilter, count uint64) ([]string, error) {
+	var branches []string
+
+	bs, err := c.GetProjectBranchesFiltered(filter)
+	branches = bs
+
+	for err == nil && filter.Limit == uint64(len(bs)) && filter.Limit > 0 && uint64(len(branches)) < count {
+		filter.Bump()
+		bs, err = c.GetProjectBranchesFiltered(filter)
+		branches = append(branches, bs...)
+	}
+
+	if uint64(len(branches)) > count {
+		return branches[:count], err
+	}
+
+	return branches, err
+}
+
+func (c Cx1Client) GetProjectCount() (uint64, error) {
+	c.logger.Debug("Get Cx1 Projects Count")
+	count, _, err := c.GetProjectsFiltered(ProjectFilter{BaseFilter: BaseFilter{Limit: 1}})
+	return count, err
+}
+
+// returns the number of projects with names matching a search string 'name'
+func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
+	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
+	count, _, err := c.GetProjectsFiltered(ProjectFilter{
+		BaseFilter: BaseFilter{Limit: 1},
+		Name:       name,
+	})
+	return count, err
+}
+
+func (c Cx1Client) GetProjectCountFiltered(filter ProjectFilter) (uint64, error) {
+	params := filter.UrlParams()
+	filter.Limit = 1
+	c.logger.Debugf("Get Cx1 Project count matching filter: %v", params.Encode())
+	count, _, err := c.GetProjectsFiltered(filter)
+	return count, err
+}
+
+func (c Cx1Client) ProjectLink(p *Project) string {
+	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
 func (c Cx1Client) SetProjectRepositoryByID(projectID, repository string, allowOverride bool) error {
@@ -393,50 +462,6 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 	// TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
 
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
-}
-
-func (c Cx1Client) GetLastScansByID(projectID string, limit uint64) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		BaseFilter: BaseFilter{Limit: limit},
-		ProjectID:  projectID,
-		Sort:       "+created_at",
-	}
-	_, scans, err := c.GetScansFiltered(scanFilter)
-	return scans, err
-}
-
-func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
-	filter.ProjectID = projectID
-	return c.GetLastScansFiltered(filter)
-}
-
-func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit uint64, status []string) ([]Scan, error) {
-	scanFilter := ScanFilter{
-		BaseFilter: BaseFilter{Limit: limit},
-		ProjectID:  projectID,
-		Statuses:   status,
-	}
-	return c.GetLastScansFiltered(scanFilter)
-}
-
-// convenience
-func (c Cx1Client) GetProjectCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects Count")
-	count, _, err := c.GetProjectsFiltered(ProjectFilter{BaseFilter: BaseFilter{Limit: 1}})
-	return count, err
-}
-
-func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
-	c.logger.Debugf("Get Cx1 Project count by name: %v", name)
-	count, _, err := c.GetProjectsFiltered(ProjectFilter{
-		BaseFilter: BaseFilter{Limit: 1},
-		Name:       name,
-	})
-	return count, err
-}
-
-func (c Cx1Client) ProjectLink(p *Project) string {
-	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
 func (c Cx1Client) UpdateProject(project *Project) error {
@@ -523,8 +548,18 @@ func getConfigurationByName(config *[]ConfigurationSetting, configKey string) *C
 	return nil
 }
 
-/* misc future stuff
+func (p *Project) String() string {
+	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
+}
 
-Listing of files in a scan:
-	https://deu.ast.checkmarx.net/api/repostore/project-tree/74328f1f-94ec-452f-8f1a-047d76f6764e
-*/
+func (p *Project) GetTags() string {
+	str := ""
+	for key, val := range p.Tags {
+		if str == "" {
+			str = key + " = " + val
+		} else {
+			str = str + ", " + key + " = " + val
+		}
+	}
+	return str
+}
