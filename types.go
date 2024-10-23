@@ -73,13 +73,14 @@ type ClientVars struct {
 
 // Related to pagination and filtering
 type PaginationSettings struct {
-	Applications uint64
-	Branches     uint64
-	Groups       uint64
-	Projects     uint64
-	Results      uint64
-	Scans        uint64
-	Users        uint64
+	Applications  uint64
+	Branches      uint64
+	Groups        uint64
+	Projects      uint64
+	Results       uint64
+	Scans         uint64
+	SASTAggregate uint64
+	Users         uint64
 }
 
 type BaseFilter struct {
@@ -460,6 +461,46 @@ type Role struct {
 	Composite  bool   `json:"composite"`
 	ClientRole bool   `json:"clientRole"`
 	SubRoles   []Role `json:"-"`
+}
+
+type SASTAggregateSummary struct {
+	Status    string
+	QueryID   uint64 `json:"queryID,string"`
+	QueryName string
+	Severity  string
+	Language  string
+	Count     uint64
+}
+
+type SASTAggregateSummaryFilter struct {
+	BaseFilter
+	ScanID                 string   `url:"scan-id"`
+	GroupBy                []string `url:"group-by-field,omitempty" del:","` //Options: QUERY,SEVERITY,STATE,STATUS,SOURCE_NODE,SINK_NODE,SOURCE_FILE,SINK_FILE,LANGUAGE
+	Language               []string `url:"language,omitempty"`
+	Status                 []string `url:"status,omitempty"`   //NEW, RECURRENT
+	Severity               []string `url:"severity,omitempty"` //CRITICAL, HIGH, MEDIUM, LOW, INFO
+	SourceFile             string   `url:"source-file,omitempty"`
+	SourceFileOperation    string   `url:"source-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceNode             string   `url:"source-node,omitempty"`
+	SourceNodeOperation    string   `url:"source-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceLine             uint64   `url:"source-line,omitempty"`
+	SourceLineOperation    string   `url:"source-line-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	SinkFile               string   `url:"sink-file,omitempty"`
+	SinkFileOperation      string   `url:"sink-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SinkNode               string   `url:"sink-node,omitempty"`
+	SinkNodeOperation      string   `url:"sink-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	NumberOfNodes          uint64   `url:"number-of-nodes,omitempty"`
+	NumberOfNodesOperation string   `url:"number-of-nodes-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	Notes                  string   `url:"notes,omitempty"`
+	NotesOperation         string   `url:"notes-operation,omitempty"` // CONTAINS, STARTS_WITH
+	FirstFoundAt           string   `url:"first-found-at,omitempty"`
+	FirstFoundAtOperation  string   `url:"first-found-at-operation,omitempty"` // LESS_THAN, GREATER_THAN
+	QueryIDs               []uint64 `url:"query-ids,omitempty"`
+	PresetID               uint64   `url:"preset-id,omitempty"`
+	ResultIDs              []string `url:"result-ids,omitempty"`
+	Categories             string   `url:"categories,omitempty"` // comma-separated list
+	Search                 string   `url:"search,omitempty"`
+	ApplyPredicates        bool     `url:"apply-predicates,omitempty"`
 }
 
 type Scan struct {
