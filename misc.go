@@ -40,13 +40,14 @@ func (c *Cx1Client) SetPaginationSettings(pagination PaginationSettings) {
 
 func (c *Cx1Client) InitializePaginationSettings() {
 	c.pagination = PaginationSettings{
-		Applications: 20,
-		Branches:     20,
-		Groups:       50,
-		Projects:     20,
-		Results:      50,
-		Scans:        20,
-		Users:        50,
+		Applications:  50,
+		Branches:      100,
+		Groups:        100,
+		Projects:      50,
+		Results:       100,
+		Scans:         50,
+		SASTAggregate: 10000,
+		Users:         100,
 	}
 }
 

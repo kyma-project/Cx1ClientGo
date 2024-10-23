@@ -250,6 +250,62 @@ func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]Configu
 	return scanConfigurations, err
 }
 
+func (c Cx1Client) GetScanSASTAggregateSummaryByID(scanId string) ([]SASTAggregateSummary, error) {
+	_, summary, err := c.GetAllScanSASTAggregateSummaryFiltered(SASTAggregateSummaryFilter{
+		BaseFilter: BaseFilter{Limit: c.pagination.SASTAggregate},
+		ScanID:     scanId,
+	})
+	return summary, err
+}
+
+// returns one page of summaries, from filter.Offset to filter.Offset+filter.Limit
+func (c Cx1Client) GetScanSASTAggregateSummaryFiltered(filter SASTAggregateSummaryFilter) (uint64, []SASTAggregateSummary, error) {
+	params, _ := query.Values(filter)
+	var SASTAggregateResponse struct {
+		BaseFilteredResponse
+		Summaries []SASTAggregateSummary
+	}
+
+	c.logger.Debugf("GetScanSASTAggregateSummaryFiltered matching: %v", params.Encode())
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-scan-summary/aggregate?%v", params.Encode()), nil, nil)
+	if err != nil {
+		return SASTAggregateResponse.TotalCount, SASTAggregateResponse.Summaries, err
+	}
+
+	err = json.Unmarshal(data, &SASTAggregateResponse)
+	return SASTAggregateResponse.TotalCount, SASTAggregateResponse.Summaries, err
+}
+
+// returns all summaries, using paging
+func (c Cx1Client) GetAllScanSASTAggregateSummaryFiltered(filter SASTAggregateSummaryFilter) (uint64, []SASTAggregateSummary, error) {
+	count, ss, err := c.GetScanSASTAggregateSummaryFiltered(filter)
+	summary := ss
+	totalcount := count
+	for err == nil && count > 0 && filter.Limit > 0 {
+		filter.Bump()
+		count, ss, err = c.GetScanSASTAggregateSummaryFiltered(filter)
+		totalcount += count
+		summary = append(summary, ss...)
+	}
+
+	return totalcount, summary, err
+}
+
+// returns at least desiredcount summaries, using paging
+func (c Cx1Client) GetXScanSASTAggregateSummaryFiltered(filter SASTAggregateSummaryFilter, desiredcount uint64) (uint64, []SASTAggregateSummary, error) {
+	count, ss, err := c.GetScanSASTAggregateSummaryFiltered(filter)
+	summary := ss
+	totalcount := count
+	for err == nil && count > 0 && totalcount < desiredcount && filter.Limit > 0 {
+		filter.Bump()
+		count, ss, err = c.GetScanSASTAggregateSummaryFiltered(filter)
+		totalcount += count
+		summary = append(summary, ss...)
+	}
+
+	return totalcount, summary, err
+}
+
 func (c Cx1Client) GetScansSummary() (ScanStatusSummary, error) {
 	var summaryResponse struct {
 		Status ScanStatusSummary
@@ -290,7 +346,7 @@ func (c Cx1Client) GetScanSummariesFiltered(filter ScanSummaryFilter) ([]ScanSum
 	}
 
 	params, _ := query.Values(filter)
-	c.logger.Infof("GetAllScanSummariesFiltered for scan IDs %v: %v", filter.ScanIDs, params.Encode())
+	c.logger.Debugf("GetScanSummariesFiltered for scan IDs %v: %v", filter.ScanIDs, params.Encode())
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode()), nil, http.Header{})
 	if err != nil {
 		c.logger.Tracef("Failed to fetch metadata for scans with IDs %v: %s", filter.ScanIDs, err)
