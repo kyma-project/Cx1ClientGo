@@ -475,7 +475,7 @@ type SASTAggregateSummary struct {
 type SASTAggregateSummaryFilter struct {
 	BaseFilter
 	ScanID                 string   `url:"scan-id"`
-	GroupBy                []string `url:"group-by-field,omitempty"` //Options: QUERY,SEVERITY,STATE,STATUS,SOURCE_NODE,SINK_NODE,SOURCE_FILE,SINK_FILE,LANGUAGE
+	GroupBy                []string `url:"group-by-field,omitempty" del:","` //Options: QUERY,SEVERITY,STATE,STATUS,SOURCE_NODE,SINK_NODE,SOURCE_FILE,SINK_FILE,LANGUAGE
 	Language               []string `url:"language,omitempty"`
 	Status                 []string `url:"status,omitempty"`   //NEW, RECURRENT
 	Severity               []string `url:"severity,omitempty"` //CRITICAL, HIGH, MEDIUM, LOW, INFO
