@@ -264,11 +264,12 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	return group, err
 }
 
+// this function is for CxOne v3.20+
 // gets and fills the group's immediate children (subgroups)
 // does not include sub-children
 func (c Cx1Client) GetGroupChildren(group *Group) ([]Group, error) {
 	var groups []Group
-	if group.SubGroupCount == 0 {
+	if group.SubGroupCount == 0 && group.Filled { // add the .filled check as a double-check that the 0-subgroupcount is valid
 		return groups, nil
 	}
 
@@ -308,6 +309,7 @@ func (c Cx1Client) FillGroup(group *Group) error {
 	return nil
 }
 
+// this function is for CxOne v3.20+
 // Used by GetGroupChildren
 func (c Cx1Client) GetGroupChildrenByID(groupID string, first, max uint64) ([]Group, error) {
 	var groups []Group
