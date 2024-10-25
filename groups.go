@@ -258,8 +258,14 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	}
 
 	err = json.Unmarshal(data, &group)
-	if c.version.CheckCxOne("3.20.0") == -1 && err == nil {
+	if err != nil {
+		return group, err
+	}
+
+	if c.version.CheckCxOne("3.20.0") == -1 { // old version API included the subgroups&roles in this call
 		group.Filled = true
+	} else { // new version includes the roles but not subgroups
+		_, err = c.GetGroupChildren(&group)
 	}
 	return group, err
 }
