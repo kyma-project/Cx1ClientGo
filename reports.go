@@ -49,7 +49,8 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 
 // the v2 report is the "improved scan report" which can be used the same as the existing RequestNewReportByID
 // returns the report ID which can be passed to GetReportStatusByID or ReportPollingByID
-func (c Cx1Client) RequestNewReportByIDv2(scanID string, engines []string) (string, error) {
+// supports pdf, csv, and json format (not xml)
+func (c Cx1Client) RequestNewReportByIDv2(scanID string, engines []string, format string) (string, error) {
 	jsonData := map[string]interface{}{
 		"reportName": "improved-scan-report",
 		"entities": []map[string]interface{}{
@@ -60,10 +61,10 @@ func (c Cx1Client) RequestNewReportByIDv2(scanID string, engines []string) (stri
 			},
 		},
 		"filters": map[string][]string{
-			"scanners": {"sast"},
+			"scanners": engines,
 		},
 		"reportType": "ui",
-		"fileFormat": "pdf",
+		"fileFormat": format,
 	}
 
 	jsonValue, _ := json.Marshal(jsonData)
