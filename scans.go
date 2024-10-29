@@ -99,11 +99,13 @@ func (c Cx1Client) GetLastScansByID(projectID string, limit uint64) ([]Scan, err
 // function will be deprecated, use Get*ScansFiltered
 func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
 	c.depwarn("GetLastScansByIDFiltered", "GetScansFiltered")
-	_, scans, err := c.GetScansFiltered(ScanFilter{
-		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
-		ProjectID:  projectID,
-		Sort:       []string{"+created_at"},
-	})
+	if filter.Limit == 0 {
+		filter.Limit = c.pagination.Scans
+	}
+	filter.Sort = append(filter.Sort, "+created_at")
+	filter.ProjectID = projectID
+
+	_, scans, err := c.GetScansFiltered(filter)
 	return scans, err
 }
 
@@ -119,7 +121,7 @@ func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit uint64, sta
 
 func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
 	c.depwarn("GetLastScansFiltered", "GetScansFiltered")
-	filter.Sort = []string{"+created_at"}
+	filter.Sort = append(filter.Sort, "+created_at")
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
 }
