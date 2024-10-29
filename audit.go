@@ -188,7 +188,7 @@ func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 }
 
 func (c Cx1Client) AuditGetRequestStatusByID(auditSession *AuditSession, requestId string) (bool, interface{}, error) {
-	c.logger.Debugf("Get status of request %v for audit session %v", requestId, auditSession.ID)
+	c.logger.Debugf("Get status of request %v for %v", requestId, auditSession.String())
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/requests/%v", auditSession.ID, requestId), nil, nil)
 	type AuditRequestStatus struct {
 		Completed    bool        `json:"completed"`
@@ -224,7 +224,7 @@ func (c Cx1Client) AuditRequestStatusPollingByID(auditSession *AuditSession, req
 }
 
 func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditSession, requestId string, delaySeconds, maxSeconds int) (interface{}, error) {
-	c.logger.Debugf("Polling status of request %v for audit session %v", requestId, auditSession.ID)
+	c.logger.Debugf("Polling status of request %v for %v", requestId, auditSession.String())
 	var value interface{}
 	var err error
 	var status bool
@@ -296,7 +296,7 @@ func (c Cx1Client) GetAuditSessionByID(engine, projectId, scanId string) (AuditS
 }
 
 func (c Cx1Client) AuditGetScanSourcesByID(auditSession *AuditSession) ([]AuditScanSourceFile, error) {
-	c.logger.Debugf("Get audit session %v scan sources", auditSession.ID)
+	c.logger.Debugf("Get %v scan sources", auditSession.String())
 
 	var sourcefiles []AuditScanSourceFile
 
@@ -310,7 +310,7 @@ func (c Cx1Client) AuditGetScanSourcesByID(auditSession *AuditSession) ([]AuditS
 }
 
 func (c Cx1Client) AuditRunScanByID(auditSession *AuditSession) error {
-	c.logger.Infof("Triggering scan under audit session %v", auditSession.ID)
+	c.logger.Infof("Triggering scan under %v", auditSession.String())
 	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/sources/scan", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
@@ -458,7 +458,7 @@ func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, l
 }
 
 func (c Cx1Client) DeleteQueryOverrideByKey(auditSession *AuditSession, queryKey string) error {
-	c.logger.Debugf("Deleting query %v under session %v", queryKey, auditSession.ID)
+	c.logger.Debugf("Deleting query %v under %v", queryKey, auditSession.String())
 	response, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v/queries/%v", auditSession.ID, url.QueryEscape(queryKey)), nil, nil)
 	if err != nil {
 		return err
@@ -480,7 +480,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	if strings.EqualFold(level, AUDIT_QUERY_APPLICATION) {
 		level = AUDIT_QUERY_APPLICATION
 		if auditSession.ApplicationID == "" {
-			return newQuery, fmt.Errorf("requested to create an application-level query but the current audit session %v for project %v has no application associated", auditSession.ID, auditSession.ProjectName)
+			return newQuery, fmt.Errorf("requested to create an application-level query but the current %v for project %v has no application associated", auditSession.String(), auditSession.ProjectName)
 		}
 	} else if strings.EqualFold(level, AUDIT_QUERY_PROJECT) {
 		level = AUDIT_QUERY_PROJECT
@@ -490,7 +490,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 		return newQuery, fmt.Errorf("invalid query override level specified ('%v'), use functions cx1client.QueryTypeTenant, QueryTypeApplication, and QueryTypeProduct", level)
 	}
 
-	c.logger.Debugf("Create new override of query %v at level %v under session %v", baseQuery.String(), level, auditSession.ID)
+	c.logger.Debugf("Create new override of query %v at level %v under %v", baseQuery.String(), level, auditSession.String())
 
 	/*baseQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
 	if err != nil {
@@ -567,7 +567,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 }
 
 func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Query, error) {
-	c.logger.Debugf("Creating new query %v under session %v", query.String(), auditSession.ID)
+	c.logger.Debugf("Creating new query %v under %v", query.String(), auditSession.String())
 	type NewQuery struct {
 		Name        string `json:"name"`
 		Language    string `json:"language"`
@@ -803,6 +803,14 @@ func (s AuditSession) HasLanguage(language string) bool {
 		}
 	}
 	return false
+}
+
+func (s AuditSession) String() string {
+	if s.ProjectID == "" && s.ApplicationID == "" {
+		return fmt.Sprintf("Audit Session %v (Tenant - %v)", ShortenGUID(s.ID), strings.Join(s.Languages, ","))
+	} else {
+		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v)", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(s.Languages, ","))
+	}
 }
 
 func (f AuditSessionFilters) GetKey(engine, language string) (string, error) {
