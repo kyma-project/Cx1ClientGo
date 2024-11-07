@@ -542,10 +542,10 @@ type ScanConfiguration struct {
 }
 
 type ScanHandler struct {
-	RepoURL     string   `json:"repoUrl"`
-	Branch      string   `json:"branch"`
-	Commit      string   `json:"commit"`
-	Credentials []string `json:"credentials"`
+	RepoURL     string                 `json:"repoUrl"`
+	Branch      string                 `json:"branch"`
+	Commit      string                 `json:"commit"`
+	Credentials map[string]interface{} `json:"credentials"`
 }
 
 type ScanMetadata struct {
