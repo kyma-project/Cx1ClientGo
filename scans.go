@@ -472,7 +472,8 @@ func (c Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, setting
 	return scan, err
 }
 
-func (c Cx1Client) ScanProjectSHAByID(projectID string, handler ScanHandler, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+// convenience function
+func (c Cx1Client) ScanProjectGitByIDWithHandler(projectID string, handler ScanHandler, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
 		"type":    "git",
