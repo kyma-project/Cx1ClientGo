@@ -541,6 +541,13 @@ type ScanConfiguration struct {
 	Values   map[string]string `json:"value"`
 }
 
+type ScanHandler struct {
+	RepoURL     string                 `json:"repoUrl"`
+	Branch      string                 `json:"branch"`
+	Commit      string                 `json:"commit"`
+	Credentials map[string]interface{} `json:"credentials"`
+}
+
 type ScanMetadata struct {
 	ScanID                string
 	ProjectID             string
