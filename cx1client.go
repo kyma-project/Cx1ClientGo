@@ -34,6 +34,13 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
 	}
 
+	if l := len(base_url); base_url[l-1:] == "/" {
+		base_url = base_url[:l-1]
+	}
+	if l := len(iam_url); iam_url[l-1:] == "/" {
+		iam_url = iam_url[:l-1]
+	}
+
 	ctx := context.Background()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
@@ -70,6 +77,17 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 
 // Main entry for users of this client when using API Key
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
+	if base_url == "" || iam_url == "" || tenant == "" || api_key == "" || logger == nil {
+		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
+	}
+
+	if l := len(base_url); base_url[l-1:] == "/" {
+		base_url = base_url[:l-1]
+	}
+	if l := len(iam_url); iam_url[l-1:] == "/" {
+		iam_url = iam_url[:l-1]
+	}
+
 	ctx := context.Background()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)

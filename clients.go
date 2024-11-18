@@ -99,7 +99,7 @@ func (c Cx1Client) CreateClient(name string, notificationEmails []string, secret
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
 	notificationEmailsStr := "[\"" + strings.Join(notificationEmails, "\",\"") + "\"]"
-	c.logger.Infof("Setting emails: %v", notificationEmailsStr)
+	//c.logger.Infof("Setting emails: %v", notificationEmailsStr)
 
 	body := map[string]interface{}{
 		"enabled": true,
