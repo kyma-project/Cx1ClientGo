@@ -1,18 +1,15 @@
 module github.com/cxpsemea/Cx1ClientGo
 
-go 1.19
+go 1.22.0
+
+toolchain go1.23.3
 
 require (
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-querystring v1.1.0
 	github.com/sirupsen/logrus v1.9.3
-	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
-	golang.org/x/oauth2 v0.13.0
+	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
+	golang.org/x/oauth2 v0.24.0
 )
 
-require (
-	github.com/golang/protobuf v1.5.3 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/protobuf v1.31.0 // indirect
-)
+require golang.org/x/sys v0.27.0 // indirect
