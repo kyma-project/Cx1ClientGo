@@ -380,6 +380,19 @@ type Query struct {
 	SastID             uint64 `json:"sastId"`
 }
 
+type QueryError struct {
+	Line        uint64
+	StartColumn uint64
+	EndColumn   uint64
+	Code        string
+	Message     string
+}
+
+type QueryFailure struct {
+	QueryID string       `json:"query_id"`
+	Errors  []QueryError `json:"error"`
+}
+
 type QueryGroup struct {
 	Name     string
 	Language string

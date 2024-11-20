@@ -2,8 +2,6 @@ module github.com/cxpsemea/Cx1ClientGo
 
 go 1.22.0
 
-toolchain go1.23.3
-
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-querystring v1.1.0
