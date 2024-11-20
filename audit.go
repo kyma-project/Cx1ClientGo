@@ -566,7 +566,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	return newQuery, nil
 }
 
-func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Query, error) {
+func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Query, QueryFailure, error) {
 	c.logger.Debugf("Creating new query %v under %v", query.String(), auditSession.String())
 	type NewQuery struct {
 		Name        string `json:"name"`
@@ -588,21 +588,23 @@ func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query Query) (Quer
 		Description: query.QueryDescriptionId,
 	}
 
+	var queryFail QueryFailure
+
 	jsonBody, _ := json.Marshal(newQueryData)
 
 	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries", auditSession.ID), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return Query{}, err
+		return Query{}, queryFail, err
 	}
 	var responseBody requestIDBody
 	err = json.Unmarshal(response, &responseBody)
 	if err != nil {
-		return Query{}, fmt.Errorf("failed to unmarshal response: %s", err)
+		return Query{}, queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
 	}
 
 	data, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
 	if err != nil {
-		return Query{}, fmt.Errorf("failed to create query: %s", err)
+		return Query{}, queryFail, fmt.Errorf("failed to create query: %s", err)
 	}
 
 	queryKey := data.(map[string]interface{})["id"].(string)
@@ -654,11 +656,12 @@ func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *Query,
 }
 
 /*
-The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
+The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQuerySource" wrapper instead to address that.
 */
-func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (Query, error) {
+func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (Query, QueryFailure, error) {
 	c.logger.Debugf("Updating query source by key: %v", queryKey)
 	var newQuery Query
+	var queryFail QueryFailure
 	type QueryUpdate struct {
 		ID     string `json:"id"`
 		Source string `json:"source"`
@@ -669,65 +672,207 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 
 	jsonBody, err := json.Marshal(postbody)
 	if err != nil {
-		return newQuery, fmt.Errorf("failed to marshal query source: %s", err)
+		return newQuery, queryFail, fmt.Errorf("failed to marshal query source: %s", err)
 	}
 
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/query-editor/sessions/%v/queries/source", auditSession.ID), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return newQuery, fmt.Errorf("failed to save source: %s", err)
+		return newQuery, queryFail, fmt.Errorf("failed to save source: %s", err)
 	}
 
 	var responseBody requestIDBody
 	err = json.Unmarshal(response, &responseBody)
 	if err != nil {
-		return newQuery, fmt.Errorf("failed to unmarshal response: %s", err)
+		return newQuery, queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
 	}
 
 	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
 	if err != nil {
-		return newQuery, fmt.Errorf("failed due to %s: %v", err, responseObj)
+		return newQuery, queryFail, fmt.Errorf("failed due to %s: %v", err, responseObj)
 	}
 
 	if responseMap, ok := responseObj.(map[string]interface{}); ok {
 		if val, ok := responseMap["failed_queries"]; ok {
-			return newQuery, fmt.Errorf("failed to save source, details: %v", val)
+			var failedQueries []QueryFailure
+
+			bytes, _ := json.Marshal(val)
+			err = json.Unmarshal(bytes, &failedQueries)
+			if err != nil {
+				return newQuery, queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
+			}
+
+			if len(failedQueries) == 1 {
+				return newQuery, failedQueries[0], fmt.Errorf("failed to save source")
+			} else {
+				return newQuery, queryFail, fmt.Errorf("failed to save sources, details: %v", failedQueries)
+			}
 		}
 	}
 
 	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
-	if err != nil {
-		return newQuery, err
-	}
+	return newAuditQuery, queryFail, err
 
-	return newAuditQuery, nil
-}
-
-func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, source string) (Query, error) {
-	if query.EditorKey == "" {
-		return Query{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
-	}
-	newQuery, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
-	if err != nil {
-		return Query{}, err
-	}
-	newQuery.MergeQuery(*query)
-	return newQuery, nil
 }
 
 // convenience/wrapper function
-func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *Query) error {
+func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *Query) (QueryFailure, error) {
 	if query.EditorKey == "" {
-		return fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 
-	_, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, query.Source)
+	_, queryFail, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, query.Source)
 	if err != nil {
-		return err
+		return queryFail, err
 	}
 
 	_, err = c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, query.GetMetadata())
 
-	return err
+	return queryFail, err
+}
+
+func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *Query, source string) (Query, QueryFailure, error) {
+	if query.EditorKey == "" {
+		return Query{}, QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, queryFail, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
+	if err != nil {
+		return Query{}, queryFail, err
+	}
+	newQuery.MergeQuery(*query)
+	return newQuery, queryFail, nil
+}
+
+/*
+The data returned by the query-editor api does not include the query ID, so it will be 0. Use "ValidateQuerySource" wrapper instead to address that.
+This will test if the code compiles and will not update the source code in Cx1 nor in the query object
+*/
+func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (QueryFailure, error) {
+	c.logger.Debugf("Validating query source by key: %v", queryKey)
+	type QueryUpdate struct {
+		ID     string `json:"id"`
+		Source string `json:"source"`
+	}
+	var queryFail QueryFailure
+	postbody := make([]QueryUpdate, 1)
+	postbody[0].ID = queryKey
+	postbody[0].Source = source
+
+	jsonBody, err := json.Marshal(postbody)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to marshal query source: %s", err)
+	}
+
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries/validate", auditSession.ID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to send source: %s", err)
+	}
+
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed due to %s: %v", err, responseObj)
+	}
+
+	if responseMap, ok := responseObj.(map[string]interface{}); ok {
+		if val, ok := responseMap["failed_queries"]; ok {
+			var failedQueries []QueryFailure
+
+			bytes, _ := json.Marshal(val)
+			err = json.Unmarshal(bytes, &failedQueries)
+			if err != nil {
+				return queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
+			}
+
+			if len(failedQueries) == 1 {
+				return failedQueries[0], fmt.Errorf("failed to validate source")
+			} else {
+				return queryFail, fmt.Errorf("failed to validate sources, details: %v", failedQueries)
+			}
+		}
+	}
+	return queryFail, nil
+}
+
+/*
+This will test if the code compiles and will not update the source code in Cx1 nor in the query object
+*/
+func (c Cx1Client) ValidateQuerySource(auditSession *AuditSession, query *Query, source string) (QueryFailure, error) {
+	if query.EditorKey == "" {
+		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	return c.ValidateQuerySourceByKey(auditSession, query.EditorKey, source)
+}
+
+/*
+The data returned by the query-editor api does not include the query ID, so it will be 0. Use "RunQuery" wrapper instead to address that.
+This will run the query, but Cx1ClientGo does not currently support retrieving the results - this function is a temporary substitute for
+ValidateQuerySource which does not return compilation errors (as of Cx1 version 3.25)
+*/
+func (c Cx1Client) RunQueryByKey(auditSession *AuditSession, queryKey, source string) (QueryFailure, error) {
+	c.logger.Debugf("Running query by key: %v", queryKey)
+	type QueryUpdate struct {
+		ID     string `json:"id"`
+		Source string `json:"source"`
+	}
+	postbody := make([]QueryUpdate, 1)
+	postbody[0].ID = queryKey
+	postbody[0].Source = source
+
+	var queryFail QueryFailure
+
+	jsonBody, err := json.Marshal(postbody)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to marshal query source: %s", err)
+	}
+
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries/run", auditSession.ID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to run: %s", err)
+	}
+
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return queryFail, fmt.Errorf("failed due to %s: %v", err, responseObj)
+	}
+
+	if responseMap, ok := responseObj.(map[string]interface{}); ok {
+		if val, ok := responseMap["failed_queries"]; ok {
+			var failedQueries []QueryFailure
+
+			bytes, _ := json.Marshal(val)
+			err = json.Unmarshal(bytes, &failedQueries)
+			if err != nil {
+				return queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
+			}
+			if len(failedQueries) == 1 {
+				return failedQueries[0], fmt.Errorf("failed to run query")
+			} else {
+				return queryFail, fmt.Errorf("failed to run queries, details: %v", failedQueries)
+			}
+		}
+	}
+	return queryFail, nil
+}
+
+/*
+This will test if the code compiles and will not update the source code in Cx1 nor in the query object
+*/
+func (c Cx1Client) RunQuery(auditSession *AuditSession, query *Query, source string) (QueryFailure, error) {
+	if query.EditorKey == "" {
+		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	return c.RunQueryByKey(auditSession, query.EditorKey, source)
 }
 
 func (q AuditQuery) ToQuery() Query {

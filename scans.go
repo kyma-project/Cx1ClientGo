@@ -404,6 +404,19 @@ func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	return data, nil
 }
 
+func (c Cx1Client) GetScanSourcesByID(scanID string) ([]byte, error) {
+	c.logger.Debugf("Fetching scan sources for scan %v", scanID)
+
+	//c.logger.Tracef("Retrieved url: %v", enginelogURL)
+	data, err := c.sendRequestInternal(http.MethodGet, fmt.Sprintf("%v/api/repostore/code/%v", c.baseUrl, scanID), nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to download sources from scan %v: %s", scanID, err)
+		return []byte{}, nil
+	}
+
+	return data, nil
+}
+
 func (c Cx1Client) GetScanWorkflowByID(scanID string) ([]WorkflowLog, error) {
 	var workflow []WorkflowLog
 
