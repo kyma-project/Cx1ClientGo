@@ -14,7 +14,7 @@ import (
 
 func main() {
 	logger := logrus.New()
-	logger.SetLevel(logrus.InfoLevel)
+	logger.SetLevel(logrus.TraceLevel)
 	myformatter := &easy.Formatter{}
 	myformatter.TimestampFormat = "2006-01-02 15:04:05.000"
 	myformatter.LogFormat = "[%lvl%][%time%] %msg%\n"
@@ -38,7 +38,7 @@ func main() {
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	httpClient.Transport = transport
+	//httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -188,7 +188,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 		return nil
 	}
 
-	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -228,7 +228,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 		return nil
 	}
 
-	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
+	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -266,7 +266,7 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 		return nil
 	}
 
-	updatedQuery, err := cx1client.UpdateQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
+	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -302,7 +302,7 @@ func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *C
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newCorpQuery, err := cx1client.CreateNewQuery(session, NewQuery)
+	newCorpQuery, _, err := cx1client.CreateNewQuery(session, NewQuery)
 	if err != nil {
 		logger.Errorf("Failed to create new corp query: %s", err)
 		return nil
