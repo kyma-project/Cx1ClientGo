@@ -109,11 +109,16 @@ func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 		Email:               email,
 		Exact:               true,
 	})
+
+	if err != nil {
+		return User{}, err
+	}
+
 	if len(users) == 0 {
 		return User{}, fmt.Errorf("no user with email %v found", email)
 	}
 
-	return users[0], err
+	return users[0], nil
 }
 
 func (c Cx1Client) GetUserCount() (uint64, error) {
