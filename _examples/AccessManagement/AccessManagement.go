@@ -1,11 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
@@ -34,10 +32,10 @@ func main() {
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
-	transport := &http.Transport{}
-	transport.Proxy = http.ProxyURL(proxyURL)
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	//proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+	//transport := &http.Transport{}
+	//transport.Proxy = http.ProxyURL(proxyURL)
+	//transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
 	//httpClient.Transport = transport
@@ -91,7 +89,7 @@ func checkCurrentUserAccess(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 	logger.Infof("Current user has access to all: %t", allAccess)
 	logger.Infof("Current user has the following resources accessible: ")
 	for _, a := range accessibleResources {
-		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceID)
+		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceID, strings.Join(a.Roles, ","))
 	}
 
 	tenantId := cx1client.GetTenantID()
@@ -109,7 +107,7 @@ func createOIDCClient(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) (
 	var user Cx1ClientGo.User
 	if err != nil {
 		logger.Warnf("Failed to find existing OIDC Client 'cx1clientgo_test' - trying to create this OIDC client. Error: %s", err)
-		testclient, err = cx1client.CreateClient("cx1clientgo_test")
+		testclient, err = cx1client.CreateClient("cx1clientgo_test", []string{ /*no email for notification*/ }, 30)
 		if err != nil {
 			return testclient, user, fmt.Errorf("failed to create oidc client 'cx1clientgo_test': %s", err)
 		}
@@ -141,7 +139,7 @@ func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.Use
 		ResourceID:   tenantId,
 		ResourceType: "tenant",
 		ResourceName: tenant,
-		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{Cx1ClientGo.AccessAssignedRole{Name: "ast-scanner"}},
+		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{{Name: "ast-scanner"}},
 		EntityID:     user.UserID,
 		EntityType:   "user",
 		EntityName:   "cx1clientgo_test",
@@ -159,7 +157,11 @@ func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.Use
 
 	logger.Info("The following access assignments exist for the cx1clientgo_test OIDC Client on tenant:")
 	for _, a := range accessAssignment {
-		logger.Infof(" - Entity %v has roles %v", a.EntityID, strings.Join(a.EntityRoles, ", "))
+		entityRoleStr := []string{}
+		for _, r := range a.EntityRoles {
+			entityRoleStr = append(entityRoleStr, r.Name)
+		}
+		logger.Infof(" - Entity %v has roles %v", a.EntityID, strings.Join(entityRoleStr, ", "))
 	}
 	return nil
 }
