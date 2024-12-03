@@ -234,6 +234,21 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 	return scanmeta, nil
 }
 
+func (c Cx1Client) GetScanMetricsByID(scanID string) (ScanMetrics, error) {
+	c.logger.Debugf("Getting scan metrics for scan %v", scanID)
+
+	var metrics ScanMetrics
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v/metrics", scanID), nil, nil)
+
+	if err != nil {
+		c.logger.Tracef("Failed to get scan metrics for scan ID %v: %s", scanID, err)
+		return metrics, err
+	}
+
+	err = json.Unmarshal([]byte(data), &metrics)
+	return metrics, err
+}
+
 func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]ConfigurationSetting, error) {
 	c.logger.Debugf("Getting scan configuration for project %v, scan %v", projectID, scanID)
 	var scanConfigurations []ConfigurationSetting
@@ -654,6 +669,23 @@ func (s *Scan) String() string {
 
 func (s ScanStatusSummary) String() string {
 	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
+}
+
+func (s ScanMetrics) HasLanguage(lang string) bool {
+	for scanLang := range s.ScannedFilesPerLanguage {
+		if strings.EqualFold(scanLang, lang) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s ScanMetrics) GetLanguages() []string {
+	langs := []string{}
+	for scanLang := range s.ScannedFilesPerLanguage {
+		langs = append(langs, scanLang)
+	}
+	return langs
 }
 
 /* misc future stuff

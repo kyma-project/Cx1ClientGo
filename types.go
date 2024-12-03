@@ -564,6 +564,23 @@ type ScanMetadata struct {
 	PresetName            string `json:"queryPreset"`
 }
 
+type ScanMetrics struct {
+	ScanID                                    string
+	MemoryPeak                                uint64
+	VirtualMemoryPeak                         uint64
+	TotalScannedFilesCount                    uint64
+	TotalScannedLOC                           uint64
+	DOMObjectsPerLanguage                     map[string]uint64
+	SuccessfullLocPerLanguage                 map[string]uint64
+	FailedLocPerLanguage                      map[string]uint64
+	FileCountOfDetectedButNotScannedLanguages map[string]uint64
+	ScannedFilesPerLanguage                   map[string]struct {
+		GoodFiles          uint64
+		PartiallyGoodFiles uint64
+		BadFiles           uint64
+	}
+}
+
 type ScanResultSet struct {
 	SAST         []ScanSASTResult
 	SCA          []ScanSCAResult
