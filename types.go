@@ -289,13 +289,14 @@ type GroupFilter struct {
 }
 
 type OIDCClient struct {
-	ID                 string                 `json:"id"`
-	ClientID           string                 `json:"clientId"`
-	Enabled            bool                   `json:"enabled"`
-	ClientSecret       string                 `json:"secret"`
-	ClientSecretExpiry uint64                 `json:"-"`
-	Creator            string                 `json:"-"`
-	OIDCClientRaw      map[string]interface{} `json:"-"`
+	ID                   string                 `json:"id"`
+	ClientID             string                 `json:"clientId"`
+	Enabled              bool                   `json:"enabled"`
+	ClientSecret         string                 `json:"secret"`
+	ClientSecretExpiry   uint64                 `json:"-"` // this is the actual time/date it will expire
+	SecretExpirationDays uint64                 `json:"-"` // this is the number of days after which a secret will expire
+	Creator              string                 `json:"-"`
+	OIDCClientRaw        map[string]interface{} `json:"-"`
 }
 
 type OIDCClientScope struct {

@@ -164,6 +164,11 @@ func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
 			timestamp := client.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"].(string)
 			client.ClientSecretExpiry, _ = strconv.ParseUint(timestamp, 10, 64)
 		}
+		if client.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"] != nil {
+			expiryDaysStr := client.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"].(string)
+			expiryDays, _ := strconv.ParseUint(expiryDaysStr, 10, 64)
+			client.SecretExpirationDays = expiryDays
+		}
 		if client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"] != nil {
 			client.Creator = client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"].(string)
 		}
@@ -172,12 +177,50 @@ func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
 	return client, nil
 }
 
+func (c *OIDCClient) clientToMap() {
+	if c.OIDCClientRaw["attributes"] != nil {
+		attributes := c.OIDCClientRaw["attributes"].(map[string]interface{})
+		if attributes["client.secret.expiration.time"] != nil {
+			timestamp := attributes["client.secret.expiration.time"].(string)
+			expiry, _ := strconv.ParseUint(timestamp, 10, 64)
+			if expiry != c.ClientSecretExpiry {
+				attributes["client.secret.expiration.time"] = expiry
+			}
+		}
+
+		if attributes["secretExpiration"] != nil {
+			expiryDaysStr := attributes["secretExpiration"].(string)
+			expiryDays, _ := strconv.ParseUint(expiryDaysStr, 10, 64)
+			if expiryDays != c.SecretExpirationDays {
+				attributes["secretExpiration"] = c.SecretExpirationDays
+			}
+		}
+		/*
+			// it may be a bug to allow changing the creator
+			if attributes["creator"] != nil {
+				creator := attributes["creator"].(string)
+				if creator != c.Creator {
+					attributes["creator"] = c.Creator
+				}
+			}
+		*/
+		c.OIDCClientRaw["attributes"] = attributes
+	}
+}
+
+// The original SaveClient is renamed to UpdateClient for consistency with other Update* functions
+func (c Cx1Client) SaveClient(client OIDCClient) error {
+	c.depwarn("SaveClient", "UpdateClient")
+	return c.UpdateClient(client)
+}
+
 /*
-The SaveClient function should be used sparingly - it will use the contents of the OIDCClient.OIDCClientRaw variable of type map[string]interface{} in the PUT request.
+The UpdateClient function should be used sparingly - it will use the contents of the OIDCClient.OIDCClientRaw variable of type map[string]interface{} in the PUT request.
 As a result, changes to the member variables in the OIDCClient object itself (creator & clientsecretexpiry) will not be saved using this method unless they are also updated in OIDCClientRaw.
 */
-func (c Cx1Client) SaveClient(client OIDCClient) error {
+func (c Cx1Client) UpdateClient(client OIDCClient) error {
 	c.logger.Debugf("Updating OIDC client with name %v", client.ClientID)
+	client.clientToMap()
 
 	jsonBody, _ := json.Marshal(client.OIDCClientRaw)
 
