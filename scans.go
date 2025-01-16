@@ -501,6 +501,23 @@ func (c Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, setting
 }
 
 // convenience function
+func (c Cx1Client) ScanProjectGitByIDWithHandler(projectID string, handler ScanHandler, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+	jsonBody := map[string]interface{}{
+		"project": map[string]interface{}{"id": projectID},
+		"type":    "git",
+		"tags":    tags,
+		"handler": handler,
+		"config":  settings,
+	}
+
+	scan, err := c.scanProject(jsonBody)
+	if err != nil {
+		return scan, fmt.Errorf("failed to start a git scan for project %v: %s", projectID, err)
+	}
+	return scan, err
+}
+
+// convenience function
 func (c Cx1Client) ScanProjectByID(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	if scanType == "upload" {
 		return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)

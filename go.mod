@@ -1,4 +1,4 @@
-module github.com/cxpsemea/Cx1ClientGo
+module github.com/kyma-project/Cx1ClientGo
 
 go 1.22.0
 
