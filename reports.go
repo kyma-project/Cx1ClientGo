@@ -101,7 +101,7 @@ func (c Cx1Client) DownloadReport(reportUrl string) ([]byte, error) {
 	return data, nil
 }
 
-// convenience
+// convenience function, polls and returns the URL to download the report
 func (c Cx1Client) ReportPollingByID(reportID string) (string, error) {
 	for {
 		status, err := c.GetReportStatusByID(reportID)
