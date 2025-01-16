@@ -1,4 +1,4 @@
-module github.com/kyma-project/Cx1ClientGo
+module github.com/cxpsemea/Cx1ClientGo
 
 go 1.19
 
