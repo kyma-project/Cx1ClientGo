@@ -9,7 +9,7 @@ import (
 )
 
 // Reports
-
+// Added the 'sections' variable, originally: "ScanSummary", "ExecutiveSummary", "ScanResults",
 func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType string, engines, sections []string) (string, error) {
 	jsonData := map[string]interface{}{
 		"fileFormat": reportType,
