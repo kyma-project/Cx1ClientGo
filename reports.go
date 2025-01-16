@@ -10,7 +10,7 @@ import (
 
 // Reports
 
-func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType string) (string, error) {
+func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType string, engines, sections []string) (string, error) {
 	jsonData := map[string]interface{}{
 		"fileFormat": reportType,
 		"reportType": "ui",
@@ -19,13 +19,9 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 			"scanId":     scanID,
 			"projectId":  projectID,
 			"branchName": branch,
-			"sections": []string{
-				"ScanSummary",
-				"ExecutiveSummary",
-				"ScanResults",
-			},
-			"scanners": []string{"SAST"},
-			"host":     "",
+			"sections":   sections,
+			"scanners":   engines,
+			"host":       "",
 		},
 	}
 
