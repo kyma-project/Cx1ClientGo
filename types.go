@@ -65,6 +65,8 @@ type ClientVars struct {
 	AuditCompilePollingDelaySeconds           int
 	AuditLanguagePollingMaxSeconds            int
 	AuditLanguagePollingDelaySeconds          int
+	ReportPollingMaxSeconds                   int
+	ReportPollingDelaySeconds                 int
 	ScanPollingMaxSeconds                     int
 	ScanPollingDelaySeconds                   int
 	ProjectApplicationLinkPollingMaxSeconds   int
