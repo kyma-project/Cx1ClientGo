@@ -103,6 +103,11 @@ func (c Cx1Client) DownloadReport(reportUrl string) ([]byte, error) {
 
 // convenience function, polls and returns the URL to download the report
 func (c Cx1Client) ReportPollingByID(reportID string) (string, error) {
+	return c.ReportPollingByIDWithTimeout(reportID, c.consts.ReportPollingDelaySeconds, c.consts.ReportPollingMaxSeconds)
+}
+
+func (c Cx1Client) ReportPollingByIDWithTimeout(reportID string, delaySeconds, maxSeconds int) (string, error) {
+	pollingCounter := 0
 	for {
 		status, err := c.GetReportStatusByID(reportID)
 		if err != nil {
@@ -114,6 +119,12 @@ func (c Cx1Client) ReportPollingByID(reportID string) (string, error) {
 		} else if status.Status == "failed" {
 			return "", fmt.Errorf("report generation failed")
 		}
-		time.Sleep(10 * time.Second)
+
+		if maxSeconds != 0 && pollingCounter > maxSeconds {
+			return "", fmt.Errorf("report %v polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", ShortenGUID(reportID), pollingCounter)
+		}
+
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 }
