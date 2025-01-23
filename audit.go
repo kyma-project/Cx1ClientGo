@@ -48,17 +48,6 @@ func (c Cx1Client) QueryTypeProject() string {
 	return AUDIT_QUERY_PROJECT
 }
 
-func (c Cx1Client) GetAuditSessionFilters() (AuditSessionFilters, error) {
-	var filters AuditSessionFilters
-	response, err := c.sendRequest(http.MethodGet, "/query-editor/filters", nil, nil)
-	if err != nil {
-		return filters, err
-	}
-
-	err = json.Unmarshal(response, &filters)
-	return filters, err
-}
-
 func (c Cx1Client) AuditCreateSession(engine, filter string) (AuditSession, error) {
 	c.logger.Debugf("Trying to create a tenant-level audit session for engine %v and filter %v", engine, filter)
 
