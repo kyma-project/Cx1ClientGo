@@ -318,3 +318,7 @@ func (ar *ApplicationRule) RemoveItem(item string) {
 	}
 	ar.Value = rulestr
 }
+
+func (ar *ApplicationRule) String() string {
+	return fmt.Sprintf("[%v] %v: %v", ShortenGUID(ar.ID), ar.Type, ar.Value)
+}
