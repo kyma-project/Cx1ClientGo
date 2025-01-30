@@ -274,7 +274,7 @@ func (a *Application) AddRule(ruletype, value string) {
 
 func (a *Application) RemoveRule(rule *ApplicationRule) {
 	for i := 0; i < len(a.Rules); i++ {
-		if rule == &a.Rules[i] {
+		if rule.ID == a.Rules[i].ID {
 			a.Rules = append(a.Rules[:i], a.Rules[i+1:]...)
 			return
 		}

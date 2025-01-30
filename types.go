@@ -143,6 +143,7 @@ type ApplicationFilter struct {
 }
 
 type ApplicationRule struct {
+	ID    string `json:"id"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
 }
