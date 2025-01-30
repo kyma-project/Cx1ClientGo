@@ -234,15 +234,15 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 }
 
 // returns the first rule of this type. There should only be one rule of each type.
-/*
-func (a *Application) GetRuleByType(ruletype string) (ApplicationRule, error) {
+
+func (a *Application) GetRuleByID(ruleID string) *ApplicationRule {
 	for id := range a.Rules {
-		if a.Rules[id].Type == ruletype {
-			return a.Rules[id]
+		if a.Rules[id].ID == ruleID {
+			return &a.Rules[id]
 		}
 	}
-	return ApplicationRule{}, fmt.Errorf( "no rule found" )
-}*/
+	return nil
+}
 
 // returns all rules of this type. There should only be one rule of each type but sometimes there are more.
 func (a *Application) GetRulesByType(ruletype string) []ApplicationRule {
@@ -268,14 +268,14 @@ func (a *Application) AddRule(ruletype, value string) {
 				return // rule value already contains this value
 			}
 		}
-		rule := rules[0]
+		rule := a.GetRuleByID(rules[0].ID)
 		rule.Value = fmt.Sprintf("%v;%v", rule.Value, value)
 	}
 }
 
-func (a *Application) RemoveRule(rule ApplicationRule) {
+func (a *Application) RemoveRule(ruleID string) {
 	for i := 0; i < len(a.Rules); i++ {
-		if rule.ID == a.Rules[i].ID {
+		if ruleID == a.Rules[i].ID {
 			a.Rules = append(a.Rules[:i], a.Rules[i+1:]...)
 			return
 		}
@@ -296,11 +296,12 @@ func (a *Application) UnassignProject(project *Project) {
 
 	for _, rule := range rules {
 		if strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", project.Name)) {
-			rule.RemoveItem(project.Name)
-			if rule.Value == "" {
-				a.RemoveRule(rule)
+			rule_ref := a.GetRuleByID(rule.ID)
+			rule_ref.RemoveItem(project.Name)
+			if rule_ref.Value == "" {
+				a.RemoveRule(rule.ID)
 			}
-			return // rule value already contains this value
+			return
 		}
 	}
 }
@@ -312,7 +313,7 @@ func (ar *ApplicationRule) RemoveItem(item string) {
 		rulestr = strings.Replace(rulestr, itemstr, ";", 1)
 		rulestr = rulestr[1:] // chop out starting ;
 		if len(rulestr) > 0 {
-			rulestr = rulestr[:len(rulestr)-1]
+			rulestr = rulestr[:len(rulestr)-1] // chop out ending ;
 		}
 	}
 	ar.Value = rulestr
