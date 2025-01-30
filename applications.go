@@ -233,6 +233,7 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 	return nil
 }
 
+// returns the first rule of this type. There should only be one rule of each type.
 func (a *Application) GetRuleByType(ruletype string) *ApplicationRule {
 	for id := range a.Rules {
 		if a.Rules[id].Type == ruletype {
@@ -242,17 +243,31 @@ func (a *Application) GetRuleByType(ruletype string) *ApplicationRule {
 	return nil
 }
 
+// returns all rules of this type. There should only be one rule of each type but sometimes there are more.
+func (a *Application) GetRulesByType(ruletype string) []*ApplicationRule {
+	rules := []*ApplicationRule{}
+	for id := range a.Rules {
+		if a.Rules[id].Type == ruletype {
+			rules = append(rules, &(a.Rules[id]))
+		}
+	}
+	return rules
+}
+
 func (a *Application) AddRule(ruletype, value string) {
-	rule := a.GetRuleByType(ruletype)
-	if rule == nil {
+	rules := a.GetRulesByType(ruletype)
+	if len(rules) == 0 {
 		var newrule ApplicationRule
 		newrule.Type = ruletype
 		newrule.Value = value
 		a.Rules = append(a.Rules, newrule)
 	} else {
-		if rule.Value == value || strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", value)) {
-			return // rule value already contains this value
+		for _, rule := range rules {
+			if rule.Value == value || strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", value)) {
+				return // rule value already contains this value
+			}
 		}
+		rule := rules[0]
 		rule.Value = fmt.Sprintf("%v;%v", rule.Value, value)
 	}
 }
@@ -273,14 +288,19 @@ func (a *Application) AssignProject(project *Project) {
 
 // UnassignProject will remove the project from the "project.name.in" rule if it's there, and if the rule ends up empty it will remove the rule
 func (a *Application) UnassignProject(project *Project) {
-	rule := a.GetRuleByType("project.name.in")
-	if rule == nil {
+	rules := a.GetRulesByType("project.name.in")
+	if len(rules) == 0 {
 		return
 	}
 
-	rule.RemoveItem(project.Name)
-	if rule.Value == "" {
-		a.RemoveRule(rule)
+	for _, rule := range rules {
+		if strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", project.Name)) {
+			rule.RemoveItem(project.Name)
+			if rule.Value == "" {
+				a.RemoveRule(rule)
+			}
+			return // rule value already contains this value
+		}
 	}
 }
 
