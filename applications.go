@@ -234,21 +234,22 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 }
 
 // returns the first rule of this type. There should only be one rule of each type.
-func (a *Application) GetRuleByType(ruletype string) *ApplicationRule {
+/*
+func (a *Application) GetRuleByType(ruletype string) (ApplicationRule, error) {
 	for id := range a.Rules {
 		if a.Rules[id].Type == ruletype {
-			return &(a.Rules[id])
+			return a.Rules[id]
 		}
 	}
-	return nil
-}
+	return ApplicationRule{}, fmt.Errorf( "no rule found" )
+}*/
 
 // returns all rules of this type. There should only be one rule of each type but sometimes there are more.
-func (a *Application) GetRulesByType(ruletype string) []*ApplicationRule {
-	rules := []*ApplicationRule{}
-	for id := range a.Rules {
-		if a.Rules[id].Type == ruletype {
-			rules = append(rules, &(a.Rules[id]))
+func (a *Application) GetRulesByType(ruletype string) []ApplicationRule {
+	rules := []ApplicationRule{}
+	for i := range a.Rules {
+		if a.Rules[i].Type == ruletype {
+			rules = append(rules, a.Rules[i])
 		}
 	}
 	return rules
@@ -272,7 +273,7 @@ func (a *Application) AddRule(ruletype, value string) {
 	}
 }
 
-func (a *Application) RemoveRule(rule *ApplicationRule) {
+func (a *Application) RemoveRule(rule ApplicationRule) {
 	for i := 0; i < len(a.Rules); i++ {
 		if rule.ID == a.Rules[i].ID {
 			a.Rules = append(a.Rules[:i], a.Rules[i+1:]...)
