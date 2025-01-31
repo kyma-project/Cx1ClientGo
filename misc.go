@@ -41,7 +41,24 @@ func (c *Cx1Client) SetPaginationSettings(pagination PaginationSettings) {
 }
 
 func (c *Cx1Client) InitializePaginationSettings() {
-	c.pagination = PaginationSettings{
+	c.SetPaginationSettings(c.GetPaginationDefaultsMultiTenant())
+}
+
+func (c *Cx1Client) GetPaginationDefaultsSingleTenant() PaginationSettings {
+	return PaginationSettings{
+		Applications:  500,
+		Branches:      100,
+		Groups:        200,
+		Projects:      500,
+		Results:       200,
+		Scans:         200,
+		SASTAggregate: 10000,
+		Users:         200,
+	}
+}
+
+func (c *Cx1Client) GetPaginationDefaultsMultiTenant() PaginationSettings {
+	return PaginationSettings{
 		Applications:  50,
 		Branches:      100,
 		Groups:        100,
