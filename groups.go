@@ -353,16 +353,26 @@ func (c Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
 }
 
+// Sets group g as child of group parent
+// If parent == nil, sets the group as top-level
 func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 	body := map[string]string{
 		"id":   g.GroupID,
 		"name": g.Name,
 	}
 	jsonBody, _ := json.Marshal(body)
-	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/children", parent.GroupID), bytes.NewReader(jsonBody), http.Header{})
-	if err != nil {
-		c.logger.Tracef("Failed to add child to parent: %s", err)
-		return err
+	if parent != nil {
+		_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/children", parent.GroupID), bytes.NewReader(jsonBody), http.Header{})
+		if err != nil {
+			c.logger.Tracef("Failed to add child to parent: %s", err)
+			return err
+		}
+	} else {
+		_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups", bytes.NewReader(jsonBody), http.Header{})
+		if err != nil {
+			c.logger.Tracef("Failed to move group to top-level: %s", err)
+			return err
+		}
 	}
 
 	return nil
