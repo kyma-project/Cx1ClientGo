@@ -355,6 +355,21 @@ type ProjectBranchFilter struct {
 	Name      string `url:"branch-name,omitempty"`
 }
 
+type ProjectScanSchedule struct {
+	ID            string            `json:"id"`
+	ProjectID     string            `json:"projectID"`
+	NextStartTime time.Time         `json:"start_time"`
+	StartTime     string            `json:"-"`
+	CreatedAt     time.Time         `json:"create_at"`
+	UpdatedAt     time.Time         `json:"update_at"`
+	Frequency     string            `json:"frequency"`      // weekly or daily
+	Days          []string          `json:"days,omitempty"` // monday, tuesday ... iff weekly
+	Active        bool              `json:"active"`
+	Engines       []string          `json:"engines"`
+	Branch        string            `json:"branch"`
+	Tags          map[string]string `json:"tags"`
+}
+
 type ConfigurationSetting struct {
 	Key             string `json:"key"`
 	Name            string `json:"name"`
