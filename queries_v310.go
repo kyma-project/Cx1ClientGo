@@ -21,7 +21,7 @@ func (c Cx1Client) GetQueryByName_v310(level, levelid, language, group, query st
 		return AuditQuery_v310{}, err
 	}
 
-	aq, err := FindQueryByName_v310(queries, levelid, language, group, query)
+	aq, err := FindQueryByName_v310(queries, level, language, group, query)
 	if err != nil {
 		return AuditQuery_v310{}, err
 	}
