@@ -319,6 +319,10 @@ func (c *Cx1Client) InitializeClient() error {
 		AUDIT_QUERY_APPLICATION = "Application"
 	}
 
+	if c.version.CheckCxOne("3.31.0") >= 0 {
+		ScanSortCreatedDescending = "-created_at"
+	}
+
 	err = c.RefreshFlags()
 	if err != nil {
 		c.logger.Warnf("Failed to get tenant flags: %s", err)
