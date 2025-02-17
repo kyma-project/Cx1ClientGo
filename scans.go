@@ -72,7 +72,7 @@ func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
 	filter := ScanFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		Statuses:   status,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{"-created_at"},
 	}
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
@@ -91,7 +91,7 @@ func (c Cx1Client) GetLastScansByID(projectID string, limit uint64) ([]Scan, err
 	_, scans, err := c.GetXScansFiltered(ScanFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		ProjectID:  projectID,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{"-created_at"},
 	}, limit)
 	return scans, err
 }
@@ -102,7 +102,7 @@ func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter)
 	if filter.Limit == 0 {
 		filter.Limit = c.pagination.Scans
 	}
-	filter.Sort = append(filter.Sort, "+created_at")
+	filter.Sort = append(filter.Sort, "-created_at")
 	filter.ProjectID = projectID
 
 	_, scans, err := c.GetScansFiltered(filter)
@@ -114,14 +114,14 @@ func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit uint64, sta
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		ProjectID:  projectID,
 		Statuses:   status,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{"-created_at"},
 	}, limit)
 	return scans, err
 }
 
 func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
 	c.depwarn("GetLastScansFiltered", "GetScansFiltered")
-	filter.Sort = append(filter.Sort, "+created_at")
+	filter.Sort = append(filter.Sort, "-created_at")
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
 }
