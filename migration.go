@@ -79,7 +79,7 @@ func (c Cx1Client) GetImportByID(importID string) (DataImport, error) {
 	return di, err
 }
 
-func (c Cx1Client) GetImportLogsByID(importID, engine string) ([]byte, error) {
+func (c Cx1Client) GetImportLogsByID(importID string) ([]byte, error) {
 	c.logger.Debugf("Fetching import logs for import %v", importID)
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/imports/%v/logs/download", importID), nil, nil)
