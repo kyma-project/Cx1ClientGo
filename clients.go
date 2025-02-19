@@ -141,7 +141,7 @@ func (c Cx1Client) CreateClient(name string, notificationEmails []string, secret
 		return newClient, fmt.Errorf("failed to add 'groups' client scope to new client: %s", err)
 	}
 
-	err = c.SaveClient(newClient)
+	err = c.UpdateClient(newClient)
 	return newClient, err
 }
 
