@@ -36,9 +36,15 @@ func (c Cx1Client) AddAccessAssignment(access AccessAssignment) error {
 		CreatedAt    string   `json:"createdAt"`
 	}
 
+	flag, _ := c.CheckFlag("ACCESS_MANAGEMENT_PHASE_2")
+
 	roles := make([]string, 0)
 	for _, r := range access.EntityRoles {
-		roles = append(roles, r.Name)
+		if flag {
+			roles = append(roles, r.Id)
+		} else {
+			roles = append(roles, r.Name)
+		}
 	}
 
 	accessPost := AccessAssignmentPOST{

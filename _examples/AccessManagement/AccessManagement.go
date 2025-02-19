@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -32,13 +34,13 @@ func main() {
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	//proxyURL, _ := url.Parse("http://127.0.0.1:8080")
-	//transport := &http.Transport{}
-	//transport.Proxy = http.ProxyURL(proxyURL)
-	//transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+	transport := &http.Transport{}
+	transport.Proxy = http.ProxyURL(proxyURL)
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	//httpClient.Transport = transport
+	httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -50,9 +52,20 @@ func main() {
 	testclient, testuser, err := createOIDCClient(cx1client, logger)
 	if err != nil {
 		logger.Fatalf("Failed to get or create OIDC Client: %s", err)
+	} else {
+		_, err = cx1client.GetClientSecret(&testclient)
+		if err != nil {
+			logger.Errorf("Failed to retrieve secret for new client: %s", err)
+		}
 	}
 
-	err = addAccessAssignments(cx1client, testuser, tenant, logger)
+	version, _ := cx1client.GetVersion()
+	if version.CheckCxOne("3.25.0") >= 0 {
+		err = addAccessAssignments(cx1client, testuser, "client", tenant, logger)
+	} else {
+		err = addAccessAssignments(cx1client, testuser, "user", tenant, logger)
+	}
+
 	if err != nil {
 		logger.Errorf("Failed to add user assignment for cx1clientgo_test service user: %s", err)
 	} else {
@@ -132,20 +145,26 @@ func createOIDCClient(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) (
 	return testclient, user, nil
 }
 
-func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.User, tenant string, logger *logrus.Logger) error {
+func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.User, entityType, tenant string, logger *logrus.Logger) error {
 	tenantId := cx1client.GetTenantID()
+
+	role, err := cx1client.GetRoleByName("ast-scanner")
+	if err != nil {
+		return err
+	}
+
 	access := Cx1ClientGo.AccessAssignment{
 		TenantID:     tenantId,
 		ResourceID:   tenantId,
 		ResourceType: "tenant",
 		ResourceName: tenant,
-		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{{Name: "ast-scanner"}},
+		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{{Name: role.Name, Id: role.RoleID}},
 		EntityID:     user.UserID,
-		EntityType:   "user",
+		EntityType:   entityType,
 		EntityName:   "cx1clientgo_test",
 	}
 
-	err := cx1client.AddAccessAssignment(access)
+	err = cx1client.AddAccessAssignment(access)
 	if err != nil {
 		return fmt.Errorf("failed to assign access: %s", err)
 	}
