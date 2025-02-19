@@ -315,11 +315,13 @@ func (c *Cx1Client) InitializeClient() error {
 	c.version = &cxVersion
 
 	if c.version.CheckCxOne("3.12.7") >= 0 {
+		c.logger.Tracef("Version %v > 3.12.7: AUDIT_QUERY_TENANT = Tenant, AUDIT_QUERY_APPLICATION = Application", c.version.CxOne)
 		AUDIT_QUERY_TENANT = "Tenant"
 		AUDIT_QUERY_APPLICATION = "Application"
 	}
 
-	if c.version.CheckCxOne("3.31.0") >= 0 {
+	if c.version.CheckCxOne("3.30.0") >= 0 {
+		c.logger.Tracef("Version %v > 3.30.0: ScanSortCreatedDescending = -created_at", c.version.CxOne)
 		ScanSortCreatedDescending = "-created_at"
 	}
 
