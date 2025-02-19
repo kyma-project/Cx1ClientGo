@@ -494,14 +494,18 @@ func (c Cx1Client) groupRoleChange(g *Group) error {
 		}
 	}
 
-	err = c.DeleteRolesFromGroup(g, del_roles)
-	if err != nil {
-		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
+	if len(del_roles) > 0 {
+		err = c.DeleteRolesFromGroup(g, del_roles)
+		if err != nil {
+			return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
+		}
 	}
 
-	err = c.AddRolesToGroup(g, add_roles)
-	if err != nil {
-		return fmt.Errorf("failed to add roles to group %v: %s", g.String(), err)
+	if len(add_roles) > 0 {
+		err = c.AddRolesToGroup(g, add_roles)
+		if err != nil {
+			return fmt.Errorf("failed to add roles to group %v: %s", g.String(), err)
+		}
 	}
 
 	return nil
