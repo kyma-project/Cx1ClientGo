@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -46,28 +47,67 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 // the v2 report is the "improved scan report" which can be used the same as the existing RequestNewReportByID
 // returns the report ID which can be passed to GetReportStatusByID or ReportPollingByID
 // supports pdf, csv, and json format (not xml)
-func (c Cx1Client) RequestNewReportByIDv2(scanID string, engines []string, format string) (string, error) {
+func (c Cx1Client) RequestNewReportByIDv2(scanID string, scanners []string, format string) (string, error) {
+	c.depwarn("RequestNewReportByIDv2", "RequestNewReportByScanIDv2")
+	return c.RequestNewReportByScanIDv2(scanID, scanners, []string{}, []string{}, format)
+}
+
+func (c Cx1Client) RequestNewReportByScanIDv2(scanID string, scanners, emails, tags []string, format string) (string, error) {
+	return c.RequestNewReportByIDsv2(
+		"scan",
+		[]string{scanID},
+		[]string{"scan-information", "results-overview", "scan-results", "categories", "resolved-results", "vulnerability-details"},
+		scanners,
+		[]string{"critical", "high", "medium"},
+		[]string{"to-verify", "confirmed", "urgent"},
+		[]string{"new", "recurrent"},
+		emails,
+		tags,
+		format)
+}
+
+func (c Cx1Client) RequestNewReportByProjectIDv2(projectIDs, scanners, emails, tags []string, format string) (string, error) {
+	return c.RequestNewReportByIDsv2(
+		"project",
+		projectIDs,
+		[]string{"projects-overview", "total-vulnerabilities-overview", "vulnerabilities-insights"},
+		scanners,
+		[]string{"critical", "high", "medium"},
+		[]string{"to-verify", "confirmed", "urgent"},
+		[]string{"new", "recurrent"},
+		emails,
+		tags,
+		format)
+}
+
+// function used by RequestNewReportByIDv2
+func (c Cx1Client) RequestNewReportByIDsv2(entityType string, ids, sections, scanners, severities, states, statuses, emails, tags []string, format string) (string, error) {
 	jsonData := map[string]interface{}{
-		"reportName": "improved-scan-report",
+		"reportName": fmt.Sprintf("improved-%v-report", entityType),
+		"sections":   sections,
 		"entities": []map[string]interface{}{
 			{
-				"entity": "scan",
-				"ids":    []string{scanID},
-				"tags":   []string{},
+				"entity": entityType,
+				"ids":    ids,
+				"tags":   tags,
 			},
 		},
 		"filters": map[string][]string{
-			"scanners": engines,
+			"scanners":   scanners,
+			"severities": severities,
+			"states":     states,
+			"status":     statuses,
 		},
 		"reportType": "ui",
 		"fileFormat": format,
+		"emails":     emails,
 	}
 
 	jsonValue, _ := json.Marshal(jsonData)
 
 	data, err := c.sendRequest(http.MethodPost, "/reports/v2", bytes.NewReader(jsonValue), nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to trigger report v2 generation for scan %v: %s", scanID, err)
+		return "", fmt.Errorf("failed to trigger report v2 generation for %v(s) %v: %s", entityType, strings.Join(ids, ","), err)
 	} else {
 		c.logger.Infof("Generating report %v", string(data))
 	}
