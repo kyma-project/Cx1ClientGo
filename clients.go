@@ -261,14 +261,14 @@ func (c Cx1Client) GetServiceAccountByID(oidcId string) (User, error) {
 }
 
 func (c Cx1Client) GetTenantID() string {
-	if tenantID != "" {
-		return tenantID
+	if c.tenantID != "" {
+		return c.tenantID
 	}
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "", nil, nil)
 	if err != nil {
 		c.logger.Warnf("Failed to retrieve tenant ID: %s", err)
-		return tenantID
+		return c.tenantID
 	}
 
 	var realms struct {
@@ -280,19 +280,19 @@ func (c Cx1Client) GetTenantID() string {
 	if err != nil {
 		c.logger.Warnf("Failed to parse tenant ID: %s", err)
 		c.logger.Tracef("Response was: %v", string(response))
-		return tenantID
+		return c.tenantID
 	}
 
 	//for _, r := range realms {
 	if realms.Realm == c.tenant {
-		tenantID = realms.ID
+		c.tenantID = realms.ID
 	}
 	//}
-	if tenantID == "" {
+	if c.tenantID == "" {
 		c.logger.Warnf("Failed to retrieve tenant ID: no tenant found matching %v", c.tenant)
 	}
 
-	return tenantID
+	return c.tenantID
 }
 
 func (c Cx1Client) GetTenantName() string {
@@ -330,17 +330,17 @@ func (c Cx1Client) GetClientScopeByName(name string) (OIDCClientScope, error) {
 
 // convenience function
 func (c Cx1Client) GetASTAppID() string {
-	if astAppID == "" {
+	if c.astAppID == "" {
 		client, err := c.GetClientByName("ast-app")
 		if err != nil {
 			c.logger.Warnf("Error finding AST App ID: %s", err)
 			return ""
 		}
 
-		astAppID = client.ID
+		c.astAppID = client.ID
 	}
 
-	return astAppID
+	return c.astAppID
 }
 
 func (c Cx1Client) RegenerateClientSecret(client OIDCClient) (string, error) {
