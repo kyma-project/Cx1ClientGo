@@ -53,12 +53,16 @@ func (c Cx1Client) RequestNewReportByIDv2(scanID string, scanners []string, form
 }
 
 func (c Cx1Client) RequestNewReportByScanIDv2(scanID string, scanners, emails, tags []string, format string) (string, error) {
+	severities := []string{"high", "medium"}
+	if flag, _ := c.CheckFlag("CVSS_V3_ENABLED"); flag {
+		severities = append(severities, "critical")
+	}
 	return c.RequestNewReportByIDsv2(
 		"scan",
 		[]string{scanID},
 		[]string{"scan-information", "results-overview", "scan-results", "categories", "resolved-results", "vulnerability-details"},
 		scanners,
-		[]string{"critical", "high", "medium"},
+		severities,
 		[]string{"to-verify", "confirmed", "urgent"},
 		[]string{"new", "recurrent"},
 		emails,
@@ -67,12 +71,16 @@ func (c Cx1Client) RequestNewReportByScanIDv2(scanID string, scanners, emails, t
 }
 
 func (c Cx1Client) RequestNewReportByProjectIDv2(projectIDs, scanners, emails, tags []string, format string) (string, error) {
+	severities := []string{"high", "medium"}
+	if flag, _ := c.CheckFlag("CVSS_V3_ENABLED"); flag {
+		severities = append(severities, "critical")
+	}
 	return c.RequestNewReportByIDsv2(
 		"project",
 		projectIDs,
 		[]string{"projects-overview", "total-vulnerabilities-overview", "vulnerabilities-insights"},
 		scanners,
-		[]string{"critical", "high", "medium"},
+		severities,
 		[]string{"to-verify", "confirmed", "urgent"},
 		[]string{"new", "recurrent"},
 		emails,
