@@ -92,7 +92,12 @@ func (c Cx1Client) GetRoleComposites(role *Role) ([]Role, error) {
 	}
 
 	err = json.Unmarshal(response, &roles)
-	return roles, err
+	if err != nil {
+		return roles, err
+	}
+
+	role.SubRoles = roles
+	return roles, nil
 }
 
 func (c Cx1Client) AddRoleComposites(role *Role, roles *[]Role) error {
