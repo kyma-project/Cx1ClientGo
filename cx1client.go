@@ -21,12 +21,12 @@ import (
 )
 
 var cxOrigin = "Cx1-Client-GoLang"
-var astAppID string
-var tenantID string
-var tenantOwner *TenantOwner
 
+//var astAppID string
+//var tenantID string
+//var tenantOwner *TenantOwner
 // var cxVersion VersionInfo
-var cx1UserAgent string = "Cx1ClientGo"
+//var cx1UserAgent string = "Cx1ClientGo"
 
 // Main entry for users of this client when using OAuth Client ID & Client Secret:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -167,7 +167,7 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 
 	//request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
 	if request.Header.Get("User-Agent") == "" {
-		request.Header.Set("User-Agent", cx1UserAgent)
+		request.Header.Set("User-Agent", c.cx1UserAgent)
 	}
 
 	if request.Header.Get("Content-Type") == "" {
@@ -305,6 +305,7 @@ func (c Cx1Client) String() string {
 }
 
 func (c *Cx1Client) InitializeClient() error {
+	c.SetUserAgent("Cx1ClientGo - GoLang CheckmarxOne client (https://github.com/cxpsemea/cx1clientgo)")
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
 	_, _ = c.GetTenantOwner()
@@ -346,7 +347,7 @@ func (c *Cx1Client) RefreshFlags() error {
 		// Payload interface{} `json:"payload"` // ignoring the payload for now
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/flags?filter=%v", tenantID), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/flags?filter=%v", c.tenantID), nil, nil)
 
 	if err != nil {
 		return err
@@ -406,9 +407,9 @@ func (c Cx1Client) CheckFlag(flag string) (bool, error) {
 	return setting, nil
 }
 
-func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
-	if tenantOwner != nil {
-		return *tenantOwner, nil
+func (c *Cx1Client) GetTenantOwner() (TenantOwner, error) {
+	if c.tenantOwner != nil {
+		return *c.tenantOwner, nil
 	}
 
 	var owner TenantOwner
@@ -420,7 +421,7 @@ func (c Cx1Client) GetTenantOwner() (TenantOwner, error) {
 
 	err = json.Unmarshal(response, &owner)
 	if err == nil {
-		tenantOwner = &owner
+		c.tenantOwner = &owner
 	}
 	return owner, err
 }
@@ -441,15 +442,15 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 }
 
 func (c Cx1Client) GetUserAgent() string {
-	return cx1UserAgent
+	return c.cx1UserAgent
 }
-func (c Cx1Client) SetUserAgent(ua string) {
-	cx1UserAgent = ua
+func (c *Cx1Client) SetUserAgent(ua string) {
+	c.cx1UserAgent = ua
 }
 
 // this function set the U-A to be the old one that was previously default in Cx1ClientGo
-func (c Cx1Client) SetUserAgentFirefox() {
-	cx1UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0"
+func (c *Cx1Client) SetUserAgentFirefox() {
+	c.cx1UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0"
 }
 
 func (v VersionInfo) String() string {

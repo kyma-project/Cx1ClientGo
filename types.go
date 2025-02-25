@@ -11,16 +11,20 @@ import (
 type Cx1Client struct {
 	httpClient *http.Client
 	//authToken  string
-	baseUrl    string
-	iamUrl     string
-	tenant     string
-	logger     *logrus.Logger
-	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
-	consts     ClientVars
-	pagination PaginationSettings
-	claims     Cx1Claims
-	user       *User
-	version    *VersionInfo
+	baseUrl      string
+	iamUrl       string
+	tenant       string
+	logger       *logrus.Logger
+	flags        map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts       ClientVars
+	pagination   PaginationSettings
+	claims       Cx1Claims
+	user         *User
+	version      *VersionInfo
+	astAppID     string
+	tenantID     string
+	cx1UserAgent string
+	tenantOwner  *TenantOwner
 }
 
 type Cx1Claims struct {
