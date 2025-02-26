@@ -305,7 +305,7 @@ func (c Cx1Client) String() string {
 }
 
 func (c *Cx1Client) InitializeClient() error {
-	c.SetUserAgent("Cx1ClientGo - GoLang CheckmarxOne client (https://github.com/cxpsemea/cx1clientgo)")
+	c.SetUserAgent("Cx1ClientGo")
 	_ = c.GetTenantID()
 	_ = c.GetASTAppID()
 	_, _ = c.GetTenantOwner()
