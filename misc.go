@@ -105,7 +105,7 @@ func (v VersionInfo) CheckCxOne(version string) (int, error) {
 
 	return v.vCxOne.Compare(test), nil
 }
-func (v VersionInfo) CheckKics(version string) (int, error) {
+func (v VersionInfo) CheckKICS(version string) (int, error) {
 	test, err := versionStringToTriad(version)
 	if err != nil {
 		return 0, err
