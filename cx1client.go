@@ -320,7 +320,7 @@ func (c *Cx1Client) InitializeClient() error {
 		AUDIT_QUERY_APPLICATION = "Application"
 	}
 
-	if check, _ := c.version.CheckCxOne("3.30.0"); check >= 0 {
+	if check, _ := c.version.CheckCxOne("3.30.45"); check >= 0 {
 		c.logger.Tracef("Version %v > 3.30.0: ScanSortCreatedDescending = -created_at", c.version.CxOne)
 		ScanSortCreatedDescending = "-created_at"
 	}
