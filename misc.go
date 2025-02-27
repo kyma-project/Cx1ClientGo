@@ -1,5 +1,11 @@
 package Cx1ClientGo
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // miscellaneous functions (ClientVars & Pagination)
 
 func (c Cx1Client) GetClientVars() ClientVars {
@@ -76,4 +82,86 @@ func (f *BaseFilter) Bump() {
 
 func (f *BaseIAMFilter) Bump() {
 	f.First += f.Max
+}
+
+func (v VersionInfo) String() string {
+	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
+}
+
+func (v *VersionInfo) Parse() (error, error, error) {
+	var errCx1, errKics, errSast error
+	v.vCxOne, errCx1 = versionStringToTriad(v.CxOne)
+	v.vSAST, errSast = versionStringToTriad(v.SAST)
+	v.vKICS, errKics = versionStringToTriad(v.KICS)
+	return errCx1, errKics, errSast
+}
+
+// version check returns -1 (current cx1 version lower), 0 (equal), 1 (current cx1 version greater)
+func (v VersionInfo) CheckCxOne(version string) (int, error) {
+	test, err := versionStringToTriad(version)
+	if err != nil {
+		return 0, err
+	}
+
+	return v.vCxOne.Compare(test), nil
+}
+func (v VersionInfo) CheckKICS(version string) (int, error) {
+	test, err := versionStringToTriad(version)
+	if err != nil {
+		return 0, err
+	}
+
+	return v.vKICS.Compare(test), nil
+}
+func (v VersionInfo) CheckSAST(version string) (int, error) {
+	test, err := versionStringToTriad(version)
+	if err != nil {
+		return 0, err
+	}
+
+	return v.vSAST.Compare(test), nil
+}
+
+func versionStringToTriad(version string) (VersionTriad, error) {
+	var v VersionTriad
+	if version == "" {
+		return v, fmt.Errorf("empty version string")
+	}
+	str := strings.Split(version, ".")
+	if len(str) != 3 {
+		return v, fmt.Errorf("version string is not in Major.Minor.Patch format")
+	}
+
+	ints := make([]uint64, len(str))
+	for id, val := range str {
+		ints[id], _ = strconv.ParseUint(val, 10, 64)
+	}
+
+	v.Major = uint(ints[0])
+	v.Minor = uint(ints[1])
+	v.Patch = uint(ints[2])
+
+	return v, nil
+}
+
+func (v VersionTriad) Compare(test VersionTriad) int {
+	if test.Major < v.Major {
+		return 1
+	} else if test.Major > v.Major {
+		return -1
+	} else {
+		if test.Minor < v.Minor {
+			return 1
+		} else if test.Minor > v.Minor {
+			return -1
+		} else {
+			if test.Patch < v.Patch {
+				return 1
+			} else if test.Patch > v.Patch {
+				return -1
+			} else {
+				return 0
+			}
+		}
+	}
 }

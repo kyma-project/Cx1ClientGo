@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 
@@ -315,13 +314,13 @@ func (c *Cx1Client) InitializeClient() error {
 	}
 	c.version = &cxVersion
 
-	if c.version.CheckCxOne("3.12.7") >= 0 {
+	if check, _ := c.version.CheckCxOne("3.12.7"); check >= 0 {
 		c.logger.Tracef("Version %v > 3.12.7: AUDIT_QUERY_TENANT = Tenant, AUDIT_QUERY_APPLICATION = Application", c.version.CxOne)
 		AUDIT_QUERY_TENANT = "Tenant"
 		AUDIT_QUERY_APPLICATION = "Application"
 	}
 
-	if c.version.CheckCxOne("3.30.0") >= 0 {
+	if check, _ := c.version.CheckCxOne("3.30.0"); check >= 0 {
 		c.logger.Tracef("Version %v > 3.30.0: ScanSortCreatedDescending = -created_at", c.version.CxOne)
 		ScanSortCreatedDescending = "-created_at"
 	}
@@ -438,7 +437,12 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 	}
 
 	err = json.Unmarshal(response, &v)
-	return v, err
+	if err != nil {
+		return v, err
+	}
+
+	v.Parse()
+	return v, nil
 }
 
 func (c Cx1Client) GetUserAgent() string {
@@ -451,46 +455,4 @@ func (c *Cx1Client) SetUserAgent(ua string) {
 // this function set the U-A to be the old one that was previously default in Cx1ClientGo
 func (c *Cx1Client) SetUserAgentFirefox() {
 	c.cx1UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0"
-}
-
-func (v VersionInfo) String() string {
-	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
-}
-
-// version check returns -1 (current cx1 version lower), 0 (equal), 1 (current cx1 version greater)
-func (v VersionInfo) CheckCxOne(version string) int {
-	check := versionStringToInts(version)
-	cx1 := versionStringToInts(v.CxOne)
-
-	if check[0] < cx1[0] {
-		return 1
-	} else if check[0] > cx1[0] {
-		return -1
-	} else {
-		if check[1] < cx1[1] {
-			return 1
-		} else if check[1] > cx1[1] {
-			return -1
-		} else {
-			if check[2] < cx1[2] {
-				return 1
-			} else if check[2] > cx1[2] {
-				return -1
-			} else {
-				return 0
-			}
-		}
-	}
-}
-
-func versionStringToInts(version string) []int64 {
-	if version == "" {
-		return []int64{0, 0, 0}
-	}
-	str := strings.Split(version, ".")
-	ints := make([]int64, len(str))
-	for id, val := range str {
-		ints[id], _ = strconv.ParseInt(val, 10, 64)
-	}
-	return ints
 }
