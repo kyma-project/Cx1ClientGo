@@ -72,7 +72,7 @@ func (c Cx1Client) CreateProjectInApplicationWOPolling(projectname string, cx1_g
 
 	var project Project
 	var response []byte
-	if c.version.CheckCxOne("3.16.0") >= 0 {
+	if check, _ := c.version.CheckCxOne("3.16.0"); check >= 0 {
 		data["applicationIds"] = []string{applicationId}
 		jsonBody, err = json.Marshal(data)
 		if err != nil {

@@ -134,7 +134,7 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Tracef("Got %d groups", len(groups))
 
 	for i := range groups {
-		if c.version.CheckCxOne("3.20.0") >= 0 {
+		if check, _ := c.version.CheckCxOne("3.20.0"); check >= 0 {
 			setGroupFilled(&groups[i])
 		}
 
@@ -262,7 +262,7 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 		return group, err
 	}
 
-	if c.version.CheckCxOne("3.20.0") == -1 { // old version API included the subgroups&roles in this call
+	if check, _ := c.version.CheckCxOne("3.20.0"); check == -1 { // old version API included the subgroups&roles in this call
 		group.Filled = true
 	} else { // new version includes the roles but not subgroups
 		_, err = c.GetGroupChildren(&group)
@@ -380,7 +380,7 @@ func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 
 func (c Cx1Client) UpdateGroup(g *Group) error {
 	if !g.Filled {
-		if c.version.CheckCxOne("3.20.0") >= 0 {
+		if check, _ := c.version.CheckCxOne("3.20.0"); check >= 0 {
 			return fmt.Errorf("group %v data is not filled (use GetGroupChildren) - may be missing expected roles & subgroups, update aborted", g.String())
 		} else {
 			return fmt.Errorf("group %v data is not filled (use GetGroupByID) - may be missing expected roles & subgroups, update aborted", g.String())
