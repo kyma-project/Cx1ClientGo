@@ -1047,9 +1047,18 @@ type UserWithAttributes struct {
 }
 
 type VersionInfo struct {
-	CxOne string
-	KICS  string
-	SAST  string
+	CxOne  string
+	KICS   string
+	SAST   string
+	vCxOne VersionTriad `json:"-"`
+	vKICS  VersionTriad `json:"-"`
+	vSAST  VersionTriad `json:"-"`
+}
+
+type VersionTriad struct {
+	Major uint
+	Minor uint
+	Patch uint
 }
 
 type WhoAmI struct {
