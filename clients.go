@@ -333,7 +333,7 @@ func (c *Cx1Client) GetCurrentClient() (OIDCClient, error) {
 		return *c.client, nil
 	}
 	if c.IsUser {
-		return OIDCClient{}, fmt.Errorf("Currently connected as user %v (%v) and not an OIDC client", c.claims.Username, c.claims.Email)
+		return OIDCClient{}, fmt.Errorf("currently connected as user %v (%v) and not an OIDC client", c.claims.Username, c.claims.Email)
 	}
 	var client OIDCClient
 
