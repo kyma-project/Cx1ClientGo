@@ -328,6 +328,21 @@ func (c Cx1Client) GetClientScopeByName(name string) (OIDCClientScope, error) {
 	return OIDCClientScope{}, fmt.Errorf("client-scope %v not found", name)
 }
 
+func (c *Cx1Client) GetCurrentClient() (OIDCClient, error) {
+	if c.client != nil {
+		return *c.client, nil
+	}
+	if c.IsUser {
+		return OIDCClient{}, fmt.Errorf("currently connected as user %v (%v) and not an OIDC client", c.claims.Username, c.claims.Email)
+	}
+	var client OIDCClient
+
+	client, err := c.GetClientByName(c.claims.ClientID)
+	c.client = &client
+
+	return *c.client, err
+}
+
 // convenience function
 func (c Cx1Client) GetASTAppID() string {
 	if c.astAppID == "" {
