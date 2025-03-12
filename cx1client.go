@@ -68,8 +68,15 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 
 	cli.InitializeClient()
 
-	user, _ := cli.GetServiceAccountByID(client_id)
-	cli.user = &user
+	oidcclient, err := cli.GetClientByName(client_id)
+	if err != nil {
+		logger.Warningf("Failed to retrieve information for OIDC Client %v", client_id)
+	} else {
+		user, _ := cli.GetServiceAccountByID(oidcclient.ID)
+		cli.user = &user
+	}
+
+	cli.IsUser = false
 
 	return &cli, nil
 }
@@ -123,6 +130,7 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	cli.parseJWT(token.AccessToken)
 
 	_, _ = cli.GetCurrentUser()
+	cli.IsUser = true
 
 	return &cli, nil
 }
