@@ -20,6 +20,8 @@ type Cx1Client struct {
 	pagination   PaginationSettings
 	claims       Cx1Claims
 	user         *User
+	client       *OIDCClient
+	IsUser       bool
 	version      *VersionInfo
 	astAppID     string
 	tenantID     string
@@ -32,6 +34,12 @@ type Cx1Claims struct {
 	Cx1License    ASTLicense `json:"ast-license"`
 	IsServiceUser string     `json:"is-service-user"`
 	UserID        string     `json:"sub"`
+	Username      string     `json:"name"`
+	ClientID      string     `json:"clientId"`
+	ASTBaseURL    string     `json:"ast-base-url"`
+	TenantID      string     `json:"tenant_id"`
+	TenantName    string     `json:"tenant_name"`
+	Email         string     `json:"email"`
 }
 type ASTLicense struct {
 	ID          int
