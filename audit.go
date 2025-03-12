@@ -168,6 +168,11 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 }
 
 func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
+	if auditSession == nil {
+		c.logger.Error("Attempt to run AuditDeleteSession with a nil session")
+		return nil
+	}
+
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
