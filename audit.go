@@ -947,12 +947,14 @@ func (s AuditSession) HasLanguage(language string) bool {
 }
 
 func (s AuditSession) String() string {
+	age := time.Since(s.CreatedAt)
+	since_refresh := time.Since(s.LastHearbeat)
 	if s.ProjectID == "" && s.ApplicationID == "" {
-		return fmt.Sprintf("Audit Session %v (Tenant - %v)", ShortenGUID(s.ID), strings.Join(s.Languages, ","))
+		return fmt.Sprintf("Audit Session %v (Tenant - %v) [%v/%v]", ShortenGUID(s.ID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
 	} else if s.ApplicationID == "" {
-		return fmt.Sprintf("Audit Session %v (Project %v - %v)", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(s.Languages, ","))
+		return fmt.Sprintf("Audit Session %v (Project %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
 	} else {
-		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v)", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(s.Languages, ","))
+		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
 	}
 }
 
