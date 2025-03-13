@@ -949,6 +949,8 @@ func (s AuditSession) HasLanguage(language string) bool {
 func (s AuditSession) String() string {
 	if s.ProjectID == "" && s.ApplicationID == "" {
 		return fmt.Sprintf("Audit Session %v (Tenant - %v)", ShortenGUID(s.ID), strings.Join(s.Languages, ","))
+	} else if s.ApplicationID == "" {
+		return fmt.Sprintf("Audit Session %v (Project %v - %v)", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(s.Languages, ","))
 	} else {
 		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v)", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(s.Languages, ","))
 	}
