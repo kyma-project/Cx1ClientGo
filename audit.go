@@ -253,7 +253,7 @@ func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
 	if err != nil {
 		return err
 	}
-	auditSession.LastHearbeat = time.Now()
+	auditSession.LastHeartbeat = time.Now()
 	return nil
 }
 
@@ -948,7 +948,7 @@ func (s AuditSession) HasLanguage(language string) bool {
 
 func (s AuditSession) String() string {
 	age := time.Since(s.CreatedAt)
-	since_refresh := time.Since(s.LastHearbeat)
+	since_refresh := time.Since(s.LastHeartbeat)
 	if s.ProjectID == "" && s.ApplicationID == "" {
 		return fmt.Sprintf("Audit Session %v (Tenant - %v) [%v/%v]", ShortenGUID(s.ID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
 	} else if s.ApplicationID == "" {
