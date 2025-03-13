@@ -161,6 +161,7 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 
 	session.ProjectID = projectId
 	session.ApplicationID = appId
+	session.CreatedAt = time.Now()
 
 	c.logger.Debugf("Created audit session %v under project %v, app %v", session.ID, session.ProjectID, session.ApplicationID)
 
@@ -252,6 +253,7 @@ func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
 	if err != nil {
 		return err
 	}
+	auditSession.LastHearbeat = time.Now()
 	return nil
 }
 

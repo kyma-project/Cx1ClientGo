@@ -210,15 +210,17 @@ type AuditSession struct {
 			Application AuditPermissions `json:"application"`
 		} `json:"permissions"`
 	} `json:"data"`
-	ProjectName            string   `json:"projectName"`
-	QueryBuilder           bool     `json:"queryBuilder"`
-	ApplicationAssociation bool     `json:"applicationAssociation"`
-	Status                 string   `json:"status"`
-	Value                  []string `json:"value"`
-	ProjectID              string   `json:"-"`
-	ApplicationID          string   `json:"-"`
-	ScanID                 string   `json:"-"`
-	Languages              []string `json:"-"`
+	ProjectName            string    `json:"projectName"`
+	QueryBuilder           bool      `json:"queryBuilder"`
+	ApplicationAssociation bool      `json:"applicationAssociation"`
+	Status                 string    `json:"status"`
+	Value                  []string  `json:"value"`
+	ProjectID              string    `json:"-"`
+	ApplicationID          string    `json:"-"`
+	ScanID                 string    `json:"-"`
+	Languages              []string  `json:"-"`
+	CreatedAt              time.Time `json:"-"`
+	LastHearbeat           time.Time `json:"-"`
 }
 
 type AuditSessionFilters map[string]AuditSessionLanguageFilters
