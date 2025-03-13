@@ -220,7 +220,7 @@ type AuditSession struct {
 	ScanID                 string    `json:"-"`
 	Languages              []string  `json:"-"`
 	CreatedAt              time.Time `json:"-"`
-	LastHearbeat           time.Time `json:"-"`
+	LastHeartbeat          time.Time `json:"-"`
 }
 
 type AuditSessionFilters map[string]AuditSessionLanguageFilters
