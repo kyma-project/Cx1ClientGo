@@ -91,29 +91,40 @@ func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
 }
 
 func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, maxSeconds int) (string, error) {
+	fail_counter := 5 // allow up to 5 failures while waiting for the import ID to be valid
 	pollingCounter := 0
 	for {
 		status, err := c.GetImportByID(importID)
-		if err != nil {
-			return "", err
-		}
+		if err == nil {
+			switch status.Status {
+			case "failed":
+				return status.Status, fmt.Errorf("import failed: %s", status.Logs)
+			case "blank":
+				return status.Status, fmt.Errorf("import finished but nothing was imported: %s", status.Logs)
+			case "completed":
+				return status.Status, nil
+			case "partial":
+				return status.Status, nil
+			}
+			if maxSeconds != 0 && pollingCounter >= maxSeconds {
+				return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
+			}
 
-		switch status.Status {
-		case "failed":
-			return status.Status, fmt.Errorf("import failed: %s", status.Logs)
-		case "blank":
-			return status.Status, fmt.Errorf("import finished but nothing was imported: %s", status.Logs)
-		case "completed":
-			return status.Status, nil
-		case "partial":
-			return status.Status, nil
+			c.logger.Infof("Polling every %d seconds, up to %d", delaySeconds, maxSeconds)
+			time.Sleep(time.Duration(delaySeconds) * time.Second)
+			pollingCounter += delaySeconds
+		} else {
+			if err.Error()[:8] == "HTTP 404" {
+				fail_counter--
+				if fail_counter == 0 {
+					return "", fmt.Errorf("import ID %v does not exist", importID)
+				}
+				c.logger.Warnf("Import ID %v doesn't exist (yet) - waiting to retry %d more times", importID, fail_counter)
+				time.Sleep(time.Duration(delaySeconds) * time.Second)
+			} else {
+				return "", err
+			}
 		}
-		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
-		}
-		c.logger.Infof("Polling every %d seconds, up to %d", delaySeconds, maxSeconds)
-		time.Sleep(time.Duration(delaySeconds) * time.Second)
-		pollingCounter += delaySeconds
 	}
 }
 
