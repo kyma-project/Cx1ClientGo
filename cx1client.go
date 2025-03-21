@@ -66,7 +66,7 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		cli.parseJWT(token.AccessToken)
 	}
 
-	cli.InitializeClient()
+	cli.InitializeClient(false)
 
 	oidcclient, err := cli.GetClientByName(client_id)
 	if err != nil {
@@ -126,10 +126,67 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 		tenant:     tenant,
 		logger:     logger}
 
-	cli.InitializeClient()
+	cli.InitializeClient(false)
 	cli.parseJWT(token.AccessToken)
 
 	_, _ = cli.GetCurrentUser()
+	cli.IsUser = true
+
+	return &cli, nil
+}
+
+func ResumeAPIKeyClient(client *http.Client, base_url, iam_url, tenant, api_key, last_token string, logger *logrus.Logger) (*Cx1Client, error) {
+	if base_url == "" || iam_url == "" || tenant == "" || api_key == "" || logger == nil {
+		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
+	}
+
+	if l := len(base_url); base_url[l-1:] == "/" {
+		base_url = base_url[:l-1]
+	}
+	if l := len(iam_url); iam_url[l-1:] == "/" {
+		iam_url = iam_url[:l-1]
+	}
+
+	ctx := context.Background()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
+
+	conf := &oauth2.Config{
+		ClientID: "ast-app",
+		Endpoint: oauth2.Endpoint{
+			TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant),
+		},
+	}
+
+	expiry, err := parseJWTExpiry(last_token)
+	if err != nil {
+		logger.Warningf("Failed parsing last token: %s", err)
+	}
+
+	refreshToken := &oauth2.Token{
+		AccessToken:  last_token,
+		RefreshToken: api_key,
+		Expiry:       expiry.UTC(),
+	}
+
+	token, err := conf.TokenSource(ctx, refreshToken).Token()
+	if err != nil {
+		err = fmt.Errorf("failed getting a token: %s", err)
+		logger.Error(err.Error())
+		return nil, err
+	}
+
+	oauthclient := conf.Client(ctx, token)
+
+	cli := Cx1Client{
+		httpClient: oauthclient,
+		baseUrl:    base_url,
+		iamUrl:     iam_url,
+		tenant:     tenant,
+		logger:     logger}
+
+	cli.InitializeClient(true)
+	cli.parseJWT(token.AccessToken)
 	cli.IsUser = true
 
 	return &cli, nil
@@ -311,11 +368,17 @@ func (c Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
 
-func (c *Cx1Client) InitializeClient() error {
+func (c *Cx1Client) InitializeClient(quick bool) error {
 	c.SetUserAgent("Cx1ClientGo")
-	_ = c.GetTenantID()
-	_ = c.GetASTAppID()
-	_, _ = c.GetTenantOwner()
+	if !quick {
+		_ = c.GetTenantID()
+		_ = c.GetASTAppID()
+		_, _ = c.GetTenantOwner()
+
+		if err := c.RefreshFlags(); err != nil {
+			c.logger.Warnf("Failed to get tenant flags: %s", err)
+		}
+	}
 	cxVersion, err := c.GetVersion()
 	if err != nil {
 		return fmt.Errorf("failed to retrieve cx1 version: %s", err)
@@ -331,11 +394,6 @@ func (c *Cx1Client) InitializeClient() error {
 	if check, _ := c.version.CheckCxOne("3.30.45"); check >= 0 {
 		c.logger.Tracef("Version %v > 3.30.0: ScanSortCreatedDescending = -created_at", c.version.CxOne)
 		ScanSortCreatedDescending = "-created_at"
-	}
-
-	err = c.RefreshFlags()
-	if err != nil {
-		c.logger.Warnf("Failed to get tenant flags: %s", err)
 	}
 
 	c.InitializeClientVars()
@@ -379,6 +437,34 @@ func (c *Cx1Client) parseJWT(jwtToken string) error {
 		return []byte(nil), nil
 	})
 	return err
+}
+
+func parseJWTExpiry(last_token string) (time.Time, error) {
+	// Parse the JWT token to get the claims
+	parser := new(jwt.Parser)
+	tokenClaims := jwt.MapClaims{}
+	_, _, err := parser.ParseUnverified(last_token, &tokenClaims)
+	if err != nil {
+		return time.Now(), fmt.Errorf("failed to parse JWT token: %w", err)
+	}
+
+	// Extract the expiration time from the claims
+	if exp, ok := tokenClaims["exp"]; ok {
+		switch exp := exp.(type) {
+		case float64:
+			return time.Unix(int64(exp), 0), nil
+		case json.Number:
+			expInt, err := exp.Int64()
+			if err != nil {
+				return time.Now(), fmt.Errorf("failed to parse exp claim as int64: %v", err)
+			}
+			return time.Unix(expInt, 0), nil
+		default:
+			return time.Now(), fmt.Errorf("unexpected type for exp claim: %T", exp)
+		}
+	} else {
+		return time.Now(), fmt.Errorf("exp claim not found in JWT token")
+	}
 }
 
 func (c Cx1Client) GetFlags() map[string]bool {
@@ -463,4 +549,27 @@ func (c *Cx1Client) SetUserAgent(ua string) {
 // this function set the U-A to be the old one that was previously default in Cx1ClientGo
 func (c *Cx1Client) SetUserAgentFirefox() {
 	c.cx1UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0"
+}
+
+func (c *Cx1Client) GetAccessToken() (string, error) {
+	if c.httpClient == nil {
+		return "", fmt.Errorf("http client is not initialized")
+	}
+
+	// Check if the Transport is an oauth2.Transport
+	transport, ok := c.httpClient.Transport.(*oauth2.Transport)
+	if !ok {
+		return "", fmt.Errorf("http client's transport is not an oauth2.Transport or *Transport")
+	}
+
+	// Get the TokenSource from the Transport
+	tokenSource := transport.Source
+
+	// Get the current token from the TokenSource
+	token, err := tokenSource.Token()
+	if err != nil {
+		return "", fmt.Errorf("failed to get token from TokenSource: %w", err)
+	}
+
+	return token.AccessToken, nil
 }
