@@ -33,6 +33,7 @@ type Cx1Claims struct {
 	jwt.RegisteredClaims
 	Cx1License    ASTLicense `json:"ast-license"`
 	IsServiceUser string     `json:"is-service-user"`
+	ISS           string     `json:"iss"`
 	UserID        string     `json:"sub"`
 	Username      string     `json:"name"`
 	ClientID      string     `json:"clientId"`
@@ -40,6 +41,12 @@ type Cx1Claims struct {
 	TenantID      string     `json:"tenant_id"`
 	TenantName    string     `json:"tenant_name"`
 	Email         string     `json:"email"`
+	Expiry        int64      `json:"exp"`
+	AZP           string     `json:"azp"`
+
+	// the following are generated during parsing
+	IAMURL     string    `json:"-"`
+	ExpiryTime time.Time `json:"-"`
 }
 type ASTLicense struct {
 	ID          int
