@@ -59,6 +59,18 @@ func (c Cx1Client) GetIAMRoleByName(name string) (Role, error) {
 	return role, err
 }
 
+func (c Cx1Client) GetIAMRolesByName(name string) ([]Role, error) {
+	c.logger.Debugf("Getting KeyCloak Roles with name matching %v", name)
+	var roles []Role
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles/?search=%v&briefRepresentation=false", url.QueryEscape(name)), nil, nil)
+	if err != nil {
+		return roles, err
+	}
+
+	err = json.Unmarshal(response, &roles)
+	return roles, err
+}
+
 func (c Cx1Client) GetRolesByClientID(clientId string) ([]Role, error) {
 	c.logger.Debugf("Getting roles for client %v", clientId)
 	var roles []Role
@@ -84,6 +96,19 @@ func (c Cx1Client) GetRoleByClientIDAndName(clientId string, name string) (Role,
 
 	err = json.Unmarshal(response, &role)
 	return role, err
+}
+
+func (c Cx1Client) GetRolesByClientIDAndName(clientId string, name string) ([]Role, error) {
+	c.logger.Debugf("Getting KeyCloak Roles for client %v with name matching %v", clientId, name)
+	var roles []Role
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v/roles?search=%v&briefRepresentation=false", clientId, url.PathEscape(name)), nil, nil)
+	if err != nil {
+		return roles, err
+	}
+
+	err = json.Unmarshal(response, &roles)
+	return roles, err
 }
 
 // returns all sub-roles assigned to a specific composite role, including nested composites
@@ -189,7 +214,7 @@ func (c Cx1Client) CreateAppRole(roleName, createdBy string) (Role, error) {
 		"attributes": map[string]interface{}{
 			"category":   []string{"Composite role"},
 			"type":       []string{"Role"},
-			"creator":    []string{fmt.Sprintf("SAST2CX1 by %v", createdBy)},
+			"creator":    []string{fmt.Sprintf("%v", createdBy)},
 			"lastUpdate": []int64{time.Now().UnixMilli()},
 		},
 	}
@@ -234,6 +259,11 @@ func (c Cx1Client) GetAppRoleByName(name string) (Role, error) {
 	return c.GetRoleByClientIDAndName(c.GetASTAppID(), name)
 }
 
+func (c Cx1Client) GetAppRolesByName(name string) ([]Role, error) {
+	c.logger.Debugf("Getting roles matching %v in ast-app client", name)
+	return c.GetRolesByClientIDAndName(c.GetASTAppID(), name)
+}
+
 // convenience function to get both KeyCloak (system) roles plus the AST-APP-specific roles
 // roles are returned without sub-roles, use GetRoleComposites(&role) to fill
 func (c Cx1Client) GetRoles() ([]Role, error) {
@@ -265,6 +295,25 @@ func (c Cx1Client) GetRoleByName(name string) (Role, error) {
 	}
 
 	return Role{}, fmt.Errorf("Role %v not found", name)
+}
+
+// roles are returned without sub-roles, use GetRoleComposites(&role) to fill
+func (c Cx1Client) GetRolesByName(name string) ([]Role, error) {
+	c.logger.Debugf("Getting any roles matching %v", name)
+	var all_roles []Role
+	roles, err := c.GetAppRolesByName(name)
+	if err != nil {
+		return all_roles, err
+	}
+	all_roles = append(all_roles, roles...)
+
+	roles, err = c.GetIAMRolesByName(name)
+	if err != nil {
+		return all_roles, err
+	}
+	all_roles = append(all_roles, roles...)
+
+	return all_roles, nil
 }
 
 func (c Cx1Client) RoleLink(r *Role) string {

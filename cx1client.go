@@ -486,3 +486,7 @@ func (c *Cx1Client) GetAccessToken() (string, error) {
 
 	return token.AccessToken, nil
 }
+
+func (c *Cx1Client) GetCurrentUsername() string {
+	return c.claims.Username
+}
