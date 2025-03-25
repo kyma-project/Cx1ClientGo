@@ -16,7 +16,7 @@ func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 	var json_clients []map[string]interface{}
 	var clients []OIDCClient
 
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true", nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true&first=0&max=99999999", nil, nil)
 	if err != nil {
 		return clients, err
 	}
@@ -54,6 +54,32 @@ func (c Cx1Client) GetClientByID(id string) (OIDCClient, error) {
 	}
 
 	return clientFromMap(json_client)
+}
+
+func (c Cx1Client) GetClientsByName(clientName string) ([]OIDCClient, error) {
+	c.logger.Debugf("Getting OIDC clients matching name %v", clientName)
+	var clients []OIDCClient
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients?clientId=%v&search=true&first=0&max=99999999", clientName), nil, nil)
+	if err != nil {
+		return clients, err
+	}
+
+	var json_clients []map[string]interface{}
+	err = json.Unmarshal(response, &json_clients)
+	if err != nil {
+		return clients, err
+	}
+
+	clients = make([]OIDCClient, len(json_clients))
+	for id, client := range json_clients {
+		clients[id], err = clientFromMap(client)
+		if err != nil {
+			return clients, err
+		}
+	}
+
+	return clients, nil
 }
 
 func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
@@ -147,34 +173,37 @@ func (c Cx1Client) CreateClient(name string, notificationEmails []string, secret
 
 func clientFromMap(data map[string]interface{}) (OIDCClient, error) {
 	var client OIDCClient
+	err := client.ClientFromMap(data)
+	return client, err
+}
 
+func (c *OIDCClient) ClientFromMap(data map[string]interface{}) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return client, fmt.Errorf("failed to marshal unmarshaled json: %s", err)
+		return fmt.Errorf("failed to marshal unmarshaled json: %s", err)
 	}
 
-	err = json.Unmarshal(jsonData, &client)
+	err = json.Unmarshal(jsonData, c)
 	if err != nil {
-		return client, fmt.Errorf("failed to re-unmarshal json: %s", err)
+		return fmt.Errorf("failed to re-unmarshal json: %s", err)
 	}
 
-	client.OIDCClientRaw = data
-	if client.OIDCClientRaw["attributes"] != nil {
-		if client.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"] != nil {
-			timestamp := client.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"].(string)
-			client.ClientSecretExpiry, _ = strconv.ParseUint(timestamp, 10, 64)
+	c.OIDCClientRaw = data
+	if c.OIDCClientRaw["attributes"] != nil {
+		if c.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"] != nil {
+			timestamp := c.OIDCClientRaw["attributes"].(map[string]interface{})["client.secret.expiration.time"].(string)
+			c.ClientSecretExpiry, _ = strconv.ParseUint(timestamp, 10, 64)
 		}
-		if client.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"] != nil {
-			expiryDaysStr := client.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"].(string)
+		if c.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"] != nil {
+			expiryDaysStr := c.OIDCClientRaw["attributes"].(map[string]interface{})["secretExpiration"].(string)
 			expiryDays, _ := strconv.ParseUint(expiryDaysStr, 10, 64)
-			client.SecretExpirationDays = expiryDays
+			c.SecretExpirationDays = expiryDays
 		}
-		if client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"] != nil {
-			client.Creator = client.OIDCClientRaw["attributes"].(map[string]interface{})["creator"].(string)
+		if c.OIDCClientRaw["attributes"].(map[string]interface{})["creator"] != nil {
+			c.Creator = c.OIDCClientRaw["attributes"].(map[string]interface{})["creator"].(string)
 		}
 	}
-
-	return client, nil
+	return nil
 }
 
 func (c *OIDCClient) clientToMap() {

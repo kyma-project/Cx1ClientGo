@@ -595,6 +595,10 @@ type ScanConfiguration struct {
 	Values   map[string]string `json:"value"`
 }
 
+type ScanConfigurationSet struct {
+	Configurations []ScanConfiguration
+}
+
 type ScanHandler struct {
 	RepoURL     string                 `json:"repoUrl"`
 	Branch      string                 `json:"branch"`
