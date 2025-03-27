@@ -38,7 +38,6 @@ func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, c
 	}
 
 	ctx := context.Background()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
 	conf := &clientcredentials.Config{
@@ -76,59 +75,72 @@ func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, c
 // Old entry for users of this client when using API Key
 // You can use the new "FromAPIKey" initializer with fewer parameters
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
-	if base_url == "" || iam_url == "" || tenant == "" || api_key == "" || logger == nil {
-		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
-	}
+	return ResumeAPIKeyClient(client, base_url, iam_url, tenant, api_key, "", logger)
+	/*
+		if base_url == "" || iam_url == "" || tenant == "" || api_key == "" || logger == nil {
+			return nil, fmt.Errorf("unable to create client: invalid parameters provided")
+		}
 
-	if l := len(base_url); base_url[l-1:] == "/" {
-		base_url = base_url[:l-1]
-	}
-	if l := len(iam_url); iam_url[l-1:] == "/" {
-		iam_url = iam_url[:l-1]
-	}
+		if l := len(base_url); base_url[l-1:] == "/" {
+			base_url = base_url[:l-1]
+		}
+		if l := len(iam_url); iam_url[l-1:] == "/" {
+			iam_url = iam_url[:l-1]
+		}
 
-	ctx := context.Background()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
-	conf := &oauth2.Config{
-		ClientID: "ast-app",
-		Endpoint: oauth2.Endpoint{
-			TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant),
-		},
-	}
+		conf := &oauth2.Config{
+			ClientID: "ast-app",
+			Endpoint: oauth2.Endpoint{
+				TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant),
+			},
+		}
 
-	refreshToken := &oauth2.Token{
-		AccessToken:  "",
-		RefreshToken: api_key,
-		Expiry:       time.Now().UTC(),
-	}
+		refreshToken := &oauth2.Token{
+			AccessToken:  "",
+			RefreshToken: api_key,
+			Expiry:       time.Now().UTC(),
+		}
 
-	token, err := conf.TokenSource(ctx, refreshToken).Token()
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return nil, err
-	}
+		token, err := conf.TokenSource(ctx, refreshToken).Token()
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return nil, err
+		}
 
-	oauthclient := conf.Client(ctx, token)
-	claims, err := parseJWT(token.AccessToken)
-	if err != nil {
-		return nil, err
-	}
+		oauthTransport := &oauth2.Transport{
+			Source: conf.TokenSource(ctx, refreshToken),
+			Base:   client.Transport,
+		}
 
-	cli := Cx1Client{
-		httpClient: oauthclient,
-		baseUrl:    base_url,
-		iamUrl:     iam_url,
-		tenant:     tenant,
-		logger:     logger,
-		claims:     claims,
-		IsUser:     true,
-		tenantID:   claims.TenantID,
-	}
+		oauthclient := &http.Client{
+			Transport: oauthTransport,
+			Timeout:   client.Timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 
-	cli.InitializeClient(false)
-	return &cli, nil
+		claims, err := parseJWT(token.AccessToken)
+		if err != nil {
+			return nil, err
+		}
+
+		cli := Cx1Client{
+			httpClient: oauthclient,
+			baseUrl:    base_url,
+			iamUrl:     iam_url,
+			tenant:     tenant,
+			logger:     logger,
+			claims:     claims,
+			IsUser:     true,
+			tenantID:   claims.TenantID,
+		}
+
+		cli.InitializeClient(false)
+		return &cli, nil*/
 }
 
 func FromAPIKey(client *http.Client, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -143,7 +155,6 @@ func FromAPIKey(client *http.Client, api_key string, logger *logrus.Logger) (*Cx
 	tenant = claims.TenantName
 
 	ctx := context.Background()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
 	conf := &oauth2.Config{
@@ -194,7 +205,6 @@ func FromToken(client *http.Client, last_token string, logger *logrus.Logger) (*
 	}
 
 	ctx := context.Background()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
 	conf := &oauth2.Config{}
@@ -243,7 +253,6 @@ func ResumeAPIKeyClient(client *http.Client, base_url, iam_url, tenant, api_key,
 	}
 
 	ctx := context.Background()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
 	conf := &oauth2.Config{
@@ -253,15 +262,25 @@ func ResumeAPIKeyClient(client *http.Client, base_url, iam_url, tenant, api_key,
 		},
 	}
 
-	claims, err := parseJWT(last_token)
-	if err != nil {
-		logger.Warningf("Failed parsing last token: %s", err)
-	}
+	var refreshToken *oauth2.Token
 
-	refreshToken := &oauth2.Token{
-		AccessToken:  last_token,
-		RefreshToken: api_key,
-		Expiry:       claims.ExpiryTime.UTC(),
+	if last_token != "" {
+		claims, err := parseJWT(last_token)
+		if err != nil {
+			logger.Warningf("Failed parsing last token: %s", err)
+		}
+
+		refreshToken = &oauth2.Token{
+			AccessToken:  last_token,
+			RefreshToken: api_key,
+			Expiry:       claims.ExpiryTime.UTC(),
+		}
+	} else {
+		refreshToken = &oauth2.Token{
+			AccessToken:  "",
+			RefreshToken: api_key,
+			Expiry:       time.Now().UTC(),
+		}
 	}
 
 	token, err := conf.TokenSource(ctx, refreshToken).Token()
@@ -271,8 +290,20 @@ func ResumeAPIKeyClient(client *http.Client, base_url, iam_url, tenant, api_key,
 		return nil, err
 	}
 
-	oauthclient := conf.Client(ctx, token)
-	claims, err = parseJWT(token.AccessToken)
+	oauthTransport := &oauth2.Transport{
+		Source: conf.TokenSource(ctx, refreshToken),
+		Base:   client.Transport,
+	}
+
+	oauthclient := &http.Client{
+		Transport: oauthTransport,
+		Timeout:   client.Timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	claims, err := parseJWT(token.AccessToken)
 	if err != nil {
 		return nil, err
 	}
@@ -285,9 +316,10 @@ func ResumeAPIKeyClient(client *http.Client, base_url, iam_url, tenant, api_key,
 		logger:     logger,
 		IsUser:     true,
 		claims:     claims,
+		tenantID:   claims.TenantID,
 	}
 
-	cli.InitializeClient(true)
+	cli.InitializeClient(last_token != "")
 	return &cli, nil
 }
 
