@@ -142,6 +142,80 @@ type AccessibleResource struct {
 	Roles        []string `json:"roles"`
 }
 
+type AnalyticsTime struct {
+	time.Time
+}
+
+type AnalyticsFilter struct {
+	Projects        []string       `json:"projects,omitempty"`
+	Applications    []string       `json:"applications,omitempty"`
+	Scanners        []string       `json:"scanners,omitempty"`
+	ApplicationTags []string       `json:"applicationTags,omitempty"`
+	ProjectTags     []string       `json:"projectTags,omitempty"`
+	ScanTags        []string       `json:"scanTags,omitempty"`
+	States          []string       `json:"states,omitempty"`
+	Status          []string       `json:"status,omitempty"`
+	Severities      []string       `json:"severities,omitempty"`
+	BranchNames     []string       `json:"branchNames,omitempty"`
+	Timezone        string         `json:"timezone,omitempty"`
+	Groups          []string       `json:"groupIds,omitempty"`
+	StartDate       *AnalyticsTime `json:"startDate,omitempty"`
+	EndDate         *AnalyticsTime `json:"endDate,omitempty"`
+}
+
+type AnalyticsDistributionEntry struct {
+	Label      string  `json:"label"`
+	Density    float32 `json:"density"`
+	Percentage float32 `json:"percentage"`
+	Results    uint64  `json:"results"`
+}
+type AnalyticsDistributionBlock struct {
+	Label  string                       `json:"label"`
+	Values []AnalyticsDistributionEntry `json:"values"`
+}
+type AnalyticsDistributionStats struct {
+	Distribution []AnalyticsDistributionBlock `json:"distribution"`
+	LOC          uint64                       `json:"loc"`
+	Total        uint64                       `json:"total"`
+}
+
+type AnalyticsOverTimeEntry struct {
+	Time  uint64        `json:"time"`
+	Value float32       `json:"value"`
+	Date  AnalyticsTime `json:"date"`
+}
+type AnalyticsOverTimeStats struct {
+	Label  string                   `json:"label"`
+	Values []AnalyticsOverTimeEntry `json:"values"`
+}
+
+type AnalyticsSeverityAndStateEntry struct {
+	Label   string `json:"label"`
+	Results int64  `json:"results"`
+}
+type AnalyticsSeverityAndstateStats struct {
+	Label      string                           `json:"label"`
+	Results    int64                            `json:"results"`
+	Severities []AnalyticsSeverityAndStateEntry `json:"severities"`
+}
+
+type AnalyticsMeanTimeEntry struct {
+	Label    string `json:"label"`
+	Results  int64  `json:"results"`
+	MeanTime int64  `json:"meanTime"`
+}
+type AnalyticsMeanTimeStats struct {
+	MeanTimeData      []AnalyticsMeanTimeEntry `json:"meanTimeData"`
+	MeanTimeStateData []AnalyticsMeanTimeEntry `json:"meanTimeStateData"`
+	TotalResults      int64                    `json:"totalResults"`
+}
+
+type AnalyticsVulnerabilitiesStats struct {
+	VulnerabilityName string                           `json:"vulnerabilityName"`
+	Total             int64                            `json:"total"`
+	Severities        []AnalyticsSeverityAndStateEntry `json:"severities"`
+}
+
 type Application struct {
 	ApplicationID string            `json:"id"`
 	Name          string            `json:"name"`
