@@ -707,6 +707,25 @@ func (s ScanMetrics) GetLanguages() []string {
 	return langs
 }
 
+func (s *ScanConfigurationSet) AddConfig(engine, key, value string) {
+	for i := range s.Configurations {
+		if s.Configurations[i].ScanType == engine {
+			if key != "" {
+				s.Configurations[i].Values[key] = value
+			}
+			return
+		}
+	}
+	newconf := ScanConfiguration{
+		ScanType: engine,
+		Values:   map[string]string{},
+	}
+	if key != "" {
+		newconf.Values[key] = value
+	}
+	s.Configurations = append(s.Configurations, newconf)
+}
+
 /* misc future stuff
 
 Listing of files in a scan:
