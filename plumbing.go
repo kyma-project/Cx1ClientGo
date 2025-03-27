@@ -75,10 +75,14 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 	}
 
 	response, err := c.httpClient.Do(request)
+
 	if err != nil {
-		// special handling: some proxies terminate connections resulting in a "remote error: tls: user canceled" failures
-		// the request actually succeeded and there is likely to be data in the response
-		if err.Error() == "remote error: tls: user canceled" {
+		if err.Error()[len(err.Error())-27:] == "net/http: use last response" {
+			return response, nil
+		} else if err.Error() == "remote error: tls: user canceled" {
+			// special handling: some proxies terminate connections resulting in a "remote error: tls: user canceled" failures
+			// the request actually succeeded and there is likely to be data in the response
+
 			c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
 			// continue processing as normal below
 		} else {
@@ -193,6 +197,10 @@ func parseJWT(jwtToken string) (claims Cx1Claims, err error) {
 
 	if claims.Expiry != 0 {
 		claims.ExpiryTime = time.Unix(claims.Expiry, 0)
+	}
+
+	if len(claims.TenantID) > 36 {
+		claims.TenantID = claims.TenantID[:36]
 	}
 
 	return
