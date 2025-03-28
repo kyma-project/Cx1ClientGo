@@ -9,23 +9,27 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     steps:
-        - id: merge
-          name: merge
-          uses: "pascalgn/automerge-action@v0.16.4"
-          env:
+      - id: checkout
+        name: checkout
+        uses: actions/checkout@v3
+      - id: merge
+        name: merge
+        run: gh pr merge <pull-request-number> --merge --queue
+    #   uses: "pascalgn/automerge-action@v0.16.4"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: comment
+        name: comment
+        run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "Merged by automerge-action"
+        env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        - id: comment
-          name: comment
-          run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "Merged by automerge-action"
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        - id: sleep
-          name: sleep
-          run: sleep 120
-        - id: comment2
-          name: comment2
-          run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "sleeped for 120 seconds"
-          env:
+      - id: sleep
+        name: sleep
+        run: sleep 120
+      - id: comment2
+        name: comment2
+        run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "sleeped for 120 seconds"
+        env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     
