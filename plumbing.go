@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -77,6 +80,10 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 	response, err := c.httpClient.Do(request)
 
 	if err != nil {
+		response, err = c.handleRetries(request, response, err)
+	}
+
+	if err != nil {
 		if err.Error()[len(err.Error())-27:] == "net/http: use last response" {
 			return response, nil
 		} else if err.Error() == "remote error: tls: user canceled" {
@@ -126,10 +133,51 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 			}
 			return response, fmt.Errorf("HTTP %v: %s", response.Status, str)
 		}
-		//return response, fmt.Errorf("HTTP Response: " + response.Status)
 	}
 
 	return response, nil
+}
+
+func (c Cx1Client) handleRetries(request *http.Request, response *http.Response, err error) (*http.Response, error) {
+	delay := c.retryDelay
+	attempt := 1
+	for attempt <= c.maxRetries && ((response.StatusCode >= 500 && response.StatusCode < 600) || isRetryableError(err)) {
+		c.logger.Warnf("Response status %v: waiting %d seconds for retry attempt %d", response.Status, delay, attempt)
+		attempt++
+		jitter := time.Duration(rand.Intn(1000)) * time.Millisecond // Up to 1 second of jitter
+		time.Sleep(time.Duration(delay)*time.Second + jitter)
+		response, err = c.httpClient.Do(request)
+		delay *= 2
+	}
+
+	return response, err
+}
+
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for network errors
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return true
+		}
+	}
+
+	// Check for DNS errors
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+
+	// Check for connection refused errors
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+
+	return false
 }
 
 func (c Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
@@ -211,6 +259,15 @@ func (c Cx1Client) GetUserAgent() string {
 }
 func (c *Cx1Client) SetUserAgent(ua string) {
 	c.cx1UserAgent = ua
+}
+
+func (c Cx1Client) GetRetries() (retries, delay int) {
+	return c.maxRetries, c.retryDelay
+}
+
+func (c *Cx1Client) SetRetries(retries, delay int) {
+	c.maxRetries = retries
+	c.retryDelay = delay
 }
 
 // this function set the U-A to be the old one that was previously default in Cx1ClientGo

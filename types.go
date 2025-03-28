@@ -27,6 +27,8 @@ type Cx1Client struct {
 	tenantID     string
 	cx1UserAgent string
 	tenantOwner  *TenantOwner
+	maxRetries   int
+	retryDelay   int
 }
 
 type Cx1Claims struct {
