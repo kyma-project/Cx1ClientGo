@@ -154,7 +154,7 @@ func (c Cx1Client) handleRetries(request *http.Request, response *http.Response,
 }
 
 func isRetryableError(err error) bool {
-	if err == nil {
+	if err == nil || err.Error() == "remote error: tls: user canceled" { // tls: user canceled can be due to proxies
 		return false
 	}
 
