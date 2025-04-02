@@ -82,8 +82,26 @@ func (c Cx1Client) GetImportByID(importID string) (DataImport, error) {
 func (c Cx1Client) GetImportLogsByID(importID string) ([]byte, error) {
 	c.logger.Debugf("Fetching import logs for import %v", importID)
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/imports/%v/logs/download", importID), nil, nil)
-	return response, err
+	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/imports/%v/logs/download", importID), nil, nil)
+
+	if err != nil {
+		c.logger.Tracef("Error retrieving import log url: %s", err)
+		return []byte{}, err
+	}
+
+	importlogURL := response.Header.Get("Location")
+	if importlogURL == "" {
+		return []byte{}, fmt.Errorf("expected location header response not found")
+	}
+
+	c.logger.Tracef("Retrieved url: %v", importlogURL)
+	data, err := c.sendRequestInternal(http.MethodGet, importlogURL, nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to download logs from %v: %s", importlogURL, err)
+		return []byte{}, nil
+	}
+
+	return data, err
 }
 
 func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
