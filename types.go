@@ -110,6 +110,7 @@ type PaginationSettings struct {
 	Applications  uint64
 	Branches      uint64
 	Groups        uint64
+	GroupMembers  uint64
 	Projects      uint64
 	Results       uint64
 	Scans         uint64
@@ -398,6 +399,11 @@ type GroupFilter struct {
 	Q                   bool   `url:"q,omitempty"`
 	Search              string `url:"search,omitempty"` // used in both GetGroup and GetGroupCount
 	Top                 bool   `url:"-"`                // used only in GetGroupCount
+}
+
+type GroupMembersFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool `url:"briefRepresentation,omitempty"`
 }
 
 type OIDCClient struct {
