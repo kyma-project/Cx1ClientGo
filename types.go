@@ -11,17 +11,20 @@ import (
 type Cx1Client struct {
 	httpClient *http.Client
 	//authToken  string
-	baseUrl      string
-	iamUrl       string
-	tenant       string
-	logger       *logrus.Logger
-	flags        map[string]bool // initial implementation ignoring "payload" part of the flag
-	consts       ClientVars
-	pagination   PaginationSettings
-	claims       Cx1Claims
-	user         *User
-	client       *OIDCClient
-	IsUser       bool
+	baseUrl    string
+	iamUrl     string
+	tenant     string
+	logger     *logrus.Logger
+	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts     ClientVars
+	pagination PaginationSettings
+
+	auth   Cx1ClientAuth
+	claims Cx1Claims
+	user   *User
+	client *OIDCClient
+	IsUser bool
+
 	version      *VersionInfo
 	astAppID     string
 	tenantID     string
@@ -29,6 +32,14 @@ type Cx1Client struct {
 	tenantOwner  *TenantOwner
 	maxRetries   int
 	retryDelay   int
+}
+
+type Cx1ClientAuth struct {
+	APIKey       string
+	ClientID     string
+	ClientSecret string
+	AccessToken  string
+	Expiry       time.Time
 }
 
 type Cx1Claims struct {
