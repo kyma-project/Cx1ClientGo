@@ -95,7 +95,7 @@ func (c *Cx1Client) sendTokenRequest(body io.Reader) (access_token string, err e
 }
 
 func (c *Cx1Client) refreshAccessToken() error {
-	if c.auth.AccessToken == "" || c.auth.Expiry.After(time.Now().Add(-30*time.Second)) {
+	if c.auth.AccessToken == "" || c.auth.Expiry.Before(time.Now().Add(30*time.Second)) {
 		if c.auth.APIKey != "" {
 			claims, err := parseJWT(c.auth.APIKey)
 			if err != nil {
@@ -169,6 +169,7 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 			// the request actually succeeded and there is likely to be data in the response
 
 			c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
+			err = nil
 			// continue processing as normal below
 		} else {
 			c.logger.Tracef("Failed HTTP request: '%s'", err)
