@@ -149,7 +149,6 @@ func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger 
 		Transport: oauthTransport,
 		Timeout:   client.Timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("CheckRedirect: %v %v -> %v\n", req.Method, req.URL, via[0].URL)
 			return http.ErrUseLastResponse
 		},
 	}
