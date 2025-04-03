@@ -1,7 +1,6 @@
 package Cx1ClientGo
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,11 +39,98 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 		request.Header.Set("Content-Type", "application/json")
 	}
 
+	// add auth header
+	err = c.refreshAccessToken()
+	if err != nil {
+		return &http.Request{}, fmt.Errorf("failed to get access token: %s", err)
+	}
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.auth.AccessToken))
+
 	for _, cookie := range cookies {
 		request.AddCookie(cookie)
 	}
 
 	return request, nil
+}
+
+func (c *Cx1Client) sendTokenRequest(body io.Reader) (access_token string, err error) {
+	tokenUrl := fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", c.iamUrl, c.tenant)
+	header := http.Header{
+		"Content-Type": {"application/x-www-form-urlencoded"},
+		"User-Agent":   {c.cx1UserAgent},
+	}
+	request, err := http.NewRequest(http.MethodPost, tokenUrl, body)
+	if err != nil {
+		return "", fmt.Errorf("failed to create token request: %v", err)
+	}
+	request.Header = header
+
+	response, err := c.handleHTTPResponse(request)
+	if err != nil {
+		return
+	}
+	var resBody []byte
+	if response != nil && response.Body != nil {
+		resBody, _ = io.ReadAll(response.Body)
+		response.Body.Close()
+	}
+
+	var responseBody struct {
+		AccessToken string `json:"access_token"`
+	}
+
+	err = json.Unmarshal(resBody, &responseBody)
+	if err != nil {
+		err = fmt.Errorf("failed to parse response body: %v", err)
+		return
+	}
+	access_token = responseBody.AccessToken
+
+	claims, err := parseJWT(access_token)
+	if err != nil {
+		return
+	}
+	c.SetClaims(claims)
+	return
+}
+
+func (c *Cx1Client) refreshAccessToken() error {
+	if c.auth.AccessToken == "" || c.auth.Expiry.After(time.Now().Add(-30*time.Second)) {
+		if c.auth.APIKey != "" {
+			claims, err := parseJWT(c.auth.APIKey)
+			if err != nil {
+				return fmt.Errorf("failed to parse API Key JWT: %v", err)
+			}
+			c.SetClaims(claims)
+
+			data := url.Values{}
+			data.Set("grant_type", "refresh_token")
+			data.Set("client_id", "ast-app")
+			data.Set("refresh_token", c.auth.APIKey)
+
+			access_token, err := c.sendTokenRequest(strings.NewReader(data.Encode()))
+			if err != nil {
+				return err
+			}
+			c.auth.AccessToken = access_token
+			c.auth.Expiry = c.claims.ExpiryTime
+		} else if c.auth.ClientID != "" && c.auth.ClientSecret != "" && c.iamUrl != "" && c.tenant != "" {
+			data := url.Values{}
+			data.Set("grant_type", "client_credentials")
+			data.Set("client_id", c.auth.ClientID)
+			data.Set("client_secret", c.auth.ClientSecret)
+
+			access_token, err := c.sendTokenRequest(strings.NewReader(data.Encode()))
+			if err != nil {
+				return err
+			}
+			c.auth.AccessToken = access_token
+			c.auth.Expiry = c.claims.ExpiryTime
+		} else {
+			return fmt.Errorf("invalid input: missing API key or ClientID + ClientSecret + IAMURL + TenantName")
+		}
+	}
+	return nil
 }
 
 func (c Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
@@ -59,26 +145,18 @@ func (c Cx1Client) sendRequestInternal(method, url string, body io.Reader, heade
 }
 
 func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
-	var requestBody io.Reader
-	var bodyBytes []byte
-
 	c.logger.Tracef("Sending %v request to URL %v", method, url)
-
-	if body != nil {
-		closer := io.NopCloser(body)
-		bodyBytes, _ := io.ReadAll(closer)
-		requestBody = bytes.NewBuffer(bodyBytes)
-		defer closer.Close()
-	}
-
-	request, err := c.createRequest(method, url, requestBody, &header, nil)
+	request, err := c.createRequest(method, url, body, &header, nil)
 	if err != nil {
 		c.logger.Tracef("Unable to create request: %s", err)
 		return nil, err
 	}
 
-	response, err := c.httpClient.Do(request)
+	return c.handleHTTPResponse(request)
+}
 
+func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, error) {
+	response, err := c.httpClient.Do(request)
 	if err != nil {
 		response, err = c.handleRetries(request, response, err)
 	}
@@ -94,18 +172,18 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 			// continue processing as normal below
 		} else {
 			c.logger.Tracef("Failed HTTP request: '%s'", err)
-			var resBody []byte
+			/*var resBody []byte
 			if response != nil && response.Body != nil {
 				resBody, _ = io.ReadAll(response.Body)
 			}
 			c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-
+			*/
 			return response, err
 		}
 	}
 	if response.StatusCode >= 400 {
 		resBody, _ := io.ReadAll(response.Body)
-		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+		//c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		var msg map[string]interface{}
 		err = json.Unmarshal(resBody, &msg)
 		if err == nil {
@@ -134,7 +212,6 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 			return response, fmt.Errorf("HTTP %v: %s", response.Status, str)
 		}
 	}
-
 	return response, nil
 }
 
@@ -204,15 +281,6 @@ func (c Cx1Client) sendRequestRawIAM(method, base, url string, body io.Reader, h
 func (c Cx1Client) sendRequestOther(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
 	iamurl := fmt.Sprintf("%v%v/%v%v", c.iamUrl, base, c.tenant, url)
 	return c.sendRequestInternal(method, iamurl, body, header)
-}
-
-func (c Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte) {
-	if len(requestBody) != 0 {
-		c.logger.Tracef("Request body: %s", string(requestBody))
-	}
-	if len(responseBody) != 0 {
-		c.logger.Tracef("Response body: %s", string(responseBody))
-	}
 }
 
 func parseJWT(jwtToken string) (claims Cx1Claims, err error) {
