@@ -601,17 +601,47 @@ func (c Cx1Client) GetGroupMembers(group *Group) ([]User, error) {
 	return c.GetGroupMembersByID(group.GroupID)
 }
 
-func (c Cx1Client) GetGroupMembersByID(groupID string) ([]User, error) {
-	var users []User
+func (c Cx1Client) GetGroupMembersByID(groupId string) ([]User, error) {
+	_, users, err := c.GetAllGroupMembersFiltered(groupId, GroupMembersFilter{
+		BaseIAMFilter: BaseIAMFilter{Max: c.pagination.GroupMembers},
+	})
+	return users, err
+}
 
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/members", groupID), nil, http.Header{})
+func (c Cx1Client) GetGroupMembersFiltered(groupId string, filter GroupMembersFilter) ([]User, error) {
+	var members []User
+	params, _ := query.Values(filter)
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/members?%v", groupId, params.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Tracef("Fetching group %v member failed: %s", groupID, err)
-		return users, err
+		return members, err
 	}
 
-	err = json.Unmarshal(response, &users)
-	return users, err
+	err = json.Unmarshal(response, &members)
+	if err != nil {
+		return members, err
+	}
+	return members, err
+}
+
+func (c Cx1Client) GetAllGroupMembersFiltered(groupId string, filter GroupMembersFilter) (uint64, []User, error) {
+	var all_members []User
+
+	members, err := c.GetGroupMembersFiltered(groupId, filter)
+	all_members = members
+	count := len(members)
+
+	for err == nil && count > 0 {
+		filter.Bump()
+		members, err = c.GetGroupMembersFiltered(groupId, filter)
+		if len(members) == 0 {
+			break
+		}
+		all_members = append(all_members, members...)
+		count = len(all_members)
+	}
+
+	return uint64(count), all_members, err
 }
 
 // convenience
