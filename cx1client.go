@@ -1,19 +1,15 @@
 package Cx1ClientGo
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"strings"
-	"time"
 
 	//"io/ioutil"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
 var cxOrigin = "Cx1-Client-GoLang"
@@ -37,7 +33,7 @@ func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, c
 		iam_url = iam_url[:l-1]
 	}
 
-	ctx := context.Background()
+	/*ctx := context.Background()
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
 	conf := &clientcredentials.Config{
@@ -56,20 +52,27 @@ func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, c
 	claims, err := parseJWT(token.AccessToken)
 	if err != nil {
 		return nil, err
+	}*/
+
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	cli := Cx1Client{
-		httpClient: oauthclient,
+		httpClient: client,
 		baseUrl:    base_url,
 		iamUrl:     iam_url,
 		tenant:     tenant,
 		logger:     logger,
-		claims:     claims,
 		IsUser:     false,
+		auth: Cx1ClientAuth{
+			ClientID:     client_id,
+			ClientSecret: client_secret,
+		},
 	}
 
-	cli.InitializeClient(false)
-	return &cli, nil
+	err := cli.InitializeClient(false)
+	return &cli, err
 }
 
 // Old entry for users of this client when using API Key
@@ -102,76 +105,80 @@ func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger 
 		}
 	}
 
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
+	/*
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 
-	conf := &oauth2.Config{
-		ClientID: "ast-app",
-		Endpoint: oauth2.Endpoint{
-			TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", claims.IAMURL, claims.TenantName),
-		},
-	}
+		conf := &oauth2.Config{
+			ClientID: "ast-app",
+			Endpoint: oauth2.Endpoint{
+				TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", claims.IAMURL, claims.TenantName),
+			},
+		}
 
-	var refreshToken *oauth2.Token
+		var refreshToken *oauth2.Token
 
-	if last_token != "" {
-		claims, err = parseJWT(last_token)
+		if last_token != "" {
+			claims, err = parseJWT(last_token)
+			if err != nil {
+				logger.Warningf("Failed parsing last token: %s", err)
+			}
+
+			refreshToken = &oauth2.Token{
+				AccessToken:  last_token,
+				RefreshToken: api_key,
+				Expiry:       claims.ExpiryTime.UTC(),
+			}
+		} else {
+			refreshToken = &oauth2.Token{
+				AccessToken:  "",
+				RefreshToken: api_key,
+				Expiry:       time.Now().UTC(),
+			}
+		}
+
+		token, err := conf.TokenSource(ctx, refreshToken).Token()
 		if err != nil {
-			logger.Warningf("Failed parsing last token: %s", err)
+			err = fmt.Errorf("failed getting a token: %s", err)
+			logger.Error(err.Error())
+			return nil, err
 		}
 
-		refreshToken = &oauth2.Token{
-			AccessToken:  last_token,
-			RefreshToken: api_key,
-			Expiry:       claims.ExpiryTime.UTC(),
+		oauthTransport := &oauth2.Transport{
+			Source: conf.TokenSource(ctx, refreshToken),
+			Base:   client.Transport,
 		}
-	} else {
-		refreshToken = &oauth2.Token{
-			AccessToken:  "",
-			RefreshToken: api_key,
-			Expiry:       time.Now().UTC(),
+
+		oauthclient := &http.Client{
+			Transport: oauthTransport,
+			Timeout:   client.Timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		}
-	}
 
-	token, err := conf.TokenSource(ctx, refreshToken).Token()
-	if err != nil {
-		err = fmt.Errorf("failed getting a token: %s", err)
-		logger.Error(err.Error())
-		return nil, err
-	}
+		claims, err = parseJWT(token.AccessToken)
+		if err != nil {
+			return nil, err
+		}*/
 
-	oauthTransport := &oauth2.Transport{
-		Source: conf.TokenSource(ctx, refreshToken),
-		Base:   client.Transport,
-	}
-
-	oauthclient := &http.Client{
-		Transport: oauthTransport,
-		Timeout:   client.Timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("CheckRedirect: %v %v -> %v\n", req.Method, req.URL, via[0].URL)
-			return http.ErrUseLastResponse
-		},
-	}
-
-	claims, err = parseJWT(token.AccessToken)
-	if err != nil {
-		return nil, err
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	cli := Cx1Client{
-		httpClient: oauthclient,
-		baseUrl:    claims.ASTBaseURL,
-		iamUrl:     claims.IAMURL,
-		tenant:     claims.TenantName,
+		httpClient: client,
 		logger:     logger,
 		IsUser:     true,
-		claims:     claims,
-		tenantID:   claims.TenantID,
+		auth: Cx1ClientAuth{
+			APIKey:      api_key,
+			AccessToken: last_token,
+		},
 	}
+	cli.SetClaims(claims)
 
-	cli.InitializeClient(last_token != "")
-	return &cli, nil
+	err = cli.InitializeClient(last_token != "")
+	return &cli, err
 }
 
 func FromToken(client *http.Client, last_token string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -209,6 +216,11 @@ func (c Cx1Client) String() string {
 
 func (c *Cx1Client) InitializeClient(quick bool) error {
 	c.SetUserAgent("Cx1ClientGo")
+
+	if err := c.refreshAccessToken(); err != nil {
+		return err
+	}
+
 	if !quick {
 		_ = c.GetTenantID()
 		_ = c.GetASTAppID()
@@ -294,6 +306,21 @@ func (c Cx1Client) GetLicense() ASTLicense {
 func (c Cx1Client) GetClaims() Cx1Claims {
 	return c.claims
 }
+func (c *Cx1Client) SetClaims(claims Cx1Claims) {
+	c.claims = claims
+	if claims.TenantName != "" {
+		c.tenant = claims.TenantName
+	}
+	if claims.IAMURL != "" {
+		c.iamUrl = claims.IAMURL
+	}
+	if claims.ASTBaseURL != "" {
+		c.baseUrl = claims.ASTBaseURL
+	}
+	if claims.TenantID != "" {
+		c.tenantID = claims.TenantID
+	}
+}
 
 func (c Cx1Client) IsEngineAllowed(engine string) bool {
 	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
@@ -355,23 +382,8 @@ func (c Cx1Client) GetVersion() (VersionInfo, error) {
 	return v, nil
 }
 
-func (c *Cx1Client) GetAccessToken() (string, error) {
-	// Check if the Transport is an oauth2.Transport
-	transport, ok := c.httpClient.Transport.(*oauth2.Transport)
-	if !ok {
-		return "", fmt.Errorf("http client's transport is not an oauth2.Transport or *Transport")
-	}
-
-	// Get the TokenSource from the Transport
-	tokenSource := transport.Source
-
-	// Get the current token from the TokenSource
-	token, err := tokenSource.Token()
-	if err != nil {
-		return "", fmt.Errorf("failed to get token from TokenSource: %w", err)
-	}
-
-	return token.AccessToken, nil
+func (c *Cx1Client) GetAccessToken() string {
+	return c.auth.AccessToken
 }
 
 func (c *Cx1Client) GetCurrentUsername() string {

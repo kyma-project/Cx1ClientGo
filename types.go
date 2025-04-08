@@ -11,17 +11,20 @@ import (
 type Cx1Client struct {
 	httpClient *http.Client
 	//authToken  string
-	baseUrl      string
-	iamUrl       string
-	tenant       string
-	logger       *logrus.Logger
-	flags        map[string]bool // initial implementation ignoring "payload" part of the flag
-	consts       ClientVars
-	pagination   PaginationSettings
-	claims       Cx1Claims
-	user         *User
-	client       *OIDCClient
-	IsUser       bool
+	baseUrl    string
+	iamUrl     string
+	tenant     string
+	logger     *logrus.Logger
+	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts     ClientVars
+	pagination PaginationSettings
+
+	auth   Cx1ClientAuth
+	claims Cx1Claims
+	user   *User
+	client *OIDCClient
+	IsUser bool
+
 	version      *VersionInfo
 	astAppID     string
 	tenantID     string
@@ -29,6 +32,14 @@ type Cx1Client struct {
 	tenantOwner  *TenantOwner
 	maxRetries   int
 	retryDelay   int
+}
+
+type Cx1ClientAuth struct {
+	APIKey       string
+	ClientID     string
+	ClientSecret string
+	AccessToken  string
+	Expiry       time.Time
 }
 
 type Cx1Claims struct {
@@ -99,6 +110,7 @@ type PaginationSettings struct {
 	Applications  uint64
 	Branches      uint64
 	Groups        uint64
+	GroupMembers  uint64
 	Projects      uint64
 	Results       uint64
 	Scans         uint64
@@ -387,6 +399,11 @@ type GroupFilter struct {
 	Q                   bool   `url:"q,omitempty"`
 	Search              string `url:"search,omitempty"` // used in both GetGroup and GetGroupCount
 	Top                 bool   `url:"-"`                // used only in GetGroupCount
+}
+
+type GroupMembersFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool `url:"briefRepresentation,omitempty"`
 }
 
 type OIDCClient struct {
