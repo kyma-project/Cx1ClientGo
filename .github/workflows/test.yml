@@ -1,4 +1,4 @@
-name: test-merge-group
+name: test-pull-request
 
 on:
   pull_request:
@@ -14,8 +14,6 @@ jobs:
           uses: actions/checkout@v3
         - id: comment
           name: comment
-          run:  gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "test comment on pull request event"
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run: echo "test comment on pull request event"
 
     
