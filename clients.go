@@ -38,11 +38,11 @@ func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 	return clients, err
 }
 
-func (c Cx1Client) GetClientByID(id string) (OIDCClient, error) {
-	c.logger.Debugf("Getting OIDC client with ID %v", id)
+func (c Cx1Client) GetClientByID(guid string) (OIDCClient, error) {
+	c.logger.Debugf("Getting OIDC client with ID %v", guid)
 	var client OIDCClient
 
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v", id), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v", guid), nil, nil)
 	if err != nil {
 		return client, err
 	}
@@ -261,26 +261,26 @@ func (c Cx1Client) UpdateClient(client OIDCClient) error {
 	return nil
 }
 
-func (c Cx1Client) AddClientScopeByID(oidcId, clientScopeId string) error {
-	c.logger.Debugf("Adding client scope %v to OIDC Client %v", clientScopeId, oidcId)
+func (c Cx1Client) AddClientScopeByID(guid, clientScopeId string) error {
+	c.logger.Debugf("Adding client scope %v to OIDC Client %v", clientScopeId, guid)
 
-	_, err := c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/clients/%v/default-client-scopes/%v", oidcId, clientScopeId), nil, nil)
+	_, err := c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/clients/%v/default-client-scopes/%v", guid, clientScopeId), nil, nil)
 	return err
 }
 
-func (c Cx1Client) DeleteClientByID(id string) error {
-	c.logger.Debugf("Deleting OIDC client with ID %v", id)
-	if strings.EqualFold(id, c.GetASTAppID()) {
-		return fmt.Errorf("attempt to delete the ast-app client (ID: %v) prevented - this will break your tenant", id)
+func (c Cx1Client) DeleteClientByID(guid string) error {
+	c.logger.Debugf("Deleting OIDC client with ID %v", guid)
+	if strings.EqualFold(guid, c.GetASTAppID()) {
+		return fmt.Errorf("attempt to delete the ast-app client (ID: %v) prevented - this will break your tenant", guid)
 	}
-	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/clients/%v", id), nil, nil)
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/clients/%v", guid), nil, nil)
 	return err
 }
 
-func (c Cx1Client) GetServiceAccountByID(oidcId string) (User, error) {
-	c.logger.Debugf("Getting service account user behind OIDC client with ID %v", oidcId)
+func (c Cx1Client) GetServiceAccountByID(guid string) (User, error) {
+	c.logger.Debugf("Getting service account user behind OIDC client with ID %v", guid)
 	var user User
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v/service-account-user", oidcId), nil, nil)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v/service-account-user", guid), nil, nil)
 	if err != nil {
 		return user, err
 	}
