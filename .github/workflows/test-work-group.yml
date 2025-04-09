@@ -12,28 +12,14 @@ jobs:
       - id: checkout
         name: checkout
         uses: actions/checkout@v3
-      - name: Add PR to Merge Queue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER=${{ github.event.pull_request.number }}
-          REPO=${{ github.repository }}
-          curl -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/merge_queue
       - id: comment
         name: comment
-        run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "Merged by automerge-action"
+        run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "test comment on merge group event"
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - id: sleep
-        name: sleep
-        run: sleep 120
-      - id: comment2
-        name: comment2
-        run: gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "sleeped for 120 seconds"
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # fail the workflow
+      - id: fail
+        name: fail
+        run: exit 1
 
     
