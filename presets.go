@@ -7,35 +7,68 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 // Presets
 
-func (p *Preset) String() string {
-	return fmt.Sprintf("[%d] %v", p.PresetID, p.Name)
+func (p Preset) String() string {
+	if p.Engine == "sast" {
+		return fmt.Sprintf("[%v] %v", p.PresetID, p.Name)
+	} else {
+		return fmt.Sprintf("[%v] %v", ShortenGUID(p.PresetID), p.Name)
+	}
 }
 
-func (c Cx1Client) GetPresets(count uint64) ([]Preset, error) {
-	c.logger.Debug("Get Cx1 Presets")
+// Presets do not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
+func (c Cx1Client) GetSASTPresets(count uint64) ([]Preset, error) {
+	return c.GetPresets("sast", count)
+}
+
+// Presets do not include the contents of the preset (query families etc) - use Get*PresetContents to fill or Get*PresetByID
+func (c Cx1Client) GetIACPresets(count uint64) ([]Preset, error) {
+	return c.GetPresets("IAC", count)
+}
+
+func (c Cx1Client) GetPresets(engine string, count uint64) ([]Preset, error) {
+	c.logger.Debug("Get Cx1 SAST Presets")
 	var preset_response struct {
 		TotalCount uint64   `json:"totalCount"`
 		Presets    []Preset `json:"presets"`
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?limit=%d&include_details=true", count), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets?limit=%d&include_details=true", engine, count), nil, nil)
 	if err != nil {
 		return preset_response.Presets, err
 	}
 
 	err = json.Unmarshal(response, &preset_response)
-	c.logger.Tracef("Got %d presets", len(preset_response.Presets))
+	if err != nil {
+		c.logger.Tracef("Failed to unmarshal response: %s", err)
+	}
+
+	for id := range preset_response.Presets {
+		preset_response.Presets[id].Engine = engine
+	}
+
+	//c.logger.Tracef("Got %d presets", len(preset_response.Presets))
+
 	return preset_response.Presets, err
 }
 
-func (c Cx1Client) GetPresetCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Presets count")
+func (c Cx1Client) GetSASTPresetCount() (uint64, error) {
+	return c.GetPresetCount("sast")
+}
+func (c Cx1Client) GetIACPresetCount() (uint64, error) {
+	return c.GetPresetCount("iac")
+}
 
-	response, err := c.sendRequest(http.MethodGet, "/presets?limit=1", nil, nil)
+func (c Cx1Client) GetPresetCount(engine string) (uint64, error) {
+	c.logger.Debug("Get Cx1 SAST Presets count")
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets?limit=1", engine), nil, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -54,8 +87,18 @@ func (c Cx1Client) GetPresetCount() (uint64, error) {
 	return preset_response.TotalCount, err
 }
 
-func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
-	c.logger.Debugf("Get preset by name %v", name)
+// Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
+func (c Cx1Client) GetSASTPresetByName(name string) (Preset, error) {
+	return c.GetPresetByName("sast", name)
+}
+
+// Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
+func (c Cx1Client) GetIACPresetByName(name string) (Preset, error) {
+	return c.GetPresetByName("iac", name)
+}
+
+func (c Cx1Client) GetPresetByName(engine, name string) (Preset, error) {
+	c.logger.Debugf("Get preset by name %v for %v", name, engine)
 	var preset_response struct {
 		TotalCount uint64   `json:"totalCount"`
 		Presets    []Preset `json:"presets"`
@@ -64,12 +107,12 @@ func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 	params := url.Values{
 		"offset":          {"0"},
 		"limit":           {"1"},
-		"exact_match":     {"true"},
-		"include_details": {"true"},
-		"name":            {name},
+		"exact-match":     {"true"},
+		"include-details": {"true"},
+		"search-term":     {name},
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?%v", params.Encode()), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/sast/presets?%v", params.Encode()), nil, nil)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -82,77 +125,150 @@ func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 	if len(preset_response.Presets) == 0 {
 		return Preset{}, fmt.Errorf("no such preset %v found", name)
 	}
+	preset_response.Presets[0].Engine = engine
 	return preset_response.Presets[0], nil
 }
 
-func (c Cx1Client) GetPresetByID(id uint64) (Preset, error) {
-	c.logger.Debugf("Get preset by id %d", id)
-	var temp_preset struct {
-		Preset
-		QueryStr []string `json:"queryIds"`
-	}
+func (c Cx1Client) GetPresetByID(engine, id string) (Preset, error) {
 	var preset Preset
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets/%d", id), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets/%v", engine, id), nil, nil)
 	if err != nil {
-		return preset, fmt.Errorf("failed to get preset %d: %s", id, err)
+		return preset, fmt.Errorf("failed to get preset %v: %s", id, err)
 	}
 
-	err = json.Unmarshal(response, &temp_preset)
-
-	preset = Preset{PresetID: temp_preset.PresetID, Name: temp_preset.Name, Description: temp_preset.Description, Custom: temp_preset.Custom}
-
-	preset.QueryIDs = make([]uint64, len(temp_preset.QueryStr))
-	for id, q := range temp_preset.QueryStr {
-		var u uint64
-		u, _ = strconv.ParseUint(q, 0, 64)
-		preset.QueryIDs[id] = u
-	}
-
+	err = json.Unmarshal(response, &preset)
+	preset.Filled = true
+	preset.Engine = engine
 	return preset, err
 }
 
-func (c Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
-	c.logger.Tracef("Fetching contents for preset %v", p.PresetID)
-	if !p.Filled {
-		preset, err := c.GetPresetByID(p.PresetID)
-		if err != nil {
-			return err
-		}
-		p.Filled = true
-		p.QueryIDs = preset.QueryIDs
+// Includes the contents (query families/queries) of the preset as well
+func (c Cx1Client) GetSASTPresetByID(id uint64) (Preset, error) {
+	return c.GetPresetByID("sast", fmt.Sprintf("%d", id))
+}
+
+// Includes the contents (query families/queries) of the preset as well
+func (c Cx1Client) GetIACPresetByID(id string) (Preset, error) {
+	return c.GetPresetByID("iac", id)
+}
+
+func (c Cx1Client) GetIACQueryFamilies() ([]string, error) {
+	return c.GetQueryFamilies("iac")
+}
+func (c Cx1Client) GetSASTQueryFamilies() ([]string, error) {
+	return c.GetQueryFamilies("sast")
+}
+func (c Cx1Client) GetQueryFamilies(engine string) ([]string, error) {
+	var families []string
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/query-families", engine), nil, nil)
+	if err != nil {
+		return families, err
 	}
 
-	if qc != nil {
-		p.LinkQueries(qc)
+	err = json.Unmarshal(response, &families)
+	return families, err
+}
+
+func (c Cx1Client) GetIACQueryFamilyContents(family string) (IACQueryCollection, error) {
+	collection := IACQueryCollection{}
+	_, err := c.getQueryFamilyContents("iac", family)
+	if err != nil {
+		return collection, err
 	}
 
+	//collection.AddQueryTree(&tree)
+
+	return collection, nil
+}
+func (c Cx1Client) GetSASTQueryFamilyContents(family string) (SASTQueryCollection, error) {
+	collection := SASTQueryCollection{}
+	tree, err := c.getQueryFamilyContents("sast", family)
+	if err != nil {
+		return collection, err
+	}
+
+	collection.AddQueryTree(&tree)
+
+	return collection, nil
+}
+func (c Cx1Client) getQueryFamilyContents(engine, family string) ([]AuditQueryTree, error) {
+	var families []AuditQueryTree
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/query-families/%v/queries", engine, family), nil, nil)
+	if err != nil {
+		return families, err
+	}
+	err = json.Unmarshal(response, &families)
+	if err != nil {
+		return families, err
+	}
+
+	qfamily := []AuditQueryTree{
+		{
+			IsLeaf: false,
+			Title:  family,
+			Key:    family,
+			Data: struct {
+				Level    string
+				Severity string
+				CWE      int64
+				Custom   bool
+			}{},
+			Children: families,
+		},
+	}
+
+	return qfamily, err
+}
+
+func (c Cx1Client) GetPresetContents(p *Preset) error {
+	preset, err := c.GetPresetByID(p.Engine, p.PresetID)
+	if err != nil {
+		return err
+	}
+	*p = preset
 	return nil
 }
 
-func (p *Preset) LinkQueries(qc *QueryCollection) {
-	p.Queries = make([]Query, len(p.QueryIDs))
+func (p Preset) GetSASTQueryCollection(queries SASTQueryCollection) SASTQueryCollection {
+	coll := SASTQueryCollection{}
 
-	for id, qid := range p.QueryIDs {
+	for _, fam := range p.QueryFamilies {
+		for _, qid := range fam.QueryIDs {
+			u, _ := strconv.ParseUint(qid, 0, 64)
+			if query := queries.GetQueryByLevelAndID(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, u); query != nil && query.IsExecutable {
+				coll.AddQuery(*query)
+			}
+		}
+	}
+	return coll
+}
+
+/*
+func (p *SASTPreset) LinkQueries(qc *SASTQueryCollection) {
+	p.SASTQueries = make([]SASTQuery, len(p.SASTQueryIDs))
+
+	for id, qid := range p.SASTQueryIDs {
 		q := qc.GetQueryByID(qid)
 		if q != nil {
-			p.Queries[id] = *q
+			p.SASTQueries[id] = *q
 		}
 	}
 }
+*/
 
 // convenience
-func (c Cx1Client) GetAllPresets() ([]Preset, error) {
-	count, err := c.GetPresetCount()
+func (c Cx1Client) GetAllSASTPresets() ([]Preset, error) {
+	count, err := c.GetSASTPresetCount()
 	if err != nil {
 		return []Preset{}, err
 	}
 
-	return c.GetPresets(count)
+	return c.GetSASTPresets(count)
 }
 
-func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Preset, error) {
-	c.logger.Debugf("Creating preset %v", name)
+func (c Cx1Client) CreateSASTPreset(name, description string, collection SASTQueryCollection) (Preset, error) {
+	c.logger.Debugf("Creating preset %v for sast", name)
 	var preset Preset
 
 	if len(description) > 60 {
@@ -160,16 +276,51 @@ func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Pr
 		description = description[:60]
 	}
 
-	stringIDs := make([]string, len(queryIDs))
-	for id, q := range queryIDs {
-		stringIDs[id] = fmt.Sprintf("%d", q)
+	type queriesFamilyBody struct {
+		FamilyName string   `json:"familyName"`
+		QueryIDs   []string `json:"queryIds"`
+	}
+
+	var queryFamilies []queriesFamilyBody
+	for lid := range collection.QueryLanguages {
+		foundFamily := false
+		for id := range queryFamilies {
+			if strings.EqualFold(queryFamilies[id].FamilyName, collection.QueryLanguages[lid].Name) {
+				foundFamily = true
+
+				for gid := range collection.QueryLanguages[lid].QueryGroups {
+					for qid := range collection.QueryLanguages[lid].QueryGroups[gid].Queries {
+						queryId := fmt.Sprintf("%d", collection.QueryLanguages[lid].QueryGroups[gid].Queries[qid].QueryID)
+
+						if !slices.Contains(queryFamilies[id].QueryIDs, queryId) {
+							queryFamilies[id].QueryIDs = append(queryFamilies[id].QueryIDs, queryId)
+						}
+					}
+				}
+				break
+			}
+		}
+		if !foundFamily {
+			newFam := queriesFamilyBody{
+				FamilyName: collection.QueryLanguages[lid].Name,
+			}
+			for gid := range collection.QueryLanguages[lid].QueryGroups {
+				for qid := range collection.QueryLanguages[lid].QueryGroups[gid].Queries {
+					queryId := fmt.Sprintf("%d", collection.QueryLanguages[lid].QueryGroups[gid].Queries[qid].QueryID)
+
+					if !slices.Contains(newFam.QueryIDs, queryId) {
+						newFam.QueryIDs = append(newFam.QueryIDs, queryId)
+					}
+				}
+			}
+			queryFamilies = append(queryFamilies, newFam)
+		}
 	}
 
 	body := map[string]interface{}{
 		"name":        name,
 		"description": description,
-		"queryIDs":    stringIDs,
-		"custom":      true,
+		"queries":     queryFamilies,
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -177,13 +328,13 @@ func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Pr
 		return preset, err
 	}
 
-	response, err := c.sendRequest(http.MethodPost, "/presets", bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequest(http.MethodPost, "/preset-manager/sast/presets", bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		return preset, err
 	}
 
 	var responseStruct struct {
-		Id      uint64 `json:"id"`
+		Id      uint64 `json:"id,string"`
 		Message string `json:"message"`
 	}
 
@@ -192,15 +343,12 @@ func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Pr
 		return preset, err
 	}
 
-	return c.GetPresetByID(responseStruct.Id)
+	return c.GetSASTPresetByID(responseStruct.Id)
 }
 
-func (p *Preset) AddQueryID(queryId uint64) {
-	p.QueryIDs = append(p.QueryIDs, queryId)
-}
-
-func (c Cx1Client) UpdatePreset(preset *Preset) error {
-	c.logger.Debugf("Saving preset %v", preset.Name)
+/*
+func (c Cx1Client) UpdatePreset(preset *SASTPreset) error {
+	c.logger.Debugf("Saving sast preset %v", preset.Name)
 
 	qidstr := make([]string, len(preset.QueryIDs))
 
@@ -225,20 +373,22 @@ func (c Cx1Client) UpdatePreset(preset *Preset) error {
 		return err
 	}
 
-	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/presets/%d", preset.PresetID), bytes.NewReader(json), nil)
+	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/preset-manager/sast/presets/%v", preset.PresetID), bytes.NewReader(json), nil)
 	return err
 }
+*/
 
-func (c Cx1Client) DeletePreset(preset *Preset) error {
+func (c Cx1Client) DeletePreset(preset Preset) error {
 	c.logger.Debugf("Removing preset %v", preset.Name)
 	if !preset.Custom {
 		return fmt.Errorf("cannot delete preset %v - this is a product-default preset", preset.String())
 	}
 
-	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/presets/%d", preset.PresetID), nil, nil)
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/preset-manager/%v/presets/%v", preset.Engine, preset.PresetID), nil, nil)
 	return err
 }
 
 func (c Cx1Client) PresetLink(p *Preset) string {
-	return fmt.Sprintf("%v/resourceManagement/presets?presetId=%d", c.baseUrl, p.PresetID)
+	c.depwarn("PresetLink", "will be removed")
+	return fmt.Sprintf("%v/resourceManagement/presets?presetId=%v", c.baseUrl, p.PresetID)
 }
