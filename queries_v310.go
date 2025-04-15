@@ -230,9 +230,9 @@ func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpda
 	}
 }
 
-func (c Cx1Client) GetQueries_v310() (QueryCollection, error) {
+func (c Cx1Client) GetQueries_v310() (SASTQueryCollection, error) {
 	c.depwarn("GetQueries_v310", "GetQueries/GetAuditQueries*")
-	var qc QueryCollection
+	var qc SASTQueryCollection
 	q, err := c.GetPresetQueries()
 	if err != nil {
 		return qc, err
@@ -249,18 +249,18 @@ func (c Cx1Client) GetQueries_v310() (QueryCollection, error) {
 	return qc, nil
 }
 
-func (qc *QueryCollection) AddAuditQueries_v310(queries *[]AuditQuery_v310) {
+func (qc *SASTQueryCollection) AddAuditQueries_v310(queries *[]AuditQuery_v310) {
 	for _, q := range *queries {
 		ql := qc.GetQueryLanguageByName(q.Language)
 
 		if ql == nil {
-			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
+			qc.QueryLanguages = append(qc.QueryLanguages, SASTQueryLanguage{q.Language, []SASTQueryGroup{}})
 			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
 		}
 
 		qg := ql.GetQueryGroupByName(q.Group)
 		if qg == nil {
-			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q.ToQuery()}})
+			ql.QueryGroups = append(ql.QueryGroups, SASTQueryGroup{q.Group, q.Language, []SASTQuery{q.ToQuery()}})
 		} else {
 			if qgq := qg.GetQueryByLevelAndName(q.Level, q.LevelID, q.Name); qgq == nil {
 				qg.Queries = append(qg.Queries, q.ToQuery())
