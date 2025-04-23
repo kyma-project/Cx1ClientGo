@@ -232,12 +232,11 @@ func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpda
 
 func (c Cx1Client) GetQueries_v310() (SASTQueryCollection, error) {
 	c.depwarn("GetQueries_v310", "GetQueries/GetAuditQueries*")
-	var qc SASTQueryCollection
-	q, err := c.GetPresetQueries()
+	//var qc SASTQueryCollection
+	qc, err := c.GetSASTPresetQueries()
 	if err != nil {
 		return qc, err
 	}
-	qc.AddQueries(&q)
 
 	aq, err := c.GetQueriesByLevelID_v310(AUDIT_QUERY_TENANT, "")
 	if err != nil {

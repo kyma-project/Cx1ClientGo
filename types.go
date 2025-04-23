@@ -312,6 +312,8 @@ type AuditSession struct {
 	ApplicationAssociation bool      `json:"applicationAssociation"`
 	Status                 string    `json:"status"`
 	Value                  []string  `json:"value"`
+	QueryFilters           []string  `json:"queryFilters"`
+	Engine                 string    `json:"-"`
 	ProjectID              string    `json:"-"`
 	ApplicationID          string    `json:"-"`
 	ScanID                 string    `json:"-"`
@@ -429,18 +431,33 @@ type IACPreset struct {
 
 type IACQuery struct {
 	QueryID    string
+	Name       string
 	Technology string
-	Family     string
-	IsCustom   bool
+	Group      string
+	Severity   string
+	CWE        int64
+	Level      string
+	LevelID    string
+	Custom     bool
+	Path       string
+	Source     string
 }
-
-type IACQueryFamily struct {
-	Name    string
-	Queries []IACQuery
+type IACQueryGroup struct {
+	Name       string
+	Technology string
+	Queries    []IACQuery
+}
+type IACQueryTechnology struct {
+	Name        string
+	QueryGroups []IACQueryGroup
 }
 
 type IACQueryCollection struct {
-	QueryFamily []IACQueryFamily
+	Technologies []IACQueryTechnology
+}
+
+type QueryCollection interface {
+	GetQueryFamilies(executableOnly bool) []QueryFamily
 }
 
 type OIDCClient struct {
@@ -469,9 +486,9 @@ type Preset struct {
 	Custom             bool          `json:"custom"`
 	IsTenantDefault    bool          `json:"isTenantDefault"`
 	IsMigrated         bool          `json:"isMigrated"`
-	QueryFamilies      []QueryFamily `json:"queries"`
 	Filled             bool          `json:"-"`
 	Engine             string        `json:"-"`
+	QueryFamilies      []QueryFamily `json:"queries"` // this member variable should not be modified, any content changes come from the QueryCollection objects
 }
 
 type Project struct {

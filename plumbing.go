@@ -217,6 +217,10 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 }
 
 func (c Cx1Client) handleRetries(request *http.Request, response *http.Response, err error) (*http.Response, error) {
+	if err == nil || err.Error() == "remote error: tls: user canceled" { // tls: user canceled can be due to proxies
+		return response, nil
+	}
+
 	delay := c.retryDelay
 	attempt := 1
 	for attempt <= c.maxRetries && ((response.StatusCode >= 500 && response.StatusCode < 600) || isRetryableError(err)) {
@@ -232,10 +236,6 @@ func (c Cx1Client) handleRetries(request *http.Request, response *http.Response,
 }
 
 func isRetryableError(err error) bool {
-	if err == nil || err.Error() == "remote error: tls: user canceled" { // tls: user canceled can be due to proxies
-		return false
-	}
-
 	// Check for network errors
 	var netErr net.Error
 	if errors.As(err, &netErr) {
@@ -317,7 +317,7 @@ func parseJWT(jwtToken string) (claims Cx1Claims, err error) {
 	}
 
 	if len(claims.TenantID) > 36 {
-		claims.TenantID = claims.TenantID[:36]
+		claims.TenantID = claims.TenantID[len(claims.TenantID)-36:]
 	}
 
 	return

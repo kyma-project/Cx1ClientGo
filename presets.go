@@ -7,9 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 // Presets
@@ -131,7 +128,6 @@ func (c Cx1Client) GetPresetByName(engine, name string) (Preset, error) {
 
 func (c Cx1Client) GetPresetByID(engine, id string) (Preset, error) {
 	var preset Preset
-
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets/%v", engine, id), nil, nil)
 	if err != nil {
 		return preset, fmt.Errorf("failed to get preset %v: %s", id, err)
@@ -153,6 +149,47 @@ func (c Cx1Client) GetIACPresetByID(id string) (Preset, error) {
 	return c.GetPresetByID("iac", id)
 }
 
+// this will return a list of queries that can be added to a preset, meaning only executable queries
+func (c Cx1Client) GetSASTPresetQueries() (SASTQueryCollection, error) {
+	collection := SASTQueryCollection{}
+	querytree, err := c.getPresetQueries("sast")
+	if err != nil {
+		return collection, err
+	}
+
+	collection.AddQueryTree(&querytree, "", "", true)
+	return collection, nil
+}
+
+func (c Cx1Client) GetIACPresetQueries() (IACQueryCollection, error) {
+	collection := IACQueryCollection{}
+	querytree, err := c.getPresetQueries("iac")
+	if err != nil {
+		return collection, err
+	}
+
+	collection.AddQueryTree(&querytree, "", "")
+	return collection, nil
+}
+
+func (c Cx1Client) getPresetQueries(engine string) ([]AuditQueryTree, error) {
+	families, err := c.GetQueryFamilies(engine)
+	querytree := []AuditQueryTree{}
+	if err != nil {
+		return querytree, err
+	}
+
+	for _, fam := range families {
+		tree, err := c.getQueryFamilyContents(engine, fam)
+		if err != nil {
+			return querytree, err
+		}
+		querytree = append(querytree, tree...)
+	}
+
+	return querytree, nil
+}
+
 func (c Cx1Client) GetIACQueryFamilies() ([]string, error) {
 	return c.GetQueryFamilies("iac")
 }
@@ -172,12 +209,12 @@ func (c Cx1Client) GetQueryFamilies(engine string) ([]string, error) {
 
 func (c Cx1Client) GetIACQueryFamilyContents(family string) (IACQueryCollection, error) {
 	collection := IACQueryCollection{}
-	_, err := c.getQueryFamilyContents("iac", family)
+	tree, err := c.getQueryFamilyContents("iac", family)
 	if err != nil {
 		return collection, err
 	}
 
-	//collection.AddQueryTree(&tree)
+	collection.AddQueryTree(&tree, "", "")
 
 	return collection, nil
 }
@@ -188,7 +225,7 @@ func (c Cx1Client) GetSASTQueryFamilyContents(family string) (SASTQueryCollectio
 		return collection, err
 	}
 
-	collection.AddQueryTree(&tree)
+	collection.AddQueryTree(&tree, "", "", false)
 
 	return collection, nil
 }
@@ -226,22 +263,8 @@ func (c Cx1Client) GetPresetContents(p *Preset) error {
 	if err != nil {
 		return err
 	}
-	*p = preset
+	p.QueryFamilies = preset.QueryFamilies
 	return nil
-}
-
-func (p Preset) GetSASTQueryCollection(queries SASTQueryCollection) SASTQueryCollection {
-	coll := SASTQueryCollection{}
-
-	for _, fam := range p.QueryFamilies {
-		for _, qid := range fam.QueryIDs {
-			u, _ := strconv.ParseUint(qid, 0, 64)
-			if query := queries.GetQueryByLevelAndID(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, u); query != nil && query.IsExecutable {
-				coll.AddQuery(*query)
-			}
-		}
-	}
-	return coll
 }
 
 /*
@@ -269,103 +292,84 @@ func (c Cx1Client) GetAllSASTPresets() ([]Preset, error) {
 
 func (c Cx1Client) CreateSASTPreset(name, description string, collection SASTQueryCollection) (Preset, error) {
 	c.logger.Debugf("Creating preset %v for sast", name)
-	var preset Preset
 
 	if len(description) > 60 {
 		c.logger.Warn("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 
-	type queriesFamilyBody struct {
-		FamilyName string   `json:"familyName"`
-		QueryIDs   []string `json:"queryIds"`
+	queryFamilies := collection.GetQueryFamilies(true)
+
+	presetID, err := c.CreatePreset("sast", name, description, queryFamilies)
+	if err != nil {
+		return Preset{}, err
+	}
+	u, _ := strconv.ParseUint(presetID, 10, 64)
+	return c.GetSASTPresetByID(u)
+}
+
+func (c Cx1Client) CreateIACPreset(name, description string, collection IACQueryCollection) (Preset, error) {
+	c.logger.Debugf("Creating preset %v for iac", name)
+
+	if len(description) > 60 {
+		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		description = description[:60]
 	}
 
-	var queryFamilies []queriesFamilyBody
-	for lid := range collection.QueryLanguages {
-		foundFamily := false
-		for id := range queryFamilies {
-			if strings.EqualFold(queryFamilies[id].FamilyName, collection.QueryLanguages[lid].Name) {
-				foundFamily = true
+	queryFamilies := collection.GetQueryFamilies(true) // true parameter unused for IAC
 
-				for gid := range collection.QueryLanguages[lid].QueryGroups {
-					for qid := range collection.QueryLanguages[lid].QueryGroups[gid].Queries {
-						queryId := fmt.Sprintf("%d", collection.QueryLanguages[lid].QueryGroups[gid].Queries[qid].QueryID)
+	presetID, err := c.CreatePreset("iac", name, description, queryFamilies)
+	if err != nil {
+		return Preset{}, err
+	}
+	return c.GetIACPresetByID(presetID)
+}
 
-						if !slices.Contains(queryFamilies[id].QueryIDs, queryId) {
-							queryFamilies[id].QueryIDs = append(queryFamilies[id].QueryIDs, queryId)
-						}
-					}
-				}
-				break
-			}
-		}
-		if !foundFamily {
-			newFam := queriesFamilyBody{
-				FamilyName: collection.QueryLanguages[lid].Name,
-			}
-			for gid := range collection.QueryLanguages[lid].QueryGroups {
-				for qid := range collection.QueryLanguages[lid].QueryGroups[gid].Queries {
-					queryId := fmt.Sprintf("%d", collection.QueryLanguages[lid].QueryGroups[gid].Queries[qid].QueryID)
+func (c Cx1Client) CreatePreset(engine, name, description string, families []QueryFamily) (string, error) {
+	body := map[string]interface{}{
+		"name":        name,
+		"description": description,
+		"queries":     families,
+	}
 
-					if !slices.Contains(newFam.QueryIDs, queryId) {
-						newFam.QueryIDs = append(newFam.QueryIDs, queryId)
-					}
-				}
-			}
-			queryFamilies = append(queryFamilies, newFam)
-		}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/preset-manager/%v/presets", engine), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return "", err
+	}
+
+	var responseStruct struct {
+		Id      string `json:"id"`
+		Message string `json:"message"`
+	}
+
+	err = json.Unmarshal(response, &responseStruct)
+	return responseStruct.Id, err
+}
+
+func (c Cx1Client) UpdateSASTPreset(preset Preset) error {
+	c.logger.Debugf("Saving sast preset %v", preset.Name)
+	return c.UpdatePreset("sast", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
+}
+func (c Cx1Client) UpdateIACPreset(preset Preset) error {
+	c.logger.Debugf("Saving iac preset %v", preset.Name)
+	return c.UpdatePreset("iac", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
+}
+
+func (c Cx1Client) UpdatePreset(engine, id, name, description string, families []QueryFamily) error {
+	if len(description) > 60 {
+		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		description = description[:60]
 	}
 
 	body := map[string]interface{}{
 		"name":        name,
 		"description": description,
-		"queries":     queryFamilies,
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return preset, err
-	}
-
-	response, err := c.sendRequest(http.MethodPost, "/preset-manager/sast/presets", bytes.NewReader(jsonBody), nil)
-	if err != nil {
-		return preset, err
-	}
-
-	var responseStruct struct {
-		Id      uint64 `json:"id,string"`
-		Message string `json:"message"`
-	}
-
-	err = json.Unmarshal(response, &responseStruct)
-	if err != nil {
-		return preset, err
-	}
-
-	return c.GetSASTPresetByID(responseStruct.Id)
-}
-
-/*
-func (c Cx1Client) UpdatePreset(preset *SASTPreset) error {
-	c.logger.Debugf("Saving sast preset %v", preset.Name)
-
-	qidstr := make([]string, len(preset.QueryIDs))
-
-	for id, q := range preset.QueryIDs {
-		qidstr[id] = fmt.Sprintf("%d", q)
-	}
-
-	description := preset.Description
-	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
-		description = description[:60]
-	}
-
-	body := map[string]interface{}{
-		"name":        preset.Name,
-		"description": description,
-		"queryIds":    qidstr,
+		"queries":     families,
 	}
 
 	json, err := json.Marshal(body)
@@ -373,10 +377,9 @@ func (c Cx1Client) UpdatePreset(preset *SASTPreset) error {
 		return err
 	}
 
-	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/preset-manager/sast/presets/%v", preset.PresetID), bytes.NewReader(json), nil)
+	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/preset-manager/%v/presets/%v", engine, id), bytes.NewReader(json), nil)
 	return err
 }
-*/
 
 func (c Cx1Client) DeletePreset(preset Preset) error {
 	c.logger.Debugf("Removing preset %v", preset.Name)
@@ -391,4 +394,41 @@ func (c Cx1Client) DeletePreset(preset Preset) error {
 func (c Cx1Client) PresetLink(p *Preset) string {
 	c.depwarn("PresetLink", "will be removed")
 	return fmt.Sprintf("%v/resourceManagement/presets?presetId=%v", c.baseUrl, p.PresetID)
+}
+
+func (p Preset) GetSASTQueryCollection(queries SASTQueryCollection) SASTQueryCollection {
+	coll := SASTQueryCollection{}
+	if p.Engine != "sast" {
+		return coll
+	}
+
+	for _, fam := range p.QueryFamilies {
+		for _, qid := range fam.QueryIDs {
+			u, _ := strconv.ParseUint(qid, 0, 64)
+			if query := queries.GetQueryByLevelAndID(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, u); query != nil && query.IsExecutable {
+				coll.AddQuery(*query)
+			}
+		}
+	}
+	return coll
+}
+
+func (p Preset) GetIACQueryCollection(queries IACQueryCollection) IACQueryCollection {
+	coll := IACQueryCollection{}
+	if p.Engine != "iac" {
+		return coll
+	}
+
+	for _, fam := range p.QueryFamilies {
+		for _, qid := range fam.QueryIDs {
+			if query := queries.GetQueryByLevelAndID(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, qid); query != nil {
+				coll.AddQuery(*query)
+			}
+		}
+	}
+	return coll
+}
+
+func (p *Preset) UpdateQueries(collection QueryCollection) {
+	p.QueryFamilies = collection.GetQueryFamilies(true)
 }

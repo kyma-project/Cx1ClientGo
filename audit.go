@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -141,23 +140,30 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 		return session, err
 	}
 
-	if session.Data.Status != "ALLOCATED" {
-		return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
-	}
+	if engine == "sast" {
 
-	languageResponse, err := c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
-
-	if err != nil {
-		c.logger.Errorf("Error while creating audit engine: %s", err)
-		return session, err
-	}
-	if languages, ok := languageResponse.([]interface{}); ok {
-		for _, lang := range languages {
-			session.Languages = append(session.Languages, lang.(string))
+		if session.Data.Status != "ALLOCATED" {
+			return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
 		}
 
-	} else {
-		return session, fmt.Errorf("failed to get languages from response: %v", languageResponse)
+		languageResponse, err := c.AuditRequestStatusPollingByID(&session, session.Data.RequestID)
+
+		if err != nil {
+			c.logger.Errorf("Error while creating audit engine: %s", err)
+			return session, err
+		}
+		if languages, ok := languageResponse.([]interface{}); ok {
+			for _, lang := range languages {
+				session.Languages = append(session.Languages, lang.(string))
+			}
+
+		} else {
+			return session, fmt.Errorf("failed to get languages from response: %v", languageResponse)
+		}
+	} else if engine == "iac" {
+		if session.Data.Status != "RUNNING" {
+			return session, fmt.Errorf("failed to start audit session: %v", session.Data.Status)
+		}
 	}
 
 	session.ProjectID = projectId
@@ -338,6 +344,10 @@ func (q AuditQuery) String() string {
 }
 
 func (c Cx1Client) GetAuditQueryByKey(auditSession *AuditSession, key string) (SASTQuery, error) {
+	c.depwarn("GetAuditQueryByKey", "GetAuditSASTQueryByKey")
+	return c.GetAuditSASTQueryByKey(auditSession, key)
+}
+func (c Cx1Client) GetAuditSASTQueryByKey(auditSession *AuditSession, key string) (SASTQuery, error) {
 	c.logger.Debugf("Get audit query by key: %v", key)
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/queries/%v", auditSession.ID, url.QueryEscape(key)), nil, nil)
@@ -351,7 +361,7 @@ func (c Cx1Client) GetAuditQueryByKey(auditSession *AuditSession, key string) (S
 		return SASTQuery{}, err
 	}
 
-	query := q.ToQuery()
+	query := q.ToSASTQuery()
 	switch query.Level {
 	case AUDIT_QUERY_APPLICATION:
 		query.LevelID = auditSession.ApplicationID
@@ -375,11 +385,38 @@ QueryTypeProject(), project.ProjectID : when retrieving project-level queries
 
 The resulting array of queries should be merged into a QueryCollection object returned by the GetQueries function.
 */
-func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, levelId string) ([]SASTQuery, error) {
+func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, levelId string) (SASTQueryCollection, error) {
+	c.depwarn("GetAuditQueriesByLevelID", "GetAuditSASTQueriesByLevelID")
+	return c.GetAuditSASTQueriesByLevelID(auditSession, level, levelId)
+}
+func (c Cx1Client) GetAuditSASTQueriesByLevelID(auditSession *AuditSession, level, levelId string) (SASTQueryCollection, error) {
 	c.logger.Debugf("Get all queries for %v %v", level, levelId)
 
+	collection := SASTQueryCollection{}
+	querytree, err := c.GetAuditQueryTreeByLevelID(auditSession, level, levelId)
+	if err != nil {
+		return collection, err
+	}
+
+	collection.AddQueryTree(&querytree, auditSession.ApplicationID, levelId, false)
+
+	return collection, nil
+}
+func (c Cx1Client) GetAuditIACQueriesByLevelID(auditSession *AuditSession, level, levelId string) (IACQueryCollection, error) {
+	c.logger.Debugf("Get all queries for %v %v", level, levelId)
+
+	collection := IACQueryCollection{}
+	querytree, err := c.GetAuditQueryTreeByLevelID(auditSession, level, levelId)
+	if err != nil {
+		return collection, err
+	}
+
+	collection.AddQueryTree(&querytree, auditSession.ApplicationID, levelId)
+
+	return collection, nil
+}
+func (c Cx1Client) GetAuditQueryTreeByLevelID(auditSession *AuditSession, level, levelId string) ([]AuditQueryTree, error) {
 	var url string
-	var queries []SASTQuery
 	var querytree []AuditQueryTree
 	switch level {
 	case AUDIT_QUERY_TENANT:
@@ -387,96 +424,16 @@ func (c Cx1Client) GetAuditQueriesByLevelID(auditSession *AuditSession, level, l
 	case AUDIT_QUERY_PROJECT:
 		url = fmt.Sprintf("/query-editor/sessions/%v/queries?projectId=%v", auditSession.ID, levelId)
 	default:
-		return queries, fmt.Errorf("invalid level %v, options are currently: %v or %v", level, AUDIT_QUERY_TENANT, AUDIT_QUERY_PROJECT)
+		return querytree, fmt.Errorf("invalid level %v, options are currently: %v or %v", level, AUDIT_QUERY_TENANT, AUDIT_QUERY_PROJECT)
 	}
 
 	response, err := c.sendRequest(http.MethodGet, url, nil, nil)
 	if err != nil {
-		return queries, err
+		return querytree, err
 	}
 
 	err = json.Unmarshal(response, &querytree)
-	if err != nil {
-		return queries, err
-	}
-
-	return treeToSASTQueries(&querytree), nil
-}
-
-func treeToSASTQueries(querytree *[]AuditQueryTree) []SASTQuery {
-	var queries []SASTQuery
-	for _, lang := range *querytree {
-		for _, level := range lang.Children {
-			isCustom := true
-			if level.Title == "Cx" {
-				isCustom = false
-			}
-			for _, group := range level.Children {
-				for _, query := range group.Children {
-					var qlevelId string
-					switch level.Title {
-					case AUDIT_QUERY_PRODUCT:
-						qlevelId = AUDIT_QUERY_PRODUCT
-
-					case AUDIT_QUERY_TENANT:
-						qlevelId = AUDIT_QUERY_TENANT
-					default:
-						//c.logger.Errorf("Unknown query level: %v", level.Title)
-						qlevelId = level.Title
-					}
-
-					qid, _ := strconv.ParseUint(query.Key, 10, 64)
-
-					query := SASTQuery{
-						QueryID:            qid,
-						Level:              level.Title,
-						LevelID:            qlevelId,
-						Path:               fmt.Sprintf("queries/%v/%v/%v/%v.cs", lang.Title, group.Title, query.Title, query.Title),
-						Modified:           "",
-						Source:             "",
-						Name:               query.Title,
-						Group:              group.Title,
-						Language:           lang.Title,
-						Severity:           GetSeverity(GetSeverityID(query.Data.Severity)),
-						CweID:              0,
-						IsExecutable:       false,
-						QueryDescriptionId: 0,
-						Custom:             isCustom,
-						EditorKey:          query.Key,
-						SastID:             0,
-					}
-					queries = append(queries, query)
-				}
-			}
-		}
-	}
-
-	return queries
-}
-
-func treeToIACQueries(querytree *[]AuditQueryTree) []IACQuery {
-	var queries []IACQuery
-	for _, tech := range *querytree {
-		for _, level := range tech.Children {
-			isCustom := true
-			if level.Title == "Cx" {
-				isCustom = false
-			}
-			for _, family := range level.Children {
-				for _, query := range family.Children {
-					queries = append(queries, IACQuery{
-						QueryID:    query.Key,
-						Family:     family.Title,
-						Technology: tech.Title,
-						IsCustom:   isCustom,
-					})
-
-				}
-			}
-		}
-	}
-
-	return queries
+	return querytree, err
 }
 
 func (c Cx1Client) DeleteQueryOverrideByKey(auditSession *AuditSession, queryKey string) error {
@@ -498,6 +455,10 @@ func (c Cx1Client) DeleteQueryOverrideByKey(auditSession *AuditSession, queryKey
 }
 
 func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string, baseQuery *SASTQuery) (SASTQuery, error) {
+	c.depwarn("CreateQueryOverride", "CreateSASTQueryOverride")
+	return c.CreateSASTQueryOverride(auditSession, level, baseQuery)
+}
+func (c Cx1Client) CreateSASTQueryOverride(auditSession *AuditSession, level string, baseQuery *SASTQuery) (SASTQuery, error) {
 	var newQuery SASTQuery
 	if strings.EqualFold(level, AUDIT_QUERY_APPLICATION) {
 		level = AUDIT_QUERY_APPLICATION
@@ -513,11 +474,6 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	}
 
 	c.logger.Debugf("Create new override of query %v at level %v under %v", baseQuery.String(), level, auditSession.String())
-
-	/*baseQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
-	if err != nil {
-		return newQuery, err
-	}*/
 
 	type NewQuery struct {
 		CWE         int64  `json:"cwe"`
@@ -565,7 +521,7 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 	}
 
 	responseValue := data.(map[string]interface{})
-	newQuery, err = c.GetAuditQueryByKey(auditSession, responseValue["id"].(string))
+	newQuery, err = c.GetAuditSASTQueryByKey(auditSession, responseValue["id"].(string))
 	if err != nil {
 		return newQuery, err
 	}
@@ -589,6 +545,10 @@ func (c Cx1Client) CreateQueryOverride(auditSession *AuditSession, level string,
 }
 
 func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, QueryFailure, error) {
+	c.depwarn("CreateNewQuery", "CreateNewSASTQuery")
+	return c.CreateNewSASTQuery(auditSession, query)
+}
+func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, QueryFailure, error) {
 	c.logger.Debugf("Creating new query %v under %v", query.String(), auditSession.String())
 	type NewQuery struct {
 		Name        string `json:"name"`
@@ -631,7 +591,7 @@ func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query SASTQuery) (
 
 	queryKey := data.(map[string]interface{})["id"].(string)
 
-	return c.UpdateQuerySourceByKey(auditSession, queryKey, query.Source)
+	return c.UpdateSASTQuerySourceByKey(auditSession, queryKey, query.Source)
 }
 
 /*
@@ -640,6 +600,10 @@ Changes to CWE, description, and other fields will not take effect.
 Also, the data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
 */
 func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (SASTQuery, error) {
+	c.depwarn("UpdateQueryMetadataByKey", "UpdateSASTQueryMetadataByKey")
+	return c.UpdateSASTQueryMetadataByKey(auditSession, queryKey, metadata)
+}
+func (c Cx1Client) UpdateSASTQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (SASTQuery, error) {
 	c.logger.Debugf("Updating query metadata by key: %v", queryKey)
 	jsonBody, err := json.Marshal(metadata)
 	if err != nil {
@@ -662,10 +626,14 @@ func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey
 		return SASTQuery{}, err
 	}
 
-	return c.GetAuditQueryByKey(auditSession, queryKey)
+	return c.GetAuditSASTQueryByKey(auditSession, queryKey)
 }
 
 func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *SASTQuery, metadata AuditQueryMetadata) (SASTQuery, error) {
+	c.depwarn("UpdateQueryMetadata", "UpdateSASTQueryMetadata")
+	return c.UpdateSASTQueryMetadata(auditSession, query, metadata)
+}
+func (c Cx1Client) UpdateSASTQueryMetadata(auditSession *AuditSession, query *SASTQuery, metadata AuditQueryMetadata) (SASTQuery, error) {
 	if query.EditorKey == "" {
 		return SASTQuery{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
@@ -681,6 +649,10 @@ func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *SASTQu
 The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQuerySource" wrapper instead to address that.
 */
 func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, QueryFailure, error) {
+	c.depwarn("UpdateQuerySourceByKey", "UpdateSASTQuerySourceByKey")
+	return c.UpdateSASTQuerySourceByKey(auditSession, queryKey, source)
+}
+func (c Cx1Client) UpdateSASTQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, QueryFailure, error) {
 	c.logger.Debugf("Updating query source by key: %v", queryKey)
 	var newQuery SASTQuery
 	var queryFail QueryFailure
@@ -731,18 +703,22 @@ func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, 
 		}
 	}
 
-	newAuditQuery, err := c.GetAuditQueryByKey(auditSession, queryKey)
+	newAuditQuery, err := c.GetAuditSASTQueryByKey(auditSession, queryKey)
 	return newAuditQuery, queryFail, err
 
 }
 
 // convenience/wrapper function
 func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *SASTQuery) (QueryFailure, error) {
+	c.depwarn("UpdateQuery", "UpdateSASTQuery")
+	return c.UpdateSASTQuery(auditSession, query)
+}
+func (c Cx1Client) UpdateSASTQuery(auditSession *AuditSession, query *SASTQuery) (QueryFailure, error) {
 	if query.EditorKey == "" {
 		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 
-	_, queryFail, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, query.Source)
+	_, queryFail, err := c.UpdateSASTQuerySourceByKey(auditSession, query.EditorKey, query.Source)
 	if err != nil {
 		return queryFail, err
 	}
@@ -752,11 +728,11 @@ func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *SASTQuery) (Qu
 	return queryFail, err
 }
 
-func (c Cx1Client) UpdateQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (SASTQuery, QueryFailure, error) {
+func (c Cx1Client) UpdateSASTQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (SASTQuery, QueryFailure, error) {
 	if query.EditorKey == "" {
 		return SASTQuery{}, QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
-	newQuery, queryFail, err := c.UpdateQuerySourceByKey(auditSession, query.EditorKey, source)
+	newQuery, queryFail, err := c.UpdateSASTQuerySourceByKey(auditSession, query.EditorKey, source)
 	if err != nil {
 		return SASTQuery{}, queryFail, err
 	}
@@ -824,6 +800,10 @@ func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey
 This will test if the code compiles and will not update the source code in Cx1 nor in the query object
 */
 func (c Cx1Client) ValidateQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
+	c.depwarn("ValidateQuerySource", "ValidateSASTQuerySource")
+	return c.ValidateSASTQuerySource(auditSession, query, source)
+}
+func (c Cx1Client) ValidateSASTQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
 	if query.EditorKey == "" {
 		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
@@ -891,13 +871,17 @@ func (c Cx1Client) RunQueryByKey(auditSession *AuditSession, queryKey, source st
 This will test if the code compiles and will not update the source code in Cx1 nor in the query object
 */
 func (c Cx1Client) RunQuery(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
+	c.depwarn("RunQuery", "RunSASTQuery")
+	return c.RunSASTQuery(auditSession, query, source)
+}
+func (c Cx1Client) RunSASTQuery(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
 	if query.EditorKey == "" {
 		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 	return c.RunQueryByKey(auditSession, query.EditorKey, source)
 }
 
-func (q AuditQuery) ToQuery() SASTQuery {
+func (q AuditQuery) ToSASTQuery() SASTQuery {
 	return SASTQuery{
 		QueryID:            0,
 		Level:              q.Level,
@@ -973,14 +957,22 @@ func (s AuditSession) HasLanguage(language string) bool {
 }
 
 func (s AuditSession) String() string {
+	var languages []string
+
+	if s.Engine == "sast" {
+		languages = s.Languages
+	} else {
+		languages = s.QueryFilters
+	}
+
 	age := time.Since(s.CreatedAt)
 	since_refresh := time.Since(s.LastHeartbeat)
 	if s.ProjectID == "" && s.ApplicationID == "" {
-		return fmt.Sprintf("Audit Session %v (Tenant - %v) [%v/%v]", ShortenGUID(s.ID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("Audit Session %v (Tenant - %v) [%v/%v]", ShortenGUID(s.ID), strings.Join(languages, ","), age.String(), since_refresh.String())
 	} else if s.ApplicationID == "" {
-		return fmt.Sprintf("Audit Session %v (Project %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("Audit Session %v (Project %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(languages, ","), age.String(), since_refresh.String())
 	} else {
-		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(s.Languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("Audit Session %v (Project %v/Application %v - %v) [%v/%v]", ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(languages, ","), age.String(), since_refresh.String())
 	}
 }
 
