@@ -338,7 +338,7 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 	err := dec.Decode(&resultResponse)
 	if err != nil {
 		c.logger.Tracef("Failed while parsing response: %s", err)
-		c.logger.Tracef("Response contents: %s", string(response))
+		//c.logger.Tracef("Response contents: %s", string(response))
 		return resultResponse.TotalCount, ResultSet, err
 	}
 	//c.logger.Debugf("Retrieved %d results", resultResponse.TotalCount)

@@ -54,12 +54,12 @@ func (q AuditQuery_v312) ToQuery() SASTQuery {
 	}
 }
 
-func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]SASTQuery, error) {
+func (c Cx1Client) GetQueriesByLevelID(level, levelId string) (SASTQueryCollection, error) {
 	c.depwarn("GetQueriesByLevelID", "GetAuditQueriesByLevelID")
 	c.logger.Debugf("Get all queries for %v", level)
 
 	var url string
-
+	collection := SASTQueryCollection{}
 	var queries_v312 []AuditQuery_v312
 	var queries []SASTQuery
 	switch level {
@@ -68,17 +68,17 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]SASTQuery, erro
 	case AUDIT_QUERY_PROJECT:
 		url = fmt.Sprintf("/cx-audit/queries?projectId=%v", levelId)
 	default:
-		return queries, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
+		return collection, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
 	}
 
 	response, err := c.sendRequest(http.MethodGet, url, nil, nil)
 	if err != nil {
-		return queries, err
+		return collection, err
 	}
 
 	err = json.Unmarshal(response, &queries_v312)
 	if err != nil {
-		return queries, err
+		return collection, err
 	}
 
 	applicationId := ""
@@ -93,12 +93,12 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]SASTQuery, erro
 			if applicationId == "" {
 				project, err := c.GetProjectByID(levelId)
 				if err != nil {
-					return queries, fmt.Errorf("failed to retrieve project with ID %v", levelId)
+					return collection, fmt.Errorf("failed to retrieve project with ID %v", levelId)
 				}
 				if len(project.Applications) == 0 {
-					return queries, fmt.Errorf("project %v has an application-level query defined, but has no application associated", project.String())
+					return collection, fmt.Errorf("project %v has an application-level query defined, but has no application associated", project.String())
 				} else if len(project.Applications) > 1 {
-					return queries, fmt.Errorf("project %v has an application-level query defined, but has multiple application associated", project.String())
+					return collection, fmt.Errorf("project %v has an application-level query defined, but has multiple application associated", project.String())
 				}
 				applicationId = project.Applications[0]
 			}
@@ -110,19 +110,24 @@ func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]SASTQuery, erro
 		queries = append(queries, queries_v312[id].ToQuery())
 	}
 
-	return queries, nil
+	collection.AddQueries(&queries)
+
+	return collection, nil
 }
 
 func (c Cx1Client) GetQueries() (SASTQueryCollection, error) {
+	c.depwarn("GetQueries", "Get(SAST|IAC)QueryCollection")
 	return c.GetSASTQueryCollection()
 }
 
-func (c Cx1Client) GetPresetQueries() ([]SASTQuery, error) {
+func (c Cx1Client) GetPresetQueries() (SASTQueryCollection, error) {
+	c.depwarn("GetPresetQueries", "Get(SAST|IAC)PresetQueries")
 	queries := []SASTQuery{}
 
+	collection := SASTQueryCollection{}
 	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
 	if err != nil {
-		return queries, err
+		return collection, err
 	}
 
 	err = json.Unmarshal(response, &queries)
@@ -141,8 +146,9 @@ func (c Cx1Client) GetPresetQueries() ([]SASTQuery, error) {
 			queries[i].LevelID = c.QueryTypeProduct()
 		}
 	}
+	collection.AddQueries(&queries)
 
-	return queries, err
+	return collection, err
 }
 
 func (c Cx1Client) GetQueryMappings() (map[uint64]uint64, error) {
@@ -243,6 +249,24 @@ func (q *SASTQuery) MergeQuery(nq SASTQuery) {
 	}
 }
 
+func (q *IACQuery) MergeQuery(nq IACQuery) {
+	if q.QueryID == "" && nq.QueryID != "" {
+		q.QueryID = nq.QueryID
+	}
+	if q.Path == "" && nq.Path != "" {
+		q.Path = nq.Path
+	}
+	if q.Level == "" && nq.Level != "" {
+		q.Level = nq.Level
+	}
+	if q.LevelID == "" && nq.LevelID != "" {
+		q.LevelID = nq.LevelID
+	}
+	if q.Source == "" && nq.Source != "" {
+		q.Source = nq.Source
+	}
+}
+
 func (q SASTQuery) StringDetailed() string {
 	var scope string
 	switch q.Level {
@@ -259,6 +283,22 @@ func (q SASTQuery) StringDetailed() string {
 func (q SASTQuery) String() string {
 	return fmt.Sprintf("[%d] %v -> %v -> %v", q.QueryID, q.Language, q.Group, q.Name)
 }
+func (q IACQuery) String() string {
+	return fmt.Sprintf("[%v] %v -> %v -> %v", ShortenGUID(q.QueryID), q.Technology, q.Group, q.Name)
+}
+func (q IACQuery) StringDetailed() string {
+	var scope string
+	switch q.Level {
+	case AUDIT_QUERY_PRODUCT:
+		scope = "Product"
+	case AUDIT_QUERY_TENANT:
+		scope = "Tenant"
+	default:
+		scope = fmt.Sprintf("%v %v", q.Level, ShortenGUID(q.LevelID))
+	}
+	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v]", scope, q.Technology, q.Group, q.Name, q.Severity, ShortenGUID(q.QueryID))
+}
+
 func (q SASTQuery) GetMetadata() AuditQueryMetadata {
 	return AuditQueryMetadata{
 		Cwe:             q.CweID,

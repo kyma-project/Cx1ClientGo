@@ -14,7 +14,7 @@ import (
 
 func main() {
 	logger := logrus.New()
-	logger.SetLevel(logrus.TraceLevel)
+	logger.SetLevel(logrus.InfoLevel)
 	myformatter := &easy.Formatter{}
 	myformatter.TimestampFormat = "2006-01-02 15:04:05.000"
 	myformatter.LogFormat = "[%lvl%][%time%] %msg%\n"
@@ -32,13 +32,16 @@ func main() {
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
-	transport := &http.Transport{}
-	transport.Proxy = http.ProxyURL(proxyURL)
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
 	httpClient := &http.Client{}
-	//httpClient.Transport = transport
+
+	if true {
+		proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+		transport := &http.Transport{}
+		transport.Proxy = http.ProxyURL(proxyURL)
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+		httpClient.Transport = transport
+	}
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -66,10 +69,11 @@ func main() {
 		}
 		logger.Infof("Running a new scan")
 
-		sastScanConfig := Cx1ClientGo.ScanConfiguration{
-			ScanType: "sast",
-		}
-		lastscan, err = cx1client.ScanProjectGitByID(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba", "master", []Cx1ClientGo.ScanConfiguration{sastScanConfig}, map[string]string{})
+		scanConfigSet := Cx1ClientGo.ScanConfigurationSet{}
+		scanConfigSet.AddConfig("sast", "", "")
+		scanConfigSet.AddConfig("kics", "", "")
+
+		lastscan, err = cx1client.ScanProjectGitByID(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba", "master", scanConfigSet.Configurations, map[string]string{})
 		if err != nil {
 			logger.Fatalf("Failed to run a new scan: %s", err)
 		}
@@ -82,6 +86,12 @@ func main() {
 		}
 	}
 
+	//makeSASTQueries(cx1client, logger, project, lastscan)
+	makeIACQueries(cx1client, logger, project, lastscan)
+
+}
+
+func makeSASTQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, project Cx1ClientGo.Project, lastscan Cx1ClientGo.Scan) {
 	logger.Infof("Starting Web-Audit session for last successful scan %v", lastscan.String())
 
 	session, err := cx1client.GetAuditSessionByID("sast", project.ProjectID, lastscan.ScanID)
@@ -97,17 +107,17 @@ func main() {
 		}
 	}()
 
-	qc, err := cx1client.GetQueries()
+	qc, err := cx1client.GetSASTQueryCollection()
 	if err != nil {
 		logger.Fatalf("Error getting the query collection: %s", err)
 	}
 
-	aq, err := cx1client.GetAuditQueriesByLevelID(&session, cx1client.QueryTypeProject(), project.ProjectID)
+	aq, err := cx1client.GetAuditSASTQueriesByLevelID(&session, cx1client.QueryTypeProject(), project.ProjectID)
 	if err != nil {
 		logger.Fatalf("Error getting queries: %s", err)
 	}
 
-	qc.AddQueries(&aq)
+	qc.AddCollection(&aq)
 	cqc := qc.GetCustomQueryCollection()
 
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
@@ -120,42 +130,42 @@ func main() {
 		}
 	}
 
-	corpOverride := newCorpOverride(cx1client, logger, &qc, &session)
+	corpOverride := newSASTCorpOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
 	defer DeleteQuery(cx1client, logger, &session, corpOverride)
 
-	appOverride := newApplicationOverride(cx1client, logger, &qc, &session)
+	appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
 	defer DeleteQuery(cx1client, logger, &session, appOverride)
 
-	projOverride := newProjectOverride(cx1client, logger, &qc, &session)
+	projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
 	defer DeleteQuery(cx1client, logger, &session, projOverride)
 
-	corpQuery := newCorpQuery(cx1client, logger, &qc, &session)
+	corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
 	defer DeleteQuery(cx1client, logger, &session, corpQuery)
 
 	logger.Info("Retrieving an updated list of queries")
-	qc, err = cx1client.GetQueries()
+	qc, err = cx1client.GetSASTQueryCollection()
 	if err != nil {
 		logger.Errorf("Error getting the query collection: %s", err)
 	}
 
-	aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
+	aq, err = cx1client.GetAuditSASTQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
 	if err != nil {
 		logger.Errorf("Error getting queries: %s", err)
 	}
 
-	qc.AddQueries(&aq)
+	qc.AddCollection(&aq)
 	if corpQuery != nil {
 		qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
 	}
@@ -173,7 +183,7 @@ func main() {
 	}
 }
 
-func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.QueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.Query {
+func newSASTCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.SASTQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.SASTQuery {
 	logger.Infof("Creating corp override under session %v", session.ID)
 	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 
@@ -182,13 +192,13 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 		return nil
 	}
 
-	newCorpOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_TENANT, baseQuery)
+	newCorpOverride, err := cx1client.CreateSASTQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_TENANT, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
 	}
 
-	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	updatedQuery, _, err := cx1client.UpdateSASTQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -196,8 +206,8 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 	}
 
 	metadata := newCorpOverride.GetMetadata()
-	metadata.Severity = "Low"
-	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
+	metadata.Severity = "Critical"
+	updatedQuery, err = cx1client.UpdateSASTQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
 	if err != nil {
 		logger.Errorf("Error updating query metadata: %s", err)
 	} else {
@@ -212,7 +222,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 	return &newCorpOverride
 }
 
-func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.QueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.Query {
+func newSASTApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.SASTQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.SASTQuery {
 	logger.Infof("Creating application-level override under session %v", session.ID)
 	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 
@@ -222,13 +232,13 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newApplicationOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_APPLICATION, baseQuery)
+	newApplicationOverride, err := cx1client.CreateSASTQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_APPLICATION, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
 	}
 
-	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
+	updatedQuery, _, err := cx1client.UpdateSASTQuerySourceByKey(session, newApplicationOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -237,7 +247,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 
 	metadata := newApplicationOverride.GetMetadata()
 	metadata.Severity = "Medium"
-	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newApplicationOverride.EditorKey, metadata)
+	updatedQuery, err = cx1client.UpdateSASTQueryMetadataByKey(session, newApplicationOverride.EditorKey, metadata)
 	if err != nil {
 		logger.Errorf("Error updating query metadata: %s", err)
 	} else {
@@ -250,7 +260,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 	return &newApplicationOverride
 }
 
-func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.QueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.Query {
+func newSASTProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.SASTQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.SASTQuery {
 	logger.Infof("Creating project override under session %v", session.ID)
 	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 
@@ -260,13 +270,13 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newProjectOverride, err := cx1client.CreateQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_PROJECT, baseQuery)
+	newProjectOverride, err := cx1client.CreateSASTQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_PROJECT, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
 	}
 
-	updatedQuery, _, err := cx1client.UpdateQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
+	updatedQuery, _, err := cx1client.UpdateSASTQuerySourceByKey(session, newProjectOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -275,7 +285,7 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 
 	metadata := newProjectOverride.GetMetadata()
 	metadata.Severity = "High"
-	updatedQuery, err = cx1client.UpdateQueryMetadataByKey(session, newProjectOverride.EditorKey, metadata)
+	updatedQuery, err = cx1client.UpdateSASTQueryMetadataByKey(session, newProjectOverride.EditorKey, metadata)
 	if err != nil {
 		logger.Errorf("Error updating query metadata: %s", err)
 	} else {
@@ -288,9 +298,9 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 	return &newProjectOverride
 }
 
-func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.QueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.Query {
+func newSASTCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.SASTQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.SASTQuery {
 	logger.Infof("Creating corp query under session %v", session.ID)
-	NewQuery := Cx1ClientGo.Query{
+	NewQuery := Cx1ClientGo.SASTQuery{
 		Source:             "result = Find_Strings().FindByName(\"test\"); // new corp query",
 		Name:               "Test_String",
 		Group:              "Java_Spring",
@@ -302,7 +312,7 @@ func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *C
 	}
 
 	cx1client.AuditSessionKeepAlive(session)
-	newCorpQuery, _, err := cx1client.CreateNewQuery(session, NewQuery)
+	newCorpQuery, _, err := cx1client.CreateNewSASTQuery(session, NewQuery)
 	if err != nil {
 		logger.Errorf("Failed to create new corp query: %s", err)
 		return nil
@@ -315,7 +325,7 @@ func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *C
 	return &newCorpQuery
 }
 
-func DeleteQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.Query) {
+func DeleteQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.SASTQuery) {
 	if query != nil {
 		logger.Infof("Deleting custom query: %v", query.StringDetailed())
 		err := cx1client.DeleteQueryOverrideByKey(session, query.EditorKey)
@@ -323,4 +333,97 @@ func DeleteQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, sessio
 			logger.Errorf("Failed to delete custom query %v: %s", query.StringDetailed(), err)
 		}
 	}
+}
+
+func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, project Cx1ClientGo.Project, lastscan Cx1ClientGo.Scan) {
+	logger.Infof("Starting IAC Web-Audit session for last successful scan %v", lastscan.String())
+
+	session, err := cx1client.GetAuditSessionByID("kics", project.ProjectID, lastscan.ScanID)
+	if err != nil {
+		logger.Fatalf("Error getting an audit session: %s", err)
+	}
+
+	defer func() {
+		logger.Infof("Terminating audit session %v", session.ID)
+		err = cx1client.AuditDeleteSession(&session)
+		if err != nil {
+			logger.Errorf("Failed to terminate audit session: %s", err)
+		}
+	}()
+
+	qc, err := cx1client.GetIACQueryCollection()
+	if err != nil {
+		logger.Fatalf("Error getting the query collection: %s", err)
+	}
+
+	aq, err := cx1client.GetAuditIACQueriesByLevelID(&session, cx1client.QueryTypeProject(), project.ProjectID)
+	if err != nil {
+		logger.Fatalf("Error getting queries: %s", err)
+	}
+
+	qc.AddCollection(&aq)
+	cqc := qc.GetCustomQueryCollection()
+
+	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
+
+	for lid := range cqc.Technologies {
+		for gid := range cqc.Technologies[lid].QueryGroups {
+			for _, q := range cqc.Technologies[lid].QueryGroups[gid].Queries {
+				logger.Info(q.StringDetailed())
+			}
+		}
+	}
+
+	/*corpOverride := newSASTCorpOverride(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteQuery(cx1client, logger, &session, corpOverride)
+
+	appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteQuery(cx1client, logger, &session, appOverride)
+
+	projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteQuery(cx1client, logger, &session, projOverride)
+
+	corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteQuery(cx1client, logger, &session, corpQuery)
+
+	logger.Info("Retrieving an updated list of queries")
+	qc, err = cx1client.GetQueries()
+	if err != nil {
+		logger.Errorf("Error getting the query collection: %s", err)
+	}
+
+	aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
+	if err != nil {
+		logger.Errorf("Error getting queries: %s", err)
+	}
+
+	qc.AddCollection(&aq)
+	if corpQuery != nil {
+		qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
+	}
+
+	cqc = qc.GetCustomQueryCollection()
+
+	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
+
+	for lid := range cqc.QueryLanguages {
+		for gid := range cqc.QueryLanguages[lid].QueryGroups {
+			for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
+				logger.Info(q.StringDetailed())
+			}
+		}
+	}
+	*/
 }
