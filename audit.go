@@ -255,7 +255,10 @@ func (c Cx1Client) AuditRequestStatusPollingByIDWithTimeout(auditSession *AuditS
 }
 
 func (c Cx1Client) AuditSessionKeepAlive(auditSession *AuditSession) error {
-	// TODO: keep track of the last-keepalive and don't spam the server, especially with the polling fix
+	if time.Since(auditSession.LastHeartbeat) < 5*time.Minute {
+		c.logger.Tracef("Audit session last refreshed within 5 minutes ago, skipping")
+		return nil
+	}
 	_, err := c.sendRequest(http.MethodPatch, fmt.Sprintf("/query-editor/sessions/%v", auditSession.ID), nil, nil)
 	if err != nil {
 		return err
