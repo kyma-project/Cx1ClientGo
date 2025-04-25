@@ -11,11 +11,23 @@ import (
 
 func (c Cx1Client) GetSASTQueryCollection() (SASTQueryCollection, error) {
 	//var qc SASTQueryCollection
-	qc, err := c.GetSASTPresetQueries()
-	if err != nil {
-		return qc, err
+	flag, _ := c.CheckFlag("NEW_PRESET_MANAGEMENT_ENABLED")
+
+	var qc SASTQueryCollection
+
+	if flag {
+		qc, err := c.GetSASTPresetQueries()
+		if err != nil {
+			return qc, err
+		}
+	} else {
+		q, err := c.GetPresetQueries()
+		if err != nil {
+			return qc, err
+		}
+		qc.AddCollection(&q)
 	}
-	//qc.AddQueries(&q)
+	//
 
 	aq, err := c.GetQueriesByLevelID(c.QueryTypeTenant(), c.QueryTypeTenant())
 	if err != nil {

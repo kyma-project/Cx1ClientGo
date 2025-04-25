@@ -121,7 +121,7 @@ func (c Cx1Client) GetQueries() (SASTQueryCollection, error) {
 }
 
 func (c Cx1Client) GetPresetQueries() (SASTQueryCollection, error) {
-	c.depwarn("GetPresetQueries", "Get(SAST|IAC)PresetQueries")
+	//c.depwarn("GetPresetQueries", "Get(SAST|IAC)PresetQueries")
 	queries := []SASTQuery{}
 
 	collection := SASTQueryCollection{}
