@@ -473,7 +473,13 @@ func (qc *SASTQueryCollection) AddQueryTree(t *[]AuditQueryTree, appId, projectI
 						qlevel = level.Title
 					}
 
-					qid, _ := strconv.ParseUint(query.Key, 10, 64)
+					key := query.Key
+					qid, err := strconv.ParseUint(query.Key, 10, 64)
+					if err == nil {
+						key = ""
+					} else {
+						qid = 0
+					}
 
 					query := SASTQuery{
 						QueryID:            qid,
@@ -490,7 +496,7 @@ func (qc *SASTQueryCollection) AddQueryTree(t *[]AuditQueryTree, appId, projectI
 						IsExecutable:       setExecutable,
 						QueryDescriptionId: 0,
 						Custom:             isCustom,
-						EditorKey:          query.Key,
+						EditorKey:          key,
 						SastID:             0,
 					}
 					qc.AddQuery(query)

@@ -164,21 +164,8 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 	if err != nil {
 		if err.Error()[len(err.Error())-27:] == "net/http: use last response" {
 			return response, nil
-		} else if err.Error() == "remote error: tls: user canceled" {
-			// special handling: some proxies terminate connections resulting in a "remote error: tls: user canceled" failures
-			// the request actually succeeded and there is likely to be data in the response
-
-			c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
-			err = nil
-			// continue processing as normal below
 		} else {
 			c.logger.Tracef("Failed HTTP request: '%s'", err)
-			/*var resBody []byte
-			if response != nil && response.Body != nil {
-				resBody, _ = io.ReadAll(response.Body)
-			}
-			c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-			*/
 			return response, err
 		}
 	}
@@ -218,6 +205,7 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 
 func (c Cx1Client) handleRetries(request *http.Request, response *http.Response, err error) (*http.Response, error) {
 	if err == nil || err.Error() == "remote error: tls: user canceled" { // tls: user canceled can be due to proxies
+		c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
 		return response, nil
 	}
 
