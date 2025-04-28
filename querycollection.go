@@ -11,24 +11,13 @@ import (
 
 func (c Cx1Client) GetSASTQueryCollection() (SASTQueryCollection, error) {
 	//var qc SASTQueryCollection
-	flag, _ := c.CheckFlag("NEW_PRESET_MANAGEMENT_ENABLED")
 
 	var qc SASTQueryCollection
 
-	if flag {
-		qc, err := c.GetSASTPresetQueries()
-		if err != nil {
-			return qc, err
-		}
-	} else {
-		q, err := c.GetPresetQueries()
-		if err != nil {
-			return qc, err
-		}
-		qc.AddCollection(&q)
+	qc, err := c.GetSASTPresetQueries()
+	if err != nil {
+		return qc, err
 	}
-	//
-
 	aq, err := c.GetQueriesByLevelID(c.QueryTypeTenant(), c.QueryTypeTenant())
 	if err != nil {
 		return qc, err
@@ -697,6 +686,20 @@ func (qc SASTQueryCollection) GetQueries() []SASTQuery {
 	return queries
 }
 
+func (qc SASTQueryCollection) GetQueryIDs() []uint64 {
+	queries := []uint64{}
+
+	for lid := range qc.QueryLanguages {
+		for gid := range qc.QueryLanguages[lid].QueryGroups {
+			for _, q := range qc.QueryLanguages[lid].QueryGroups[gid].Queries {
+				queries = append(queries, q.QueryID)
+			}
+		}
+	}
+
+	return queries
+}
+
 func (qc SASTQueryCollection) GetQueryFamilies(executableOnly bool) []QueryFamily {
 	var queryFamilies []QueryFamily
 
@@ -857,6 +860,19 @@ func (qc SASTQueryCollection) GetExtraQueries(collection *SASTQueryCollection) (
 		}
 	}
 	return
+}
+
+func (qc SASTQueryCollection) IsSubset(collection *SASTQueryCollection) bool {
+	for _, lang := range qc.QueryLanguages {
+		for _, group := range lang.QueryGroups {
+			for _, query := range group.Queries {
+				if q := collection.findQuery(query.Level, query.LevelID, query.Name, query.QueryID); q == nil {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 /*

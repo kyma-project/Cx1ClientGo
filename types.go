@@ -491,6 +491,16 @@ type Preset struct {
 	QueryFamilies      []QueryFamily `json:"queries"` // this member variable should not be modified, any content changes come from the QueryCollection objects
 }
 
+type Preset_v330 struct {
+	PresetID    uint64 `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Custom      bool   `json:"custom"`
+	QueryIDs    []uint64
+	Filled      bool
+	Queries     []SASTQuery `json:"-"`
+}
+
 type Project struct {
 	ProjectID     string                 `json:"id"`
 	Name          string                 `json:"name"`
