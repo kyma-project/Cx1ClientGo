@@ -315,6 +315,20 @@ func (c Cx1Client) getQueryFamilyContents(engine, family string) ([]AuditQueryTr
 }
 
 func (c Cx1Client) GetPresetContents(p *Preset) error {
+	if p.Engine == "sast" && c.newPresetsEnabled() {
+		queries, err := c.GetSASTPresetQueries()
+		if err != nil {
+			return err
+		}
+
+		preset := p.ToPreset_v330()
+		err = c.GetPresetContents_v330(&preset, &queries)
+		if err != nil {
+			return err
+		}
+		*p = preset.ToPreset(&queries)
+		return nil
+	}
 	preset, err := c.GetPresetByID(p.Engine, p.PresetID)
 	if err != nil {
 		return err
