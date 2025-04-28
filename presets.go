@@ -19,9 +19,32 @@ func (p Preset) String() string {
 	}
 }
 
+func (c Cx1Client) newPresetsEnabled() bool {
+	flag, _ := c.CheckFlag("NEW_PRESET_MANAGEMENT_ENABLED")
+	return flag
+}
+
 // Presets do not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
 func (c Cx1Client) GetSASTPresets(count uint64) ([]Preset, error) {
-	return c.GetPresets("sast", count)
+	if c.newPresetsEnabled() {
+		return c.GetPresets("sast", count)
+	} else {
+		queries, err := c.GetSASTPresetQueries()
+		if err != nil {
+			return []Preset{}, err
+		}
+
+		presets, err := c.GetPresets_v330(count)
+		if err != nil {
+			return []Preset{}, err
+		} else {
+			var sastPresets []Preset
+			for _, p := range presets {
+				sastPresets = append(sastPresets, p.ToPreset(&queries))
+			}
+			return sastPresets, nil
+		}
+	}
 }
 
 // Presets do not include the contents of the preset (query families etc) - use Get*PresetContents to fill or Get*PresetByID
@@ -56,7 +79,11 @@ func (c Cx1Client) GetPresets(engine string, count uint64) ([]Preset, error) {
 }
 
 func (c Cx1Client) GetSASTPresetCount() (uint64, error) {
-	return c.GetPresetCount("sast")
+	if c.newPresetsEnabled() {
+		return c.GetPresetCount("sast")
+	} else {
+		return c.GetPresetCount_v330()
+	}
 }
 func (c Cx1Client) GetIACPresetCount() (uint64, error) {
 	return c.GetPresetCount("iac")
@@ -86,7 +113,20 @@ func (c Cx1Client) GetPresetCount(engine string) (uint64, error) {
 
 // Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
 func (c Cx1Client) GetSASTPresetByName(name string) (Preset, error) {
-	return c.GetPresetByName("sast", name)
+	if c.newPresetsEnabled() {
+		return c.GetPresetByName("sast", name)
+	} else {
+		queries, err := c.GetSASTPresetQueries()
+		if err != nil {
+			return Preset{}, err
+		}
+
+		preset, err := c.GetPresetByName_v330(name)
+		if err != nil {
+			return Preset{}, err
+		}
+		return preset.ToPreset(&queries), nil
+	}
 }
 
 // Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
@@ -141,7 +181,19 @@ func (c Cx1Client) GetPresetByID(engine, id string) (Preset, error) {
 
 // Includes the contents (query families/queries) of the preset as well
 func (c Cx1Client) GetSASTPresetByID(id uint64) (Preset, error) {
-	return c.GetPresetByID("sast", fmt.Sprintf("%d", id))
+	if c.newPresetsEnabled() {
+		return c.GetPresetByID("sast", fmt.Sprintf("%d", id))
+	} else {
+		queries, err := c.GetSASTPresetQueries()
+		if err != nil {
+			return Preset{}, err
+		}
+		preset, err := c.GetPresetByID_v330(id)
+		if err != nil {
+			return Preset{}, err
+		}
+		return preset.ToPreset(&queries), nil
+	}
 }
 
 // Includes the contents (query families/queries) of the preset as well
@@ -152,13 +204,17 @@ func (c Cx1Client) GetIACPresetByID(id string) (Preset, error) {
 // this will return a list of queries that can be added to a preset, meaning only executable queries
 func (c Cx1Client) GetSASTPresetQueries() (SASTQueryCollection, error) {
 	collection := SASTQueryCollection{}
-	querytree, err := c.getPresetQueries("sast")
-	if err != nil {
-		return collection, err
-	}
+	if c.newPresetsEnabled() {
+		querytree, err := c.getPresetQueries("sast")
+		if err != nil {
+			return collection, err
+		}
 
-	collection.AddQueryTree(&querytree, "", "", true)
-	return collection, nil
+		collection.AddQueryTree(&querytree, "", "", true)
+		return collection, nil
+	} else {
+		return c.GetPresetQueries_v330()
+	}
 }
 
 func (c Cx1Client) GetIACPresetQueries() (IACQueryCollection, error) {
@@ -292,6 +348,13 @@ func (c Cx1Client) GetAllSASTPresets() ([]Preset, error) {
 
 func (c Cx1Client) CreateSASTPreset(name, description string, collection SASTQueryCollection) (Preset, error) {
 	c.logger.Debugf("Creating preset %v for sast", name)
+	if !c.newPresetsEnabled() {
+		new_preset, err := c.CreatePreset_v330(name, description, collection.GetQueryIDs())
+		if err != nil {
+			return Preset{}, err
+		}
+		return new_preset.ToPreset(&collection), nil
+	}
 
 	if len(description) > 60 {
 		c.logger.Warn("Description is longer than 60 characters, will be truncated")
@@ -300,7 +363,7 @@ func (c Cx1Client) CreateSASTPreset(name, description string, collection SASTQue
 
 	queryFamilies := collection.GetQueryFamilies(true)
 
-	presetID, err := c.CreatePreset("sast", name, description, queryFamilies)
+	presetID, err := c.createPreset("sast", name, description, queryFamilies)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -318,14 +381,14 @@ func (c Cx1Client) CreateIACPreset(name, description string, collection IACQuery
 
 	queryFamilies := collection.GetQueryFamilies(true) // true parameter unused for IAC
 
-	presetID, err := c.CreatePreset("iac", name, description, queryFamilies)
+	presetID, err := c.createPreset("iac", name, description, queryFamilies)
 	if err != nil {
 		return Preset{}, err
 	}
 	return c.GetIACPresetByID(presetID)
 }
 
-func (c Cx1Client) CreatePreset(engine, name, description string, families []QueryFamily) (string, error) {
+func (c Cx1Client) createPreset(engine, name, description string, families []QueryFamily) (string, error) {
 	body := map[string]interface{}{
 		"name":        name,
 		"description": description,
@@ -352,15 +415,19 @@ func (c Cx1Client) CreatePreset(engine, name, description string, families []Que
 }
 
 func (c Cx1Client) UpdateSASTPreset(preset Preset) error {
+	if !c.newPresetsEnabled() {
+		p := preset.ToPreset_v330()
+		return c.UpdatePreset_v330(&p)
+	}
 	c.logger.Debugf("Saving sast preset %v", preset.Name)
-	return c.UpdatePreset("sast", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
+	return c.updatePreset("sast", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
 }
 func (c Cx1Client) UpdateIACPreset(preset Preset) error {
 	c.logger.Debugf("Saving iac preset %v", preset.Name)
-	return c.UpdatePreset("iac", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
+	return c.updatePreset("iac", preset.PresetID, preset.Name, preset.Description, preset.QueryFamilies)
 }
 
-func (c Cx1Client) UpdatePreset(engine, id, name, description string, families []QueryFamily) error {
+func (c Cx1Client) updatePreset(engine, id, name, description string, families []QueryFamily) error {
 	if len(description) > 60 {
 		c.logger.Warn("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
@@ -382,6 +449,10 @@ func (c Cx1Client) UpdatePreset(engine, id, name, description string, families [
 }
 
 func (c Cx1Client) DeletePreset(preset Preset) error {
+	if !c.newPresetsEnabled() {
+		p := preset.ToPreset_v330()
+		return c.DeletePreset_v330(&p)
+	}
 	c.logger.Debugf("Removing preset %v", preset.Name)
 	if !preset.Custom {
 		return fmt.Errorf("cannot delete preset %v - this is a product-default preset", preset.String())

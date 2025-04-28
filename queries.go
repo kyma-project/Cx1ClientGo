@@ -120,37 +120,6 @@ func (c Cx1Client) GetQueries() (SASTQueryCollection, error) {
 	return c.GetSASTQueryCollection()
 }
 
-func (c Cx1Client) GetPresetQueries() (SASTQueryCollection, error) {
-	//c.depwarn("GetPresetQueries", "Get(SAST|IAC)PresetQueries")
-	queries := []SASTQuery{}
-
-	collection := SASTQueryCollection{}
-	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
-	if err != nil {
-		return collection, err
-	}
-
-	err = json.Unmarshal(response, &queries)
-	if err != nil {
-		c.logger.Tracef("Failed to parse %v", string(response))
-	}
-
-	for i := range queries {
-		queries[i].IsExecutable = true // all queries in the preset are executable
-
-		if queries[i].Custom {
-			queries[i].Level = c.QueryTypeTenant()
-			queries[i].LevelID = c.QueryTypeTenant()
-		} else {
-			queries[i].Level = c.QueryTypeProduct()
-			queries[i].LevelID = c.QueryTypeProduct()
-		}
-	}
-	collection.AddQueries(&queries)
-
-	return collection, err
-}
-
 func (c Cx1Client) GetQueryMappings() (map[uint64]uint64, error) {
 	var mapping map[uint64]uint64 = make(map[uint64]uint64)
 	var responsemap struct {

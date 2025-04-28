@@ -134,25 +134,25 @@ func makeSASTQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pr
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteQuery(cx1client, logger, &session, corpOverride)
+	defer DeleteSASTQuery(cx1client, logger, &session, corpOverride)
 
 	appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteQuery(cx1client, logger, &session, appOverride)
+	defer DeleteSASTQuery(cx1client, logger, &session, appOverride)
 
 	projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteQuery(cx1client, logger, &session, projOverride)
+	defer DeleteSASTQuery(cx1client, logger, &session, projOverride)
 
 	corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteQuery(cx1client, logger, &session, corpQuery)
+	defer DeleteSASTQuery(cx1client, logger, &session, corpQuery)
 
 	logger.Info("Retrieving an updated list of queries")
 	qc, err = cx1client.GetSASTQueryCollection()
@@ -325,7 +325,7 @@ func newSASTCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, q
 	return &newCorpQuery
 }
 
-func DeleteQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.SASTQuery) {
+func DeleteSASTQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.SASTQuery) {
 	if query != nil {
 		logger.Infof("Deleting custom query: %v", query.StringDetailed())
 		err := cx1client.DeleteQueryOverrideByKey(session, query.EditorKey)
@@ -374,56 +374,106 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 		}
 	}
 
-	/*corpOverride := newSASTCorpOverride(cx1client, logger, &qc, &session)
+	corpOverride := newIACCorpOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteQuery(cx1client, logger, &session, corpOverride)
+	defer DeleteSASTQuery(cx1client, logger, &session, corpOverride)
 
-	appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
-	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-		logger.Errorf("Audit session may have expired: %s", err)
-	}
-	defer DeleteQuery(cx1client, logger, &session, appOverride)
+	/*
+		appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
+		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+			logger.Errorf("Audit session may have expired: %s", err)
+		}
+		defer DeleteQuery(cx1client, logger, &session, appOverride)
 
-	projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
-	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-		logger.Errorf("Audit session may have expired: %s", err)
-	}
-	defer DeleteQuery(cx1client, logger, &session, projOverride)
+		projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
+		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+			logger.Errorf("Audit session may have expired: %s", err)
+		}
+		defer DeleteQuery(cx1client, logger, &session, projOverride)
 
-	corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
-	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-		logger.Errorf("Audit session may have expired: %s", err)
-	}
-	defer DeleteQuery(cx1client, logger, &session, corpQuery)
+		corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
+		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+			logger.Errorf("Audit session may have expired: %s", err)
+		}
+		defer DeleteQuery(cx1client, logger, &session, corpQuery)
 
-	logger.Info("Retrieving an updated list of queries")
-	qc, err = cx1client.GetQueries()
-	if err != nil {
-		logger.Errorf("Error getting the query collection: %s", err)
-	}
+		logger.Info("Retrieving an updated list of queries")
+		qc, err = cx1client.GetQueries()
+		if err != nil {
+			logger.Errorf("Error getting the query collection: %s", err)
+		}
 
-	aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
-	if err != nil {
-		logger.Errorf("Error getting queries: %s", err)
-	}
+		aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
+		if err != nil {
+			logger.Errorf("Error getting queries: %s", err)
+		}
 
-	qc.AddCollection(&aq)
-	if corpQuery != nil {
-		qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
-	}
+		qc.AddCollection(&aq)
+		if corpQuery != nil {
+			qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
+		}
 
-	cqc = qc.GetCustomQueryCollection()
+		cqc = qc.GetCustomQueryCollection()
 
-	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
+		logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
 
-	for lid := range cqc.QueryLanguages {
-		for gid := range cqc.QueryLanguages[lid].QueryGroups {
-			for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
-				logger.Info(q.StringDetailed())
+		for lid := range cqc.QueryLanguages {
+			for gid := range cqc.QueryLanguages[lid].QueryGroups {
+				for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
+					logger.Info(q.StringDetailed())
+				}
 			}
 		}
-	}
 	*/
+}
+
+func newIACCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.IACQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.IACQuery {
+	logger.Infof("Creating corp override under session %v", session.ID)
+	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+
+	if baseQuery == nil {
+		logger.Errorf("Unable to find query Java - Java_Spring - Spring_Missing_Expect_CT_Header")
+		return nil
+	}
+
+	newCorpOverride, err := cx1client.CreateIACQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_TENANT, baseQuery)
+	if err != nil {
+		logger.Errorf("Failed to create override: %s", err)
+		return nil
+	}
+
+	updatedQuery, _, err := cx1client.UpdateIACQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	if err != nil {
+		logger.Errorf("Error updating query source: %s", err)
+	} else {
+		newCorpOverride = updatedQuery
+	}
+
+	metadata := newCorpOverride.GetMetadata()
+	metadata.Severity = "Critical"
+	updatedQuery, err = cx1client.UpdateIACQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newCorpOverride = updatedQuery
+	}
+
+	if err = qc.UpdateNewQuery(&newCorpOverride); err != nil {
+		logger.Errorf("Unable to update query %v from collection: %s", newCorpOverride.String(), err)
+	}
+
+	logger.Infof("Created new corp override: %v", newCorpOverride.StringDetailed())
+	return &newCorpOverride
+}
+
+func DeleteIACQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.IACQuery) {
+	if query != nil {
+		logger.Infof("Deleting custom query: %v", query.StringDetailed())
+		err := cx1client.DeleteQueryOverrideByKey(session, query.QueryID)
+		if err != nil {
+			logger.Errorf("Failed to delete custom query %v: %s", query.StringDetailed(), err)
+		}
+	}
 }
