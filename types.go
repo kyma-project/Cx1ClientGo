@@ -237,7 +237,7 @@ type Application struct {
 	Criticality   uint              `json:"criticality"`
 	Rules         []ApplicationRule `json:"rules"`
 	Tags          map[string]string `json:"tags"`
-	ProjectIds    []string          `json:"projectIds"`
+	ProjectIds    []string          `json:"projectIds,omitempty"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
 }
@@ -272,6 +272,8 @@ type AuditQueryTree struct {
 	Data   struct {
 		Level    string
 		Severity string
+		CWE      int64
+		Custom   bool
 	}
 	Children []AuditQueryTree
 }
@@ -310,6 +312,8 @@ type AuditSession struct {
 	ApplicationAssociation bool      `json:"applicationAssociation"`
 	Status                 string    `json:"status"`
 	Value                  []string  `json:"value"`
+	QueryFilters           []string  `json:"queryFilters"`
+	Engine                 string    `json:"-"`
 	ProjectID              string    `json:"-"`
 	ApplicationID          string    `json:"-"`
 	ScanID                 string    `json:"-"`
@@ -364,6 +368,17 @@ type AuthenticationProviderMapperConfig struct {
 	Template      string `json:"template,omitempty"`
 }
 
+type ConfigurationSetting struct {
+	Key             string `json:"key"`
+	Name            string `json:"name"`
+	Category        string `json:"category"`
+	OriginLevel     string `json:"originLevel"`
+	Value           string `json:"value"`
+	ValueType       string `json:"valuetype"`
+	ValueTypeParams string `json:"valuetypeparams"`
+	AllowOverride   bool   `json:"allowOverride"`
+}
+
 type DataImport struct {
 	MigrationId string             `json:"migrationId"`
 	Status      string             `json:"status"`
@@ -406,6 +421,45 @@ type GroupMembersFilter struct {
 	BriefRepresentation bool `url:"briefRepresentation,omitempty"`
 }
 
+/*
+type IACPreset struct {
+	PresetBase
+	IACQueryIDs []string
+	//Queries  []SASTQuery `json:"-"`
+}
+*/
+
+type IACQuery struct {
+	QueryID    string
+	Name       string
+	Technology string
+	Group      string
+	Severity   string
+	CWE        int64
+	Level      string
+	LevelID    string
+	Custom     bool
+	Path       string
+	Source     string
+}
+type IACQueryGroup struct {
+	Name       string
+	Technology string
+	Queries    []IACQuery
+}
+type IACQueryTechnology struct {
+	Name        string
+	QueryGroups []IACQueryGroup
+}
+
+type IACQueryCollection struct {
+	Technologies []IACQueryTechnology
+}
+
+type QueryCollection interface {
+	GetQueryFamilies(executableOnly bool) []QueryFamily
+}
+
 type OIDCClient struct {
 	ID                   string                 `json:"id"`
 	ClientID             string                 `json:"clientId"`
@@ -425,13 +479,26 @@ type OIDCClientScope struct {
 }
 
 type Preset struct {
+	PresetID           string        `json:"id"`
+	Name               string        `json:"name"`
+	Description        string        `json:"description"`
+	AssociatedProjects uint64        `json:"associatedProjects"`
+	Custom             bool          `json:"custom"`
+	IsTenantDefault    bool          `json:"isTenantDefault"`
+	IsMigrated         bool          `json:"isMigrated"`
+	Filled             bool          `json:"-"`
+	Engine             string        `json:"-"`
+	QueryFamilies      []QueryFamily `json:"queries"` // this member variable should not be modified, any content changes come from the QueryCollection objects
+}
+
+type Preset_v330 struct {
 	PresetID    uint64 `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Custom      bool   `json:"custom"`
 	QueryIDs    []uint64
 	Filled      bool
-	Queries     []Query `json:"-"`
+	Queries     []SASTQuery `json:"-"`
 }
 
 type Project struct {
@@ -440,7 +507,7 @@ type Project struct {
 	CreatedAt     string                 `json:"createdAt"`
 	UpdatedAt     string                 `json:"updatedAt"`
 	Groups        []string               `json:"groups"`
-	Applications  []string               `json:"applicationIds"`
+	Applications  []string               `json:"applicationIds,omitempty"`
 	Tags          map[string]string      `json:"tags"`
 	RepoUrl       string                 `json:"repoUrl"`
 	MainBranch    string                 `json:"mainBranch"`
@@ -484,36 +551,6 @@ type ProjectScanSchedule struct {
 	Tags          map[string]string `json:"tags"`
 }
 
-type ConfigurationSetting struct {
-	Key             string `json:"key"`
-	Name            string `json:"name"`
-	Category        string `json:"category"`
-	OriginLevel     string `json:"originLevel"`
-	Value           string `json:"value"`
-	ValueType       string `json:"valuetype"`
-	ValueTypeParams string `json:"valuetypeparams"`
-	AllowOverride   bool   `json:"allowOverride"`
-}
-
-type Query struct {
-	QueryID            uint64 `json:"queryID,string"`
-	Level              string `json:"level"`
-	LevelID            string `json:"levelId"`
-	Path               string `json:"path"`
-	Modified           string `json:"-"`
-	Source             string `json:"-"`
-	Name               string `json:"queryName"`
-	Group              string `json:"group"`
-	Language           string `json:"language"`
-	Severity           string `json:"severity"`
-	CweID              int64  `json:"cweID"`
-	IsExecutable       bool   `json:"isExecutable"`
-	QueryDescriptionId int64  `json:"queryDescriptionId"`
-	Custom             bool   `json:"custom"`
-	EditorKey          string `json:"key"`
-	SastID             uint64 `json:"sastId"`
-}
-
 type QueryError struct {
 	Line        uint64
 	StartColumn uint64
@@ -527,22 +564,14 @@ type QueryFailure struct {
 	Errors  []QueryError `json:"error"`
 }
 
-type QueryGroup struct {
-	Name     string
-	Language string
-	Queries  []Query
+type QueryFamily struct {
+	Name       string   `json:"familyName"`
+	TotalCount uint64   `json:"totalCount"`
+	QueryIDs   []string `json:"queryIds"`
 }
 
-type QueryLanguage struct {
-	Name        string
-	QueryGroups []QueryGroup
-}
-
-type QueryCollection struct {
-	QueryLanguages []QueryLanguage
-}
-
-type QueryUpdate_v310 struct { // used when saving queries in Cx1
+type QueryUpdate_v310 struct {
+	// used when saving queries in Cx1
 	Name     string `json:"name"`
 	Path     string `json:"path"`
 	Source   string `json:"source"`
@@ -559,6 +588,22 @@ type ReportStatus struct {
 	ReportID  string `json:"reportId"`
 	Status    string `json:"status"`
 	ReportURL string `json:"url"`
+}
+
+type Role struct {
+	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
+	RoleID      string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Attributes  struct {
+		Creator    []string
+		Type       []string
+		Category   []string
+		LastUpdate []string // it is returned as [ "uint",... ]
+	} `json:"attributes"`
+	Composite  bool   `json:"composite"`
+	ClientRole bool   `json:"clientRole"`
+	SubRoles   []Role `json:"-"`
 }
 
 type RunningScan struct {
@@ -580,6 +625,49 @@ type ResultsPredicatesBase struct {
 	CreatedAt    string `json:"createdAt"`
 }
 
+/*
+type SASTPreset struct {
+	PresetBase
+	//SASTPresetID uint64      `json:"-"`
+	//SASTQueryIDs []uint64    `json:"-"`
+	//SASTQueries  []SASTQuery `json:"-"`
+}
+*/
+
+type SASTQuery struct {
+	QueryID            uint64 `json:"queryID,string"`
+	Level              string `json:"level"`
+	LevelID            string `json:"levelId"`
+	Path               string `json:"path"`
+	Modified           string `json:"-"`
+	Source             string `json:"-"`
+	Name               string `json:"queryName"`
+	Group              string `json:"group"`
+	Language           string `json:"language"`
+	Severity           string `json:"severity"`
+	CweID              int64  `json:"cweID"`
+	IsExecutable       bool   `json:"isExecutable"`
+	QueryDescriptionId int64  `json:"queryDescriptionId"`
+	Custom             bool   `json:"custom"`
+	EditorKey          string `json:"key"`
+	SastID             uint64 `json:"sastId"`
+}
+
+type SASTQueryGroup struct {
+	Name     string
+	Language string
+	Queries  []SASTQuery
+}
+
+type SASTQueryLanguage struct {
+	Name        string
+	QueryGroups []SASTQueryGroup
+}
+
+type SASTQueryCollection struct {
+	QueryLanguages []SASTQueryLanguage
+}
+
 type SASTResultsPredicates struct {
 	ResultsPredicatesBase // actually the same structure but different endpoint
 }
@@ -593,22 +681,6 @@ type KeyCloakClient struct {
 	Name     string `json:"clientId"`
 	Enabled  bool
 }*/
-
-type Role struct {
-	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
-	RoleID      string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Attributes  struct {
-		Creator    []string
-		Type       []string
-		Category   []string
-		LastUpdate []string // it is returned as [ "uint",... ]
-	} `json:"attributes"`
-	Composite  bool   `json:"composite"`
-	ClientRole bool   `json:"clientRole"`
-	SubRoles   []Role `json:"-"`
-}
 
 type SASTAggregateSummary struct {
 	Status    string

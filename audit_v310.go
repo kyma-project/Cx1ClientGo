@@ -40,7 +40,7 @@ func (q *AuditQuery_v310) ParsePath() {
 	}
 }
 
-func (q Query) ToAuditQuery_v310() AuditQuery_v310 {
+func (q SASTQuery) ToAuditQuery_v310() AuditQuery_v310 {
 	return AuditQuery_v310{
 		QueryID:            q.QueryID,
 		Level:              q.Level,
@@ -65,8 +65,8 @@ func (q AuditQuery_v310) String() string {
 	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
 }
 
-func (q AuditQuery_v310) ToQuery() Query {
-	return Query{
+func (q AuditQuery_v310) ToQuery() SASTQuery {
+	return SASTQuery{
 		QueryID:            q.QueryID,
 		Level:              q.Level,
 		LevelID:            q.LevelID,
