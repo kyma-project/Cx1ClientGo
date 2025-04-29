@@ -548,6 +548,93 @@ func (c Cx1Client) CreateSASTQueryOverride(auditSession *AuditSession, level str
 	return newQuery, nil
 }
 
+/*
+func (c Cx1Client) CreateIACQueryOverride(auditSession *AuditSession, level string, baseQuery *IACQuery) (IACQuery, error) {
+	var newQuery IACQuery
+	if strings.EqualFold(level, AUDIT_QUERY_APPLICATION) {
+		level = AUDIT_QUERY_APPLICATION
+		if auditSession.ApplicationID == "" {
+			return newQuery, fmt.Errorf("requested to create an application-level query but the current %v for project %v has no application associated", auditSession.String(), auditSession.ProjectName)
+		}
+	} else if strings.EqualFold(level, AUDIT_QUERY_PROJECT) {
+		level = AUDIT_QUERY_PROJECT
+	} else if strings.EqualFold(level, AUDIT_QUERY_TENANT) {
+		level = AUDIT_QUERY_TENANT
+	} else {
+		return newQuery, fmt.Errorf("invalid query override level specified ('%v'), use functions cx1client.QueryTypeTenant, QueryTypeApplication, and QueryTypeProduct", level)
+	}
+
+	c.logger.Debugf("Create new override of query %v at level %v under %v", baseQuery.String(), level, auditSession.String())
+
+	type NewQuery struct {
+		CWE         int64  `json:"cwe"`
+		Executable  bool   `json:"executable"`
+		Description int64  `json:"description"`
+		Language    string `json:"language"`
+		Group       string `json:"group"`
+		Severity    string `json:"severity"`
+		SastID      uint64 `json:"sastId"`
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Level       string `json:"level"`
+		Path        string `json:"path"`
+	}
+
+	newQueryData := NewQuery{
+		CWE:         baseQuery.CweID,
+		Executable:  baseQuery.IsExecutable,
+		Description: baseQuery.QueryDescriptionId,
+		Language:    baseQuery.Language,
+		Group:       baseQuery.Group,
+		Severity:    baseQuery.Severity,
+		SastID:      baseQuery.SastID,
+		ID:          baseQuery.EditorKey,
+		Name:        baseQuery.Name,
+		Level:       strings.ToLower(level), // seems to be in lowercase in the post
+		Path:        baseQuery.Path,
+	}
+
+	jsonBody, _ := json.Marshal(newQueryData)
+
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries", auditSession.ID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return newQuery, err
+	}
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return newQuery, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	data, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return newQuery, fmt.Errorf("failed to create query: %s", err)
+	}
+
+	responseValue := data.(map[string]interface{})
+	newQuery, err = c.GetAuditSASTQueryByKey(auditSession, responseValue["id"].(string))
+	if err != nil {
+		return newQuery, err
+	}
+
+	switch level {
+	case AUDIT_QUERY_APPLICATION:
+		newQuery.LevelID = auditSession.ApplicationID
+	case AUDIT_QUERY_PRODUCT:
+		newQuery.LevelID = AUDIT_QUERY_PRODUCT
+	case AUDIT_QUERY_PROJECT:
+		newQuery.LevelID = auditSession.ProjectID
+	case AUDIT_QUERY_TENANT:
+		newQuery.LevelID = AUDIT_QUERY_TENANT
+	}
+
+	if newQuery.QueryID == 0 {
+		newQuery.QueryID = baseQuery.QueryID
+	}
+
+	return newQuery, nil
+}*/
+
 func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, QueryFailure, error) {
 	c.depwarn("CreateNewQuery", "CreateNewSASTQuery")
 	return c.CreateNewSASTQuery(auditSession, query)
@@ -560,8 +647,8 @@ func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuer
 		Group       string `json:"group"`
 		Severity    string `json:"severity"`
 		Executable  bool   `json:"executable"`
-		CWE         int64  `json:"cwe"`
-		Description int64  `json:"description"`
+		CWE         int64  `json:"cwe,omitempty"`
+		Description int64  `json:"description,omitempty"`
 	}
 
 	newQueryData := NewQuery{
@@ -572,6 +659,12 @@ func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuer
 		Executable:  query.IsExecutable,
 		CWE:         query.CweID,
 		Description: query.QueryDescriptionId,
+	}
+	if newQueryData.CWE < 0 {
+		newQueryData.CWE = 0
+	}
+	if newQueryData.Description < 0 {
+		newQueryData.Description = 0
 	}
 
 	var queryFail QueryFailure

@@ -378,7 +378,7 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteSASTQuery(cx1client, logger, &session, corpOverride)
+	defer DeleteIACQuery(cx1client, logger, &session, corpOverride)
 
 	/*
 		appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
