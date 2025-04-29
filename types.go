@@ -237,7 +237,7 @@ type Application struct {
 	Criticality   uint              `json:"criticality"`
 	Rules         []ApplicationRule `json:"rules"`
 	Tags          map[string]string `json:"tags"`
-	ProjectIds    []string          `json:"projectIds"`
+	ProjectIds    []string          `json:"projectIds,omitempty"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
 }
@@ -507,7 +507,7 @@ type Project struct {
 	CreatedAt     string                 `json:"createdAt"`
 	UpdatedAt     string                 `json:"updatedAt"`
 	Groups        []string               `json:"groups"`
-	Applications  []string               `json:"applicationIds"`
+	Applications  []string               `json:"applicationIds,omitempty"`
 	Tags          map[string]string      `json:"tags"`
 	RepoUrl       string                 `json:"repoUrl"`
 	MainBranch    string                 `json:"mainBranch"`
