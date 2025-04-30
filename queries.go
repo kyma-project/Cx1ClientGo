@@ -234,6 +234,24 @@ func (q *IACQuery) MergeQuery(nq IACQuery) {
 	if q.Source == "" && nq.Source != "" {
 		q.Source = nq.Source
 	}
+	if q.Category == "" && nq.Category != "" {
+		q.Category = nq.Category
+	}
+	if q.Group == "" && nq.Group != "" {
+		q.Group = nq.Group
+	}
+	if q.Platform == "" && nq.Platform != "" {
+		q.Platform = nq.Platform
+	}
+	if q.Description == "" && nq.Description != "" {
+		q.Description = nq.Description
+	}
+	if q.DescriptionID == "" && nq.DescriptionID != "" {
+		q.DescriptionID = nq.DescriptionID
+	}
+	if q.DescriptionURL == "" && nq.DescriptionURL != "" {
+		q.DescriptionURL = nq.DescriptionURL
+	}
 }
 
 func (q SASTQuery) StringDetailed() string {
@@ -253,7 +271,7 @@ func (q SASTQuery) String() string {
 	return fmt.Sprintf("[%d] %v -> %v -> %v", q.QueryID, q.Language, q.Group, q.Name)
 }
 func (q IACQuery) String() string {
-	return fmt.Sprintf("[%v] %v -> %v -> %v", ShortenGUID(q.QueryID), q.Technology, q.Group, q.Name)
+	return fmt.Sprintf("[%v] %v -> %v -> %v", ShortenGUID(q.Key), q.Platform, q.Group, q.Name)
 }
 func (q IACQuery) StringDetailed() string {
 	var scope string
@@ -265,11 +283,11 @@ func (q IACQuery) StringDetailed() string {
 	default:
 		scope = fmt.Sprintf("%v %v", q.Level, ShortenGUID(q.LevelID))
 	}
-	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [ID %v]", scope, q.Technology, q.Group, q.Name, q.Severity, ShortenGUID(q.QueryID))
+	return fmt.Sprintf("%v: %v -> %v -> %v, %v risk [Key %v]", scope, q.Platform, q.Group, q.Name, q.Severity, ShortenGUID(q.Key))
 }
 
-func (q SASTQuery) GetMetadata() AuditQueryMetadata {
-	return AuditQueryMetadata{
+func (q SASTQuery) GetMetadata() AuditSASTQueryMetadata {
+	return AuditSASTQueryMetadata{
 		Cwe:             q.CweID,
 		IsExecutable:    q.IsExecutable,
 		CxDescriptionID: q.QueryDescriptionId,
@@ -278,6 +296,21 @@ func (q SASTQuery) GetMetadata() AuditQueryMetadata {
 		Severity:        q.Severity,
 		SastID:          q.SastID,
 		Name:            q.Name,
+	}
+}
+
+func (q IACQuery) GetMetadata() AuditIACQueryMetadata {
+	return AuditIACQueryMetadata{
+		Cwe:            q.CWE,
+		Aggregation:    "",
+		Category:       q.Category,
+		Description:    q.Description,
+		DescriptionID:  q.DescriptionID,
+		DescriptionURL: q.DescriptionURL,
+		Platform:       q.Platform,
+		QueryID:        q.QueryID,
+		Name:           q.Name,
+		Severity:       q.Severity,
 	}
 }
 

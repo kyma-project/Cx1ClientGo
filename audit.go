@@ -343,7 +343,7 @@ func (c Cx1Client) AuditRunScanByID(auditSession *AuditSession) error {
 	return nil
 }
 
-func (q AuditQuery) String() string {
+func (q AuditSASTQuery) String() string {
 	return fmt.Sprintf("[%v] %v: %v", ShortenGUID(q.Key), q.Level, q.Path)
 }
 
@@ -359,13 +359,47 @@ func (c Cx1Client) GetAuditSASTQueryByKey(auditSession *AuditSession, key string
 		return SASTQuery{}, err
 	}
 
-	var q AuditQuery
+	var q AuditSASTQuery
 	err = json.Unmarshal(response, &q)
 	if err != nil {
 		return SASTQuery{}, err
 	}
 
 	query := q.ToSASTQuery()
+	switch query.Level {
+	case AUDIT_QUERY_APPLICATION:
+		query.LevelID = auditSession.ApplicationID
+	case AUDIT_QUERY_PRODUCT:
+		query.LevelID = AUDIT_QUERY_PRODUCT
+	case AUDIT_QUERY_PROJECT:
+		query.LevelID = auditSession.ProjectID
+	case AUDIT_QUERY_TENANT:
+		query.LevelID = AUDIT_QUERY_TENANT
+	}
+
+	return query, nil
+}
+
+func (c Cx1Client) GetAuditIACQueryByKey(auditSession *AuditSession, key string) (IACQuery, error) {
+	c.logger.Debugf("Get audit query by key: %v", key)
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/query-editor/sessions/%v/queries/%v?includeMetadata=true&includeSource=true", auditSession.ID, url.QueryEscape(key)), nil, nil)
+	if err != nil {
+		return IACQuery{}, err
+	}
+
+	var q AuditIACQuery
+	err = json.Unmarshal(response, &q)
+	if err != nil {
+		return IACQuery{}, err
+	}
+	if q.QueryID[1] == ':' {
+		q.Key = q.QueryID[2:]
+	} else {
+		q.Key = q.QueryID
+	}
+
+	query := q.ToIACQuery()
 	switch query.Level {
 	case AUDIT_QUERY_APPLICATION:
 		query.LevelID = auditSession.ApplicationID
@@ -548,7 +582,6 @@ func (c Cx1Client) CreateSASTQueryOverride(auditSession *AuditSession, level str
 	return newQuery, nil
 }
 
-/*
 func (c Cx1Client) CreateIACQueryOverride(auditSession *AuditSession, level string, baseQuery *IACQuery) (IACQuery, error) {
 	var newQuery IACQuery
 	if strings.EqualFold(level, AUDIT_QUERY_APPLICATION) {
@@ -564,35 +597,35 @@ func (c Cx1Client) CreateIACQueryOverride(auditSession *AuditSession, level stri
 		return newQuery, fmt.Errorf("invalid query override level specified ('%v'), use functions cx1client.QueryTypeTenant, QueryTypeApplication, and QueryTypeProduct", level)
 	}
 
+	if baseQuery == nil {
+		return newQuery, fmt.Errorf("base query cannot be nil")
+	}
+
 	c.logger.Debugf("Create new override of query %v at level %v under %v", baseQuery.String(), level, auditSession.String())
+	if baseQuery.Description == "" {
+		c.logger.Tracef("Override of base query %v requires base query's metadata - fetching it now", baseQuery.String())
+		q, err := c.GetAuditIACQueryByKey(auditSession, baseQuery.QueryID)
+		if err != nil {
+			return newQuery, err
+		}
+		baseQuery.MergeQuery(q)
+	}
 
 	type NewQuery struct {
-		CWE         int64  `json:"cwe"`
-		Executable  bool   `json:"executable"`
-		Description int64  `json:"description"`
-		Language    string `json:"language"`
-		Group       string `json:"group"`
-		Severity    string `json:"severity"`
-		SastID      uint64 `json:"sastId"`
+		IACQuery
 		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Level       string `json:"level"`
-		Path        string `json:"path"`
+		QueryName   string `json:"queryname"`
+		OldSeverity string `json:"oldseverity"`
 	}
 
 	newQueryData := NewQuery{
-		CWE:         baseQuery.CweID,
-		Executable:  baseQuery.IsExecutable,
-		Description: baseQuery.QueryDescriptionId,
-		Language:    baseQuery.Language,
-		Group:       baseQuery.Group,
-		Severity:    baseQuery.Severity,
-		SastID:      baseQuery.SastID,
-		ID:          baseQuery.EditorKey,
-		Name:        baseQuery.Name,
-		Level:       strings.ToLower(level), // seems to be in lowercase in the post
-		Path:        baseQuery.Path,
+		IACQuery:    *baseQuery,
+		ID:          baseQuery.QueryID,
+		QueryName:   baseQuery.Name,
+		OldSeverity: baseQuery.Severity,
 	}
+
+	newQueryData.Level = strings.ToLower(level)
 
 	jsonBody, _ := json.Marshal(newQueryData)
 
@@ -612,7 +645,7 @@ func (c Cx1Client) CreateIACQueryOverride(auditSession *AuditSession, level stri
 	}
 
 	responseValue := data.(map[string]interface{})
-	newQuery, err = c.GetAuditSASTQueryByKey(auditSession, responseValue["id"].(string))
+	newQuery, err = c.GetAuditIACQueryByKey(auditSession, responseValue["id"].(string))
 	if err != nil {
 		return newQuery, err
 	}
@@ -628,18 +661,30 @@ func (c Cx1Client) CreateIACQueryOverride(auditSession *AuditSession, level stri
 		newQuery.LevelID = AUDIT_QUERY_TENANT
 	}
 
-	if newQuery.QueryID == 0 {
-		newQuery.QueryID = baseQuery.QueryID
+	if newQuery.QueryID == "" {
+		switch level {
+		case AUDIT_QUERY_APPLICATION:
+			newQuery.QueryID = "a" + baseQuery.QueryID[1:]
+		case AUDIT_QUERY_PROJECT:
+			newQuery.QueryID = "p" + baseQuery.QueryID[1:]
+		case AUDIT_QUERY_TENANT:
+			newQuery.QueryID = "t" + baseQuery.QueryID[1:]
+		default:
+			c.logger.Warnf("Unknown query level: %v", level)
+
+		}
 	}
 
-	return newQuery, nil
-}*/
+	newQuery.MergeQuery(*baseQuery)
 
-func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, QueryFailure, error) {
+	return newQuery, nil
+}
+
+func (c Cx1Client) CreateNewQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, []QueryFailure, error) {
 	c.depwarn("CreateNewQuery", "CreateNewSASTQuery")
 	return c.CreateNewSASTQuery(auditSession, query)
 }
-func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, QueryFailure, error) {
+func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, []QueryFailure, error) {
 	c.logger.Debugf("Creating new query %v under %v", query.String(), auditSession.String())
 	type NewQuery struct {
 		Name        string `json:"name"`
@@ -667,7 +712,7 @@ func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuer
 		newQueryData.Description = 0
 	}
 
-	var queryFail QueryFailure
+	var queryFail []QueryFailure
 
 	jsonBody, _ := json.Marshal(newQueryData)
 
@@ -691,17 +736,64 @@ func (c Cx1Client) CreateNewSASTQuery(auditSession *AuditSession, query SASTQuer
 	return c.UpdateSASTQuerySourceByKey(auditSession, queryKey, query.Source)
 }
 
+func (c Cx1Client) CreateNewIACQuery(auditSession *AuditSession, query IACQuery) (IACQuery, []QueryFailure, error) {
+	c.logger.Debugf("Creating new query %v under %v", query.String(), auditSession.String())
+	type NewQuery struct {
+		Category       string `json:"category"`
+		CWE            string `json:"cwe"`
+		Description    string `json:"description"`
+		DescriptionUrl string `json:"descriptionurl"`
+		Platform       string `json:"platform"`
+		Name           string `json:"queryname"`
+		Severity       string `json:"severity"`
+	}
+
+	newQueryData := NewQuery{
+		Category:       query.Category,
+		CWE:            query.CWE,
+		Description:    query.Description,
+		DescriptionUrl: query.DescriptionURL,
+		Platform:       query.Platform,
+		Name:           query.Name,
+		Severity:       query.Severity,
+	}
+
+	var queryFail []QueryFailure
+
+	jsonBody, _ := json.Marshal(newQueryData)
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/query-editor/sessions/%v/queries", auditSession.ID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return IACQuery{}, queryFail, err
+	}
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return IACQuery{}, queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	data, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return IACQuery{}, queryFail, fmt.Errorf("failed to create query: %s", err)
+	}
+
+	queryKey := data.(map[string]interface{})["id"].(string)
+
+	new_query, queryFail, err := c.UpdateIACQuerySourceByKey(auditSession, queryKey, query.Source)
+	new_query.MergeQuery(query)
+	return new_query, queryFail, err
+}
+
 /*
 This function will update the query metadata, however currently only the Severity of a query can be changed.
 Changes to CWE, description, and other fields will not take effect.
 Also, the data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQueryMetadata" wrapper instead to address that.
 */
-func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (SASTQuery, error) {
+func (c Cx1Client) UpdateQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditSASTQueryMetadata) (SASTQuery, error) {
 	c.depwarn("UpdateQueryMetadataByKey", "UpdateSASTQueryMetadataByKey")
 	return c.UpdateSASTQueryMetadataByKey(auditSession, queryKey, metadata)
 }
-func (c Cx1Client) UpdateSASTQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditQueryMetadata) (SASTQuery, error) {
-	c.logger.Debugf("Updating query metadata by key: %v", queryKey)
+func (c Cx1Client) UpdateSASTQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditSASTQueryMetadata) (SASTQuery, error) {
+	c.logger.Debugf("Updating sast query metadata by key: %v", queryKey)
 	jsonBody, err := json.Marshal(metadata)
 	if err != nil {
 		return SASTQuery{}, err
@@ -726,33 +818,101 @@ func (c Cx1Client) UpdateSASTQueryMetadataByKey(auditSession *AuditSession, quer
 	return c.GetAuditSASTQueryByKey(auditSession, queryKey)
 }
 
-func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query *SASTQuery, metadata AuditQueryMetadata) (SASTQuery, error) {
+func (c Cx1Client) UpdateIACQueryMetadataByKey(auditSession *AuditSession, queryKey string, metadata AuditIACQueryMetadata) (IACQuery, error) {
+	c.logger.Debugf("Updating iac query metadata by key: %v", queryKey)
+	jsonBody, err := json.Marshal(metadata)
+	if err != nil {
+		return IACQuery{}, err
+	}
+
+	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/query-editor/sessions/%v/queries/%v/metadata", auditSession.ID, url.QueryEscape(queryKey)), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return IACQuery{}, err
+	}
+
+	var responseBody requestIDBody
+	err = json.Unmarshal(response, &responseBody)
+	if err != nil {
+		return IACQuery{}, fmt.Errorf("failed to unmarshal response: %s", err)
+	}
+
+	_, err = c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
+	if err != nil {
+		return IACQuery{}, err
+	}
+
+	return c.GetAuditIACQueryByKey(auditSession, queryKey)
+}
+
+func (c Cx1Client) UpdateQueryMetadata(auditSession *AuditSession, query SASTQuery, metadata AuditSASTQueryMetadata) (SASTQuery, error) {
 	c.depwarn("UpdateQueryMetadata", "UpdateSASTQueryMetadata")
 	return c.UpdateSASTQueryMetadata(auditSession, query, metadata)
 }
-func (c Cx1Client) UpdateSASTQueryMetadata(auditSession *AuditSession, query *SASTQuery, metadata AuditQueryMetadata) (SASTQuery, error) {
+func (c Cx1Client) UpdateSASTQueryMetadata(auditSession *AuditSession, query SASTQuery, metadata AuditSASTQueryMetadata) (SASTQuery, error) {
 	if query.EditorKey == "" {
 		return SASTQuery{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
-	newQuery, err := c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, metadata)
+	newQuery, err := c.UpdateSASTQueryMetadataByKey(auditSession, query.EditorKey, metadata)
 	if err != nil {
 		return SASTQuery{}, err
 	}
-	newQuery.MergeQuery(*query)
+	newQuery.MergeQuery(query)
+	return newQuery, nil
+}
+
+func (c Cx1Client) UpdateIACQueryMetadata(auditSession *AuditSession, query IACQuery, metadata AuditIACQueryMetadata) (IACQuery, error) {
+	if query.QueryID == "" {
+		return IACQuery{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, err := c.UpdateIACQueryMetadataByKey(auditSession, query.QueryID, metadata)
+	if err != nil {
+		return IACQuery{}, err
+	}
+	newQuery.MergeQuery(query)
 	return newQuery, nil
 }
 
 /*
 The data returned by the query-editor api does not include the query ID, so it will be 0. Use "UpdateQuerySource" wrapper instead to address that.
 */
-func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, QueryFailure, error) {
+func (c Cx1Client) UpdateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, []QueryFailure, error) {
 	c.depwarn("UpdateQuerySourceByKey", "UpdateSASTQuerySourceByKey")
 	return c.UpdateSASTQuerySourceByKey(auditSession, queryKey, source)
 }
-func (c Cx1Client) UpdateSASTQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, QueryFailure, error) {
+func (c Cx1Client) UpdateSASTQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (SASTQuery, []QueryFailure, error) {
+	queryFail, err := c.updateQuerySourceByKey(auditSession, queryKey, source)
+	if err != nil {
+		return SASTQuery{}, queryFail, err
+	}
+
+	/*queryFail, err = c.ValidateQuerySourceByKey(auditSession, queryKey, source)
+	if err != nil {
+		return SASTQuery{}, queryFail, err
+	}*/
+
+	newAuditQuery, err := c.GetAuditSASTQueryByKey(auditSession, queryKey)
+	return newAuditQuery, queryFail, err
+}
+
+func (c Cx1Client) UpdateIACQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (IACQuery, []QueryFailure, error) {
+	queryFail, err := c.updateQuerySourceByKey(auditSession, queryKey, source)
+	if err != nil {
+		return IACQuery{}, queryFail, err
+	}
+
+	/*queryFail, err := c.ValidateQuerySourceByKey(auditSession, queryKey, source)
+	if err != nil {
+		return IACQuery{}, queryFail, err
+	}*/
+
+	newAuditQuery, err := c.GetAuditIACQueryByKey(auditSession, queryKey)
+	return newAuditQuery, queryFail, err
+
+}
+
+func (c Cx1Client) updateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) ([]QueryFailure, error) {
 	c.logger.Debugf("Updating query source by key: %v", queryKey)
-	var newQuery SASTQuery
-	var queryFail QueryFailure
+	var queryFail []QueryFailure
 	type QueryUpdate struct {
 		ID     string `json:"id"`
 		Source string `json:"source"`
@@ -763,75 +923,99 @@ func (c Cx1Client) UpdateSASTQuerySourceByKey(auditSession *AuditSession, queryK
 
 	jsonBody, err := json.Marshal(postbody)
 	if err != nil {
-		return newQuery, queryFail, fmt.Errorf("failed to marshal query source: %s", err)
+		return queryFail, fmt.Errorf("failed to marshal query source: %s", err)
 	}
 
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/query-editor/sessions/%v/queries/source", auditSession.ID), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return newQuery, queryFail, fmt.Errorf("failed to save source: %s", err)
+		return queryFail, fmt.Errorf("failed to save source: %s", err)
 	}
 
 	var responseBody requestIDBody
 	err = json.Unmarshal(response, &responseBody)
 	if err != nil {
-		return newQuery, queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
+		return queryFail, fmt.Errorf("failed to unmarshal response: %s", err)
 	}
 
 	responseObj, err := c.AuditRequestStatusPollingByID(auditSession, responseBody.Id)
 	if err != nil {
-		return newQuery, queryFail, fmt.Errorf("failed due to %s: %v", err, responseObj)
+		return queryFail, fmt.Errorf("failed due to %s: %v", err, responseObj)
 	}
 
 	if responseMap, ok := responseObj.(map[string]interface{}); ok {
 		if val, ok := responseMap["failed_queries"]; ok {
-			var failedQueries []QueryFailure
-
 			bytes, _ := json.Marshal(val)
-			err = json.Unmarshal(bytes, &failedQueries)
+			err = json.Unmarshal(bytes, &queryFail)
 			if err != nil {
-				return newQuery, queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
+				return queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
 			}
 
-			if len(failedQueries) == 1 {
-				return newQuery, failedQueries[0], fmt.Errorf("failed to save source")
+			if len(queryFail) == 1 {
+				return queryFail, fmt.Errorf("failed to save source")
 			} else {
-				return newQuery, queryFail, fmt.Errorf("failed to save sources, details: %v", failedQueries)
+				return queryFail, nil
 			}
 		}
 	}
-
-	newAuditQuery, err := c.GetAuditSASTQueryByKey(auditSession, queryKey)
-	return newAuditQuery, queryFail, err
-
-}
-
-// convenience/wrapper function
-func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query *SASTQuery) (QueryFailure, error) {
-	c.depwarn("UpdateQuery", "UpdateSASTQuery")
-	return c.UpdateSASTQuery(auditSession, query)
-}
-func (c Cx1Client) UpdateSASTQuery(auditSession *AuditSession, query *SASTQuery) (QueryFailure, error) {
-	if query.EditorKey == "" {
-		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
-	}
-
-	_, queryFail, err := c.UpdateSASTQuerySourceByKey(auditSession, query.EditorKey, query.Source)
-	if err != nil {
-		return queryFail, err
-	}
-
-	_, err = c.UpdateQueryMetadataByKey(auditSession, query.EditorKey, query.GetMetadata())
-
 	return queryFail, err
 }
 
-func (c Cx1Client) UpdateSASTQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (SASTQuery, QueryFailure, error) {
+// convenience/wrapper function
+func (c Cx1Client) UpdateQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, []QueryFailure, error) {
+	c.depwarn("UpdateQuery", "UpdateSASTQuery")
+	return c.UpdateSASTQuery(auditSession, query)
+}
+func (c Cx1Client) UpdateSASTQuery(auditSession *AuditSession, query SASTQuery) (SASTQuery, []QueryFailure, error) {
 	if query.EditorKey == "" {
-		return SASTQuery{}, QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+		return query, []QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditSASTQueries* calls", query.String())
+	}
+
+	updatedQuerySrc, queryFail, err := c.UpdateSASTQuerySource(auditSession, query, query.Source)
+	if err != nil {
+		return query, queryFail, err
+	}
+
+	updatedQueryMeta, err := c.UpdateSASTQueryMetadata(auditSession, query, query.GetMetadata())
+	updatedQueryMeta.MergeQuery(updatedQuerySrc)
+	updatedQueryMeta.MergeQuery(query)
+
+	return updatedQueryMeta, queryFail, err
+}
+func (c Cx1Client) UpdateIACQuery(auditSession *AuditSession, query IACQuery) (IACQuery, []QueryFailure, error) {
+	if query.QueryID == "" {
+		return query, []QueryFailure{}, fmt.Errorf("query %v does not have an ID, this should be retrieved with the GetAuditIACQueries* calls", query.String())
+	}
+
+	updatedQuerySrc, queryFail, err := c.UpdateIACQuerySourceByKey(auditSession, query.QueryID, query.Source)
+	if err != nil {
+		return query, queryFail, err
+	}
+
+	updatedQueryMeta, err := c.UpdateIACQueryMetadataByKey(auditSession, query.QueryID, query.GetMetadata())
+	updatedQueryMeta.MergeQuery(updatedQuerySrc)
+	updatedQueryMeta.MergeQuery(query)
+
+	return updatedQueryMeta, queryFail, err
+}
+
+func (c Cx1Client) UpdateSASTQuerySource(auditSession *AuditSession, query SASTQuery, source string) (SASTQuery, []QueryFailure, error) {
+	if query.EditorKey == "" {
+		return SASTQuery{}, []QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 	newQuery, queryFail, err := c.UpdateSASTQuerySourceByKey(auditSession, query.EditorKey, source)
 	if err != nil {
 		return SASTQuery{}, queryFail, err
+	}
+	newQuery.MergeQuery(query)
+	return newQuery, queryFail, nil
+}
+func (c Cx1Client) UpdateIACQuerySource(auditSession *AuditSession, query *IACQuery, source string) (IACQuery, []QueryFailure, error) {
+	if query.QueryID == "" {
+		return IACQuery{}, []QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+	}
+	newQuery, queryFail, err := c.UpdateIACQuerySourceByKey(auditSession, query.QueryID, source)
+	if err != nil {
+		return IACQuery{}, queryFail, err
 	}
 	newQuery.MergeQuery(*query)
 	return newQuery, queryFail, nil
@@ -841,13 +1025,13 @@ func (c Cx1Client) UpdateSASTQuerySource(auditSession *AuditSession, query *SAST
 The data returned by the query-editor api does not include the query ID, so it will be 0. Use "ValidateQuerySource" wrapper instead to address that.
 This will test if the code compiles and will not update the source code in Cx1 nor in the query object
 */
-func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) (QueryFailure, error) {
+func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey, source string) ([]QueryFailure, error) {
 	c.logger.Debugf("Validating query source by key: %v", queryKey)
 	type QueryUpdate struct {
 		ID     string `json:"id"`
 		Source string `json:"source"`
 	}
-	var queryFail QueryFailure
+	var queryFail []QueryFailure
 	postbody := make([]QueryUpdate, 1)
 	postbody[0].ID = queryKey
 	postbody[0].Source = source
@@ -875,18 +1059,16 @@ func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey
 
 	if responseMap, ok := responseObj.(map[string]interface{}); ok {
 		if val, ok := responseMap["failed_queries"]; ok {
-			var failedQueries []QueryFailure
-
 			bytes, _ := json.Marshal(val)
-			err = json.Unmarshal(bytes, &failedQueries)
+			err = json.Unmarshal(bytes, &queryFail)
 			if err != nil {
 				return queryFail, fmt.Errorf("failed to unmarshal failure: %s", err)
 			}
 
-			if len(failedQueries) == 1 {
-				return failedQueries[0], fmt.Errorf("failed to validate source")
+			if len(queryFail) == 0 {
+				return queryFail, nil
 			} else {
-				return queryFail, fmt.Errorf("failed to validate sources, details: %v", failedQueries)
+				return queryFail, fmt.Errorf("failed to validate source")
 			}
 		}
 	}
@@ -896,13 +1078,13 @@ func (c Cx1Client) ValidateQuerySourceByKey(auditSession *AuditSession, queryKey
 /*
 This will test if the code compiles and will not update the source code in Cx1 nor in the query object
 */
-func (c Cx1Client) ValidateQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
+func (c Cx1Client) ValidateQuerySource(auditSession *AuditSession, query *SASTQuery, source string) ([]QueryFailure, error) {
 	c.depwarn("ValidateQuerySource", "ValidateSASTQuerySource")
 	return c.ValidateSASTQuerySource(auditSession, query, source)
 }
-func (c Cx1Client) ValidateSASTQuerySource(auditSession *AuditSession, query *SASTQuery, source string) (QueryFailure, error) {
+func (c Cx1Client) ValidateSASTQuerySource(auditSession *AuditSession, query *SASTQuery, source string) ([]QueryFailure, error) {
 	if query.EditorKey == "" {
-		return QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
+		return []QueryFailure{}, fmt.Errorf("query %v does not have an editorKey, this should be retrieved with the GetAuditQueries* calls", query.String())
 	}
 	return c.ValidateQuerySourceByKey(auditSession, query.EditorKey, source)
 }
@@ -978,7 +1160,7 @@ func (c Cx1Client) RunSASTQuery(auditSession *AuditSession, query *SASTQuery, so
 	return c.RunQueryByKey(auditSession, query.EditorKey, source)
 }
 
-func (q AuditQuery) ToSASTQuery() SASTQuery {
+func (q AuditSASTQuery) ToSASTQuery() SASTQuery {
 	return SASTQuery{
 		QueryID:            0,
 		Level:              q.Level,
@@ -999,7 +1181,7 @@ func (q AuditQuery) ToSASTQuery() SASTQuery {
 	}
 }
 
-func (q *AuditQuery) CalculateEditorKey() string {
+func (q *AuditSASTQuery) CalculateEditorKey() string {
 	q.Key = calculateEditorKey(q.Level, q.Metadata.Language, q.Metadata.Group, q.Name)
 	return q.Key
 }
@@ -1015,7 +1197,7 @@ func calculateEditorKey(level, language, group, name string) string {
 	return encodedID
 }
 
-func (q AuditQuery) CalculateQueryID() (uint64, error) {
+func (q AuditSASTQuery) CalculateQueryID() (uint64, error) {
 	id, err := getAstQueryID(q.Metadata.Language, q.Metadata.Name, q.Metadata.Group)
 	return id, err
 }
@@ -1084,4 +1266,24 @@ func (f AuditSessionFilters) GetKey(engine, language string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no language '%v' found for engine '%v'", language, engine)
+}
+
+func (q AuditIACQuery) ToIACQuery() IACQuery {
+	return IACQuery{
+		QueryID:        q.QueryID,
+		Level:          q.Level,
+		LevelID:        q.LevelID,
+		Path:           q.Path,
+		Source:         q.Source,
+		Name:           q.Name,
+		Category:       q.Metadata.Category,
+		Platform:       q.Metadata.Platform,
+		Severity:       q.Metadata.Severity,
+		Custom:         q.Level != AUDIT_QUERY_PRODUCT,
+		Description:    q.Metadata.Description,
+		DescriptionID:  q.Metadata.DescriptionID,
+		DescriptionURL: q.Metadata.DescriptionURL,
+		CWE:            q.Metadata.Cwe,
+		Key:            q.Key,
+	}
 }

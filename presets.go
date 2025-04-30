@@ -506,7 +506,7 @@ func (p Preset) GetIACQueryCollection(queries IACQueryCollection) IACQueryCollec
 
 	for _, fam := range p.QueryFamilies {
 		for _, qid := range fam.QueryIDs {
-			if query := queries.GetQueryByLevelAndID(AUDIT_QUERY_PRODUCT, AUDIT_QUERY_PRODUCT, qid); query != nil {
+			if query := queries.GetQueryByID(qid); query != nil {
 				coll.AddQuery(*query)
 			}
 		}
