@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/exp/slices"
 )
 
 // Get the first count Applications
@@ -285,6 +286,12 @@ func (a *Application) RemoveRule(ruleID string) {
 // AssignProject will create or update a "project.name.in" type rule to assign the project to the app
 func (a *Application) AssignProject(project *Project) {
 	a.AddRule("project.name.in", project.Name)
+	if !slices.Contains(a.ProjectIds, project.ProjectID) {
+		a.ProjectIds = append(a.ProjectIds, project.ProjectID)
+	}
+	if !slices.Contains(project.Applications, a.ApplicationID) {
+		project.Applications = append(project.Applications, a.ApplicationID)
+	}
 }
 
 // UnassignProject will remove the project from the "project.name.in" rule if it's there, and if the rule ends up empty it will remove the rule
@@ -303,6 +310,14 @@ func (a *Application) UnassignProject(project *Project) {
 			}
 			return
 		}
+	}
+
+	if slices.Contains(a.ProjectIds, project.ProjectID) {
+
+		a.ProjectIds = slices.Delete(a.ProjectIds, slices.Index(a.ProjectIds, project.ProjectID), slices.Index(a.ProjectIds, project.ProjectID)+1)
+	}
+	if slices.Contains(project.Applications, a.ApplicationID) {
+		project.Applications = slices.Delete(project.Applications, slices.Index(project.Applications, a.ApplicationID), slices.Index(project.Applications, a.ApplicationID)+1)
 	}
 }
 

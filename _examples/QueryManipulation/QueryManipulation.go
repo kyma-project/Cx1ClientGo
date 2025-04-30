@@ -12,6 +12,11 @@ import (
 	easy "github.com/t-tomalak/logrus-easy-formatter"
 )
 
+var iacSrc string = `package Cx
+CxPolicy[result] {
+result := {}
+}`
+
 func main() {
 	logger := logrus.New()
 	logger.SetLevel(logrus.InfoLevel)
@@ -86,7 +91,7 @@ func main() {
 		}
 	}
 
-	//makeSASTQueries(cx1client, logger, project, lastscan)
+	makeSASTQueries(cx1client, logger, project, lastscan)
 	makeIACQueries(cx1client, logger, project, lastscan)
 
 }
@@ -198,7 +203,7 @@ func newSASTCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger
 		return nil
 	}
 
-	updatedQuery, _, err := cx1client.UpdateSASTQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	updatedQuery, _, err := cx1client.UpdateSASTQuerySource(session, newCorpOverride, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
@@ -207,7 +212,7 @@ func newSASTCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger
 
 	metadata := newCorpOverride.GetMetadata()
 	metadata.Severity = "Critical"
-	updatedQuery, err = cx1client.UpdateSASTQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
+	updatedQuery, err = cx1client.UpdateSASTQueryMetadata(session, newCorpOverride, metadata)
 	if err != nil {
 		logger.Errorf("Error updating query metadata: %s", err)
 	} else {
@@ -344,6 +349,11 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 	}
 
 	defer func() {
+		// Wait for user input, like hitting enter, before continuing.
+		//logger.Info("Press 'Enter' to continue...")
+		//_, _ = os.Stdin.Read(make([]byte, 1))
+		//logger.Info("Continuing...")
+
 		logger.Infof("Terminating audit session %v", session.ID)
 		err = cx1client.AuditDeleteSession(&session)
 		if err != nil {
@@ -362,102 +372,98 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 	}
 
 	qc.AddCollection(&aq)
-	cqc := qc.GetCustomQueryCollection()
-
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
-
-	for lid := range cqc.Technologies {
-		for gid := range cqc.Technologies[lid].QueryGroups {
-			for _, q := range cqc.Technologies[lid].QueryGroups[gid].Queries {
-				logger.Info(q.StringDetailed())
-			}
-		}
-	}
+	qc.GetCustomQueryCollection().Print(logger)
 
 	corpOverride := newIACCorpOverride(cx1client, logger, &qc, &session)
 	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
 		logger.Errorf("Audit session may have expired: %s", err)
 	}
-	defer DeleteSASTQuery(cx1client, logger, &session, corpOverride)
+	defer DeleteIACQuery(cx1client, logger, &session, corpOverride)
 
-	/*
-		appOverride := newSASTApplicationOverride(cx1client, logger, &qc, &session)
-		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-			logger.Errorf("Audit session may have expired: %s", err)
-		}
-		defer DeleteQuery(cx1client, logger, &session, appOverride)
+	appOverride := newIACApplicationOverride(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteIACQuery(cx1client, logger, &session, appOverride)
 
-		projOverride := newSASTProjectOverride(cx1client, logger, &qc, &session)
-		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-			logger.Errorf("Audit session may have expired: %s", err)
-		}
-		defer DeleteQuery(cx1client, logger, &session, projOverride)
+	projOverride := newIACProjectOverride(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteIACQuery(cx1client, logger, &session, projOverride)
 
-		corpQuery := newSASTCorpQuery(cx1client, logger, &qc, &session)
-		if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
-			logger.Errorf("Audit session may have expired: %s", err)
-		}
-		defer DeleteQuery(cx1client, logger, &session, corpQuery)
+	corpQuery := newIACCorpQuery(cx1client, logger, &qc, &session)
+	if err = cx1client.AuditSessionKeepAlive(&session); err != nil {
+		logger.Errorf("Audit session may have expired: %s", err)
+	}
+	defer DeleteIACQuery(cx1client, logger, &session, corpQuery)
 
-		logger.Info("Retrieving an updated list of queries")
-		qc, err = cx1client.GetQueries()
-		if err != nil {
-			logger.Errorf("Error getting the query collection: %s", err)
-		}
+	logger.Info("Retrieving an updated list of queries")
+	qc, err = cx1client.GetIACQueryCollection()
+	if err != nil {
+		logger.Errorf("Error getting the query collection: %s", err)
+	}
 
-		aq, err = cx1client.GetAuditQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
-		if err != nil {
-			logger.Errorf("Error getting queries: %s", err)
-		}
+	aq, err = cx1client.GetAuditIACQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
+	if err != nil {
+		logger.Errorf("Error getting queries: %s", err)
+	}
 
-		qc.AddCollection(&aq)
-		if corpQuery != nil {
-			qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
-		}
+	qc.AddCollection(&aq)
+	if corpQuery != nil {
+		qc.UpdateNewQuery(corpQuery) // fill in the missing QueryID for this new query
+	}
 
-		cqc = qc.GetCustomQueryCollection()
+	logger.Info("Retrieving an updated list of queries")
+	qc, err = cx1client.GetIACQueryCollection()
+	if err != nil {
+		logger.Errorf("Error getting the query collection: %s", err)
+	}
 
-		logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
+	aq, err = cx1client.GetAuditIACQueriesByLevelID(&session, Cx1ClientGo.AUDIT_QUERY_PROJECT, project.ProjectID)
+	if err != nil {
+		logger.Errorf("Error getting queries: %s", err)
+	}
 
-		for lid := range cqc.QueryLanguages {
-			for gid := range cqc.QueryLanguages[lid].QueryGroups {
-				for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
-					logger.Info(q.StringDetailed())
-				}
-			}
-		}
-	*/
+	qc.AddCollection(&aq)
+	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
+	qc.GetCustomQueryCollection().Print(logger)
 }
 
 func newIACCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.IACQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.IACQuery {
 	logger.Infof("Creating corp override under session %v", session.ID)
-	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+	baseQuery := qc.GetQueryByName("Dockerfile", "common", "Apt Get Install Lists Were Not Deleted")
 
 	if baseQuery == nil {
-		logger.Errorf("Unable to find query Java - Java_Spring - Spring_Missing_Expect_CT_Header")
+		logger.Errorf("Unable to find query Dockerfile - common - Apt Get Install Lists Were Not Deleted")
 		return nil
+	} else {
+		logger.Infof("Found query: %v", baseQuery.StringDetailed())
 	}
 
 	newCorpOverride, err := cx1client.CreateIACQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_TENANT, baseQuery)
 	if err != nil {
 		logger.Errorf("Failed to create override: %s", err)
 		return nil
+	} else {
+		logger.Infof("Created new override: %v", newCorpOverride.StringDetailed())
 	}
 
-	updatedQuery, _, err := cx1client.UpdateIACQuerySourceByKey(session, newCorpOverride.EditorKey, "result = base.Spring_Missing_Expect_CT_Header(); // corp override")
+	newCorpOverride, _, err = cx1client.UpdateIACQuerySource(session, &newCorpOverride, iacSrc)
 	if err != nil {
 		logger.Errorf("Error updating query source: %s", err)
 	} else {
-		newCorpOverride = updatedQuery
+		logger.Infof("Updated query source: %v", newCorpOverride.StringDetailed())
 	}
 
 	metadata := newCorpOverride.GetMetadata()
 	metadata.Severity = "Critical"
-	updatedQuery, err = cx1client.UpdateIACQueryMetadataByKey(session, newCorpOverride.EditorKey, metadata)
+	newCorpOverride, err = cx1client.UpdateIACQueryMetadata(session, newCorpOverride, metadata)
 	if err != nil {
 		logger.Errorf("Error updating query metadata: %s", err)
 	} else {
-		newCorpOverride = updatedQuery
+		logger.Infof("Updated query metadata: %v", newCorpOverride.StringDetailed())
 	}
 
 	if err = qc.UpdateNewQuery(&newCorpOverride); err != nil {
@@ -466,6 +472,112 @@ func newIACCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 
 	logger.Infof("Created new corp override: %v", newCorpOverride.StringDetailed())
 	return &newCorpOverride
+}
+
+func newIACApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.IACQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.IACQuery {
+	logger.Infof("Creating application-level override under session %v", session.ID)
+	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+
+	if baseQuery == nil {
+		logger.Errorf("Unable to find query Java - Java_Spring - Spring_Missing_Expect_CT_Header")
+		return nil
+	}
+
+	cx1client.AuditSessionKeepAlive(session)
+	newApplicationOverride, err := cx1client.CreateIACQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_APPLICATION, baseQuery)
+	if err != nil {
+		logger.Errorf("Failed to create override: %s", err)
+		return nil
+	}
+
+	updatedQuery, _, err := cx1client.UpdateIACQuerySourceByKey(session, newApplicationOverride.Key, "result = base.Spring_Missing_Expect_CT_Header(); // application override")
+	if err != nil {
+		logger.Errorf("Error updating query source: %s", err)
+	} else {
+		newApplicationOverride = updatedQuery
+	}
+
+	metadata := newApplicationOverride.GetMetadata()
+	metadata.Severity = "Medium"
+	updatedQuery, err = cx1client.UpdateIACQueryMetadataByKey(session, newApplicationOverride.Key, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newApplicationOverride = updatedQuery
+	}
+
+	qc.UpdateNewQuery(&newApplicationOverride)
+
+	logger.Infof("Created new application override: %v", newApplicationOverride.StringDetailed())
+	return &newApplicationOverride
+}
+
+func newIACProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.IACQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.IACQuery {
+	logger.Infof("Creating project override under session %v", session.ID)
+	baseQuery := qc.GetQueryByName("Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
+
+	if baseQuery == nil {
+		logger.Errorf("Unable to find query Java - Java_Spring - Spring_Missing_Expect_CT_Header")
+		return nil
+	}
+
+	cx1client.AuditSessionKeepAlive(session)
+	newProjectOverride, err := cx1client.CreateIACQueryOverride(session, Cx1ClientGo.AUDIT_QUERY_PROJECT, baseQuery)
+	if err != nil {
+		logger.Errorf("Failed to create override: %s", err)
+		return nil
+	}
+
+	updatedQuery, _, err := cx1client.UpdateIACQuerySourceByKey(session, newProjectOverride.Key, "result = base.Spring_Missing_Expect_CT_Header(); // project override")
+	if err != nil {
+		logger.Errorf("Error updating query source: %s", err)
+	} else {
+		newProjectOverride = updatedQuery
+	}
+
+	metadata := newProjectOverride.GetMetadata()
+	metadata.Severity = "High"
+	updatedQuery, err = cx1client.UpdateIACQueryMetadataByKey(session, newProjectOverride.Key, metadata)
+	if err != nil {
+		logger.Errorf("Error updating query metadata: %s", err)
+	} else {
+		newProjectOverride = updatedQuery
+	}
+
+	qc.UpdateNewQuery(&newProjectOverride)
+
+	logger.Infof("Created new project override: %v", newProjectOverride.StringDetailed())
+	return &newProjectOverride
+}
+
+func newIACCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc *Cx1ClientGo.IACQueryCollection, session *Cx1ClientGo.AuditSession) *Cx1ClientGo.IACQuery {
+	logger.Infof("Creating corp query under session %v", session.ID)
+	NewQuery := Cx1ClientGo.IACQuery{
+		Name:           "TestNewQuery",
+		Description:    "Test new query",
+		DescriptionURL: "http://test.com/newquery",
+		Platform:       "Dockerfile",
+		Group:          "common",
+		Category:       "Supply-Chain",
+		Severity:       "High",
+		CWE:            "",
+		Level:          Cx1ClientGo.AUDIT_QUERY_TENANT,
+		Custom:         true,
+		Source:         iacSrc,
+	}
+
+	cx1client.AuditSessionKeepAlive(session)
+	newCorpQuery, _, err := cx1client.CreateNewIACQuery(session, NewQuery)
+	if err != nil {
+		logger.Errorf("Failed to create new corp query: %s", err)
+		return nil
+	}
+
+	qc.UpdateNewQuery(&newCorpQuery)
+
+	logger.Infof("Created new corp query: %v", newCorpQuery.StringDetailed())
+	logger.Info(" - Query IDs for brand-new queries are unknown until the full query collection is refreshed via client.GetQueries()")
+	return &newCorpQuery
 }
 
 func DeleteIACQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session *Cx1ClientGo.AuditSession, query *Cx1ClientGo.IACQuery) {
