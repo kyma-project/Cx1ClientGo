@@ -255,14 +255,48 @@ type ApplicationRule struct {
 	Value string `json:"value"`
 }
 
-type AuditQuery struct {
+type AuditIACQuery struct {
+	QueryID  string `json:"id"`
+	Key      string `json:"-"`
+	Name     string
+	Level    string
+	LevelID  string
+	Path     string
+	Source   string
+	Metadata AuditIACQueryMetadata
+}
+type AuditIACQueryMetadata struct {
+	Aggregation    string `json:"aggregation,omitempty"`
+	Category       string `json:"category,omitempty"`
+	Cwe            string `json:"cwe,omitempty"`
+	Description    string `json:"description,omitempty"`
+	DescriptionID  string `json:"descriptionId,omitempty"`
+	DescriptionURL string `json:"descriptionurl,omitempty"`
+	OldSeverity    string `json:"oldseverity,omitempty"`
+	Platform       string `json:"platform"`
+	QueryID        string `json:"queryId"`
+	Name           string `json:"queryname"`
+	Severity       string `json:"severity"`
+}
+
+type AuditSASTQuery struct {
 	Key      string `json:"id"`
 	Name     string
 	Level    string
 	LevelID  string
 	Path     string
 	Source   string
-	Metadata AuditQueryMetadata
+	Metadata AuditSASTQueryMetadata
+}
+type AuditSASTQueryMetadata struct {
+	Cwe             int64  `json:"cwe,omitempty"`
+	IsExecutable    bool   `json:"executable"`
+	CxDescriptionID int64  `json:"description,omitempty"`
+	Language        string `json:"language"`
+	Group           string `json:"group"`
+	Severity        string `json:"severity"`
+	SastID          uint64 `json:"sastId,omitempty"`
+	Name            string `json:"name"`
 }
 
 type AuditQueryTree struct {
@@ -276,17 +310,6 @@ type AuditQueryTree struct {
 		Custom   bool
 	}
 	Children []AuditQueryTree
-}
-
-type AuditQueryMetadata struct {
-	Cwe             int64  `json:"cwe,omitempty"`
-	IsExecutable    bool   `json:"executable"`
-	CxDescriptionID int64  `json:"description,omitempty"`
-	Language        string `json:"language"`
-	Group           string `json:"group"`
-	Severity        string `json:"severity"`
-	SastID          uint64 `json:"sastId,omitempty"`
-	Name            string `json:"name"`
 }
 
 type AuditPermissions struct {
@@ -430,30 +453,35 @@ type IACPreset struct {
 */
 
 type IACQuery struct {
-	QueryID    string
-	Name       string
-	Technology string
-	Group      string
-	Severity   string
-	CWE        int64
-	Level      string
-	LevelID    string
-	Custom     bool
-	Path       string
-	Source     string
+	QueryID        string `json:"queryId"` // this is a unique ID per query per level (eg: query1 tenant-level override will have a different ID from the query1 project-level override)
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	DescriptionID  string `json:"descriptionId"`
+	DescriptionURL string `json:"descriptionUrl"`
+	Platform       string `json:"platform"`
+	Group          string `json:"group"`
+	Category       string `json:"category"`
+	Severity       string `json:"severity"`
+	CWE            string `json:"cwe"`
+	Level          string `json:"level"`
+	LevelID        string `json:"-"`
+	Custom         bool   `json:"-"`
+	Key            string `json:"-"` // this is the ID of the query consistent across overrides (eg: query1 tenant-level override will have the same ID as the query1 project-level override)
+	Path           string `json:"path"`
+	Source         string `json:"-"`
 }
 type IACQueryGroup struct {
-	Name       string
-	Technology string
-	Queries    []IACQuery
+	Name     string
+	Platform string
+	Queries  []IACQuery
 }
-type IACQueryTechnology struct {
+type IACQueryPlatform struct {
 	Name        string
 	QueryGroups []IACQueryGroup
 }
 
 type IACQueryCollection struct {
-	Technologies []IACQueryTechnology
+	Platforms []IACQueryPlatform
 }
 
 type QueryCollection interface {
