@@ -14,20 +14,22 @@ import (
 
 var cxOrigin = "Cx1-Client-GoLang"
 var scanEngineLicenseMap = map[string]string{
-	"SAST":                        "sast",
-	"SCA":                         "sca",
-	"KICS":                        "kics",
-	"IAC":                         "kics",
-	"Containers":                  "containers",
-	"Fusion":                      "?",
-	"API Security":                "apisec",
-	"DAST":                        "?",
-	"Malicious Packages":          "?",
-	"Cloud Insights":              "?",
-	"Application Risk Management": "?",
-	"Enterprise Secrets":          "?",
-	"AI Protection":               "?",
-	"SCS":                         "?",
+	"sast":       "SAST",
+	"sca":        "SCA",
+	"kics":       "KICS",
+	"iac":        "KICS",
+	"containers": "Containers",
+	//"?":            "Fusion",
+	"apisec": "API Security",
+	//"?":            "DAST",
+	//"?":            "Malicious Packages",
+	//"?":            "Cloud Insights",
+	//"?":            "Application Risk Management",
+	//"microengines": "Enterprise Secrets", // microengines- "Value": { "2ms" : "true" }
+	"secrets": "Enterprise Secrets",
+	"2ms":     "Enterprise Secrets",
+	//"?":            "AI Protection",
+	//"?":            "SCS",
 }
 
 //var astAppID string
@@ -339,23 +341,23 @@ func (c *Cx1Client) SetClaims(claims Cx1Claims) {
 }
 
 func (c Cx1Client) IsEngineAllowed(engine string) (string, bool) {
-	var longName string
-	var shortName string
-	for long, short := range scanEngineLicenseMap {
-		if strings.EqualFold(short, engine) || strings.EqualFold(long, engine) {
-			longName = long
-			shortName = short
+	var engineName string
+	var licenseName string
+	for long, license := range scanEngineLicenseMap {
+		if strings.EqualFold(license, engine) || strings.EqualFold(long, engine) {
+			engineName = long
+			licenseName = license
 			break
 		}
 	}
-	if longName == "" {
+	if engineName == "" {
 		return "", false
 	}
-	c.logger.Infof("Checking license for %v/%v", engine, longName)
+	c.logger.Tracef("Checking license for %v/%v", engineName, licenseName)
 
 	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
-		if strings.EqualFold(longName, eng) {
-			return shortName, true
+		if strings.EqualFold(licenseName, eng) {
+			return licenseName, true
 		}
 	}
 	return "", false

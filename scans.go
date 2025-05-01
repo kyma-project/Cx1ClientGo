@@ -706,6 +706,13 @@ func (s ScanMetrics) GetLanguages() []string {
 }
 
 func (s *ScanConfigurationSet) AddConfig(engine, key, value string) {
+	if engine == "iac" {
+		engine = "kics"
+	} else if engine == "2ms" || engine == "secrets" {
+		s.AddConfig("microengines", "2ms", "true")
+		return
+	}
+
 	for i := range s.Configurations {
 		if s.Configurations[i].ScanType == engine {
 			if key != "" {

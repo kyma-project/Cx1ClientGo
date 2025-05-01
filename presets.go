@@ -13,10 +13,13 @@ import (
 
 func (p Preset) String() string {
 	if p.Engine == "sast" {
-		return fmt.Sprintf("[%v] %v", p.PresetID, p.Name)
+		return fmt.Sprintf("[%v] %v (sast)", p.PresetID, p.Name)
+	} else if p.Engine == "iac" {
+		return fmt.Sprintf("[%v] %v (iac)", ShortenGUID(p.PresetID), p.Name)
 	} else {
-		return fmt.Sprintf("[%v] %v", ShortenGUID(p.PresetID), p.Name)
+		return fmt.Sprintf("[%v] %v (%v)", p.PresetID, p.Name, p.Engine)
 	}
+
 }
 
 func (c Cx1Client) newPresetsEnabled() bool {
@@ -49,7 +52,7 @@ func (c Cx1Client) GetSASTPresets(count uint64) ([]Preset, error) {
 
 // Presets do not include the contents of the preset (query families etc) - use Get*PresetContents to fill or Get*PresetByID
 func (c Cx1Client) GetIACPresets(count uint64) ([]Preset, error) {
-	return c.GetPresets("IAC", count)
+	return c.GetPresets("iac", count)
 }
 
 func (c Cx1Client) GetPresets(engine string, count uint64) ([]Preset, error) {
@@ -149,7 +152,7 @@ func (c Cx1Client) GetPresetByName(engine, name string) (Preset, error) {
 		"search-term":     {name},
 	}
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/sast/presets?%v", params.Encode()), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets?%v", engine, params.Encode()), nil, nil)
 	if err != nil {
 		return Preset{}, err
 	}
