@@ -87,15 +87,15 @@ func (f *BaseIAMFilter) Bump() {
 }
 
 func (v VersionInfo) String() string {
-	return fmt.Sprintf("CxOne %v, SAST %v, KICS %v", v.CxOne, v.SAST, v.KICS)
+	return fmt.Sprintf("CxOne %v, SAST %v, IAC %v", v.CxOne, v.SAST, v.IAC)
 }
 
 func (v *VersionInfo) Parse() (error, error, error) {
-	var errCx1, errKics, errSast error
+	var errCx1, errIac, errSast error
 	v.vCxOne, errCx1 = versionStringToTriad(v.CxOne)
 	v.vSAST, errSast = versionStringToTriad(v.SAST)
-	v.vKICS, errKics = versionStringToTriad(v.KICS)
-	return errCx1, errKics, errSast
+	v.vIAC, errIac = versionStringToTriad(v.IAC)
+	return errCx1, errIac, errSast
 }
 
 // version check returns -1 (current cx1 version lower), 0 (equal), 1 (current cx1 version greater)
@@ -108,12 +108,15 @@ func (v VersionInfo) CheckCxOne(version string) (int, error) {
 	return v.vCxOne.Compare(test), nil
 }
 func (v VersionInfo) CheckKICS(version string) (int, error) {
+	return v.CheckIAC(version)
+}
+func (v VersionInfo) CheckIAC(version string) (int, error) {
 	test, err := versionStringToTriad(version)
 	if err != nil {
 		return 0, err
 	}
 
-	return v.vKICS.Compare(test), nil
+	return v.vIAC.Compare(test), nil
 }
 func (v VersionInfo) CheckSAST(version string) (int, error) {
 	test, err := versionStringToTriad(version)

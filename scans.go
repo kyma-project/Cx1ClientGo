@@ -187,7 +187,7 @@ func (s ScanSummary) TotalCount() uint64 {
 	count += s.SASTCounters.TotalCounter
 	count += s.SCACounters.TotalCounter
 	count += s.SCAPackagesCounters.TotalCounter
-	count += s.KICSCounters.TotalCounter
+	count += s.IACCounters.TotalCounter
 	count += s.APISecCounters.TotalCounter
 	count += s.ContainersCounters.TotalCounter
 	count += s.SCAContainersCounters.TotalPackagesCounters
@@ -196,12 +196,12 @@ func (s ScanSummary) TotalCount() uint64 {
 }
 
 func (s ScanSummary) String() string {
-	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d KICS, %d API Security, and %d Containers results",
+	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d IAC, %d API Security, and %d Containers results",
 		s.SASTCounters.TotalCounter,
 		s.SCACounters.TotalCounter,
 		s.SCAPackagesCounters.TotalCounter,
 		s.SCAContainersCounters.TotalPackagesCounters,
-		s.KICSCounters.TotalCounter,
+		s.IACCounters.TotalCounter,
 		s.APISecCounters.TotalCounter,
 		s.ContainersCounters.TotalCounter,
 	)
