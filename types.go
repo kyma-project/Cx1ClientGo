@@ -699,7 +699,7 @@ type SASTQueryCollection struct {
 type SASTResultsPredicates struct {
 	ResultsPredicatesBase // actually the same structure but different endpoint
 }
-type KICSResultsPredicates struct {
+type IACResultsPredicates struct {
 	ResultsPredicatesBase // actually the same structure but different endpoint
 }
 
@@ -830,7 +830,7 @@ type ScanResultSet struct {
 	SAST         []ScanSASTResult
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
-	KICS         []ScanKICSResult
+	IAC          []ScanIACResult
 	Containers   []ScanContainersResult
 }
 
@@ -894,12 +894,11 @@ type ScanContainersResultDetails struct {
 	}
 }
 
-type ScanKICSResult struct {
+type ScanIACResult struct {
 	ScanResultBase
-	Data ScanKICSResultData
-	//VulnerabilityDetails ScanKICSResultDetails // currently {}
+	Data ScanIACResultData
 }
-type ScanKICSResultData struct {
+type ScanIACResultData struct {
 	QueryID       string
 	QueryName     string
 	Group         string
@@ -1042,7 +1041,7 @@ type ScanSummary struct {
 		FilesScannedCounter uint64
 	}
 
-	KICSCounters struct {
+	IACCounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
 		StatusCounters         []ScanSummaryStatusCounter
 		StateCounters          []ScanSummaryStateCounter
@@ -1055,7 +1054,7 @@ type ScanSummary struct {
 
 		PlatformSummary []ScanSummaryPlatformCounter
 		CategorySummary []ScanSummaryCategoryCounter
-	}
+	} `json:"kicsCounters"`
 
 	SCACounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
@@ -1262,10 +1261,10 @@ type UserWithAttributes struct {
 
 type VersionInfo struct {
 	CxOne  string
-	KICS   string
+	IAC    string `json:"kics"`
 	SAST   string
 	vCxOne VersionTriad `json:"-"`
-	vKICS  VersionTriad `json:"-"`
+	vIAC   VersionTriad `json:"-"`
 	vSAST  VersionTriad `json:"-"`
 }
 

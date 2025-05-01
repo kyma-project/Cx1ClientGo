@@ -17,6 +17,7 @@ var scanEngineLicenseMap = map[string]string{
 	"SAST":                        "sast",
 	"SCA":                         "sca",
 	"KICS":                        "kics",
+	"IAC":                         "kics",
 	"Containers":                  "containers",
 	"Fusion":                      "?",
 	"API Security":                "apisec",
@@ -341,12 +342,7 @@ func (c Cx1Client) IsEngineAllowed(engine string) (string, bool) {
 	var longName string
 	var shortName string
 	for long, short := range scanEngineLicenseMap {
-		if strings.EqualFold(short, engine) {
-			longName = long
-			shortName = short
-			break
-		}
-		if strings.EqualFold(long, engine) {
+		if strings.EqualFold(short, engine) || strings.EqualFold(long, engine) {
 			longName = long
 			shortName = short
 			break

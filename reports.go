@@ -116,15 +116,12 @@ func (c Cx1Client) RequestNewReportByIDsv2(entityType string, ids, sections, sca
 	data, err := c.sendRequest(http.MethodPost, "/reports/v2", bytes.NewReader(jsonValue), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to trigger report v2 generation for %v(s) %v: %s", entityType, strings.Join(ids, ","), err)
-	} else {
-		c.logger.Infof("Generating report %v", string(data))
 	}
 
 	var reportResponse struct {
 		ReportId string
 	}
 	err = json.Unmarshal(data, &reportResponse)
-
 	return reportResponse.ReportId, err
 }
 
