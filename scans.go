@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/exp/slices"
 )
 
 var ScanSortCreatedDescending = "+created_at"
@@ -124,6 +125,36 @@ func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
 	filter.Sort = append(filter.Sort, ScanSortCreatedDescending)
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
+}
+
+// This function returns the last scans matching the filter and also having a scan by a specific engine
+func (c Cx1Client) GetLastScansByEngineFiltered(engine string, limit uint64, filter ScanFilter) ([]Scan, error) {
+	var scans []Scan
+
+	count, ss, err := c.GetScansFiltered(filter)
+	scans = filterScansByEngine(ss, engine)
+	filter.Limit = c.pagination.Scans
+
+	for err == nil && count > filter.Offset+filter.Limit && uint64(len(scans)) < limit {
+		filter.Bump()
+		_, ss, err = c.GetScansFiltered(filter)
+		scans = append(scans, filterScansByEngine(ss, engine)...)
+	}
+
+	if uint64(len(scans)) > limit {
+		return scans[:limit], nil
+	}
+	return scans, nil
+}
+
+func filterScansByEngine(scans []Scan, engine string) []Scan {
+	var filteredScans []Scan
+	for _, scan := range scans {
+		if slices.Contains(scan.Engines, engine) {
+			filteredScans = append(filteredScans, scan)
+		}
+	}
+	return filteredScans
 }
 
 // returns the number of scans matching the filter and an array of those scans

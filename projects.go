@@ -110,6 +110,7 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 	if err != nil {
 		return project, err
 	}
+	time.Sleep(time.Second)
 	return c.ProjectInApplicationPollingByID(project.ProjectID, applicationId)
 }
 
