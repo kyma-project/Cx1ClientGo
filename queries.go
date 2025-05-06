@@ -222,6 +222,9 @@ func (q *IACQuery) MergeQuery(nq IACQuery) {
 	if q.QueryID == "" && nq.QueryID != "" {
 		q.QueryID = nq.QueryID
 	}
+	if q.Key == "" && nq.Key != "" {
+		q.Key = nq.Key
+	}
 	if q.Path == "" && nq.Path != "" {
 		q.Path = nq.Path
 	}
@@ -299,6 +302,17 @@ func (q SASTQuery) GetMetadata() AuditSASTQueryMetadata {
 	}
 }
 
+func (q SASTQuery) MetadataDifferent(metadata AuditSASTQueryMetadata) bool {
+	return q.CweID != metadata.Cwe ||
+		q.IsExecutable != metadata.IsExecutable ||
+		q.QueryDescriptionId != metadata.CxDescriptionID ||
+		q.Language != metadata.Language ||
+		q.Group != metadata.Group ||
+		!strings.EqualFold(q.Severity, metadata.Severity) ||
+		q.SastID != metadata.SastID ||
+		q.Name != metadata.Name
+}
+
 func (q IACQuery) GetMetadata() AuditIACQueryMetadata {
 	return AuditIACQueryMetadata{
 		Cwe:            q.CWE,
@@ -312,6 +326,18 @@ func (q IACQuery) GetMetadata() AuditIACQueryMetadata {
 		Name:           q.Name,
 		Severity:       q.Severity,
 	}
+}
+
+func (q IACQuery) MetadataDifferent(metadata AuditIACQueryMetadata) bool {
+	return q.CWE != metadata.Cwe ||
+		q.Category != metadata.Category ||
+		q.Description != metadata.Description ||
+		q.DescriptionID != metadata.DescriptionID ||
+		q.DescriptionURL != metadata.DescriptionURL ||
+		q.Platform != metadata.Platform ||
+		q.QueryID != metadata.QueryID ||
+		q.Name != metadata.Name ||
+		!strings.EqualFold(q.Severity, metadata.Severity)
 }
 
 func (c Cx1Client) QueryLink(q *SASTQuery) string {

@@ -186,14 +186,20 @@ func (qc IACQueryCollection) GetQueryByLevelAndKey(level, levelID, key string) *
 	return nil
 }
 func (qc *IACQueryCollection) AddQuery(q IACQuery) {
-	if q.Name == "herpaderp" {
-		fmt.Println("Query collection - adding ", q.StringDetailed())
+	if q.Group == "" {
+		q.Group = "common"
 	}
 
 	if q.Key == "" {
 		qgq := qc.GetQueryByName(q.Platform, q.Group, q.Name)
 		if qgq != nil {
 			q.Key = qgq.Key
+		} else {
+			if q.QueryID[1] == ':' {
+				q.Key = q.QueryID[2:]
+			} else {
+				q.Key = q.QueryID
+			}
 		}
 	}
 
@@ -281,20 +287,21 @@ func (query AuditQueryTree) ToIACQuery(levelTitle, platformTitle, groupTitle, pr
 	if levelTitle == AUDIT_QUERY_PRODUCT || levelTitle == "Checkmarx predefined" {
 		qlevelId = AUDIT_QUERY_PRODUCT
 		qlevel = AUDIT_QUERY_PRODUCT
+		key = query.Key
 	} else {
 		switch query.Key[0] {
 		case 't':
 			qlevelId = AUDIT_QUERY_TENANT
 			qlevel = AUDIT_QUERY_TENANT
-			key = query.Key[2:]
+			//key = query.Key[2:]
 		case 'p':
 			qlevelId = projectId
 			qlevel = AUDIT_QUERY_PROJECT
-			key = query.Key[2:]
+			//key = query.Key[2:]
 		case 'a':
 			qlevelId = appId
 			qlevel = AUDIT_QUERY_APPLICATION
-			key = query.Key[2:]
+			//key = query.Key[2:]
 		default:
 			//c.logger.Warnf("Unknown query level: %v / %v", levelTitle, level.Key)
 			qlevel = AUDIT_QUERY_PRODUCT

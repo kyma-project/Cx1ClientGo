@@ -322,9 +322,10 @@ type AuditPermissions struct {
 type AuditSession struct {
 	ID   string `json:"id"`
 	Data struct {
-		Status      string `json:"status"`
-		RequestID   string `json:"requestId"`
-		Permissions struct {
+		Status       string   `json:"status"`
+		RequestID    string   `json:"requestId"`
+		QueryFilters []string `json:"queryFilters"`
+		Permissions  struct {
 			Tenant      AuditPermissions `json:"tenant"`
 			Project     AuditPermissions `json:"project"`
 			Application AuditPermissions `json:"application"`
@@ -335,12 +336,12 @@ type AuditSession struct {
 	ApplicationAssociation bool      `json:"applicationAssociation"`
 	Status                 string    `json:"status"`
 	Value                  []string  `json:"value"`
-	QueryFilters           []string  `json:"queryFilters"`
 	Engine                 string    `json:"-"`
 	ProjectID              string    `json:"-"`
 	ApplicationID          string    `json:"-"`
 	ScanID                 string    `json:"-"`
 	Languages              []string  `json:"-"`
+	Platforms              []string  `json:"-"`
 	CreatedAt              time.Time `json:"-"`
 	LastHeartbeat          time.Time `json:"-"`
 }
@@ -643,14 +644,15 @@ type RunningScan struct {
 }
 
 type ResultsPredicatesBase struct {
-	PredicateID  string `json:"ID"`
+	PredicateID  string `json:"ID,omitempty"`
 	SimilarityID string `json:"similarityId"`
 	ProjectID    string `json:"projectId"`
-	State        string `json:"state"`
+	ScanID       string `json:"scanId"`
+	State        string `json:"state,omitempty"`
 	Comment      string `json:"comment"`
-	Severity     string `json:"severity"`
-	CreatedBy    string `json:"createdBy"`
-	CreatedAt    string `json:"createdAt"`
+	Severity     string `json:"severity,omitempty"`
+	CreatedBy    string `json:"createdBy,omitempty"`
+	CreatedAt    string `json:"createdAt,omitempty"`
 }
 
 /*
