@@ -153,8 +153,8 @@ func (c Cx1Client) AddIACResultsPredicates(predicates []IACResultsPredicates) er
 	return err
 }
 
-func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {
-	c.logger.Debugf("Fetching SAST results predicates for project %v similarityId %v", ProjectID, SimilarityID)
+func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID, ScanID string) ([]SASTResultsPredicates, error) {
+	c.logger.Debugf("Fetching SAST results predicates for project %v scan %v similarityId %v", ProjectID, ScanID, SimilarityID)
 
 	var Predicates struct {
 		PredicateHistoryPerProject []struct {
@@ -166,7 +166,7 @@ func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID s
 
 		TotalCount uint
 	}
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v&scan-id=%v", SimilarityID, ProjectID, ScanID), nil, nil)
 	if err != nil {
 		return []SASTResultsPredicates{}, err
 	}
@@ -181,6 +181,30 @@ func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID s
 	}
 
 	return Predicates.PredicateHistoryPerProject[0].Predicates, err
+}
+
+func (c Cx1Client) GetLastSASTResultsPredicateByID(SimilarityID string, ProjectID, ScanID string) (SASTResultsPredicates, error) {
+	c.logger.Debugf("Fetching SAST results predicates for project %v scan %v similarityId %v", ProjectID, ScanID, SimilarityID)
+
+	var Predicates struct {
+		LatestPredicatePerProject []SASTResultsPredicates `json:"latestPredicatePerProject"`
+		TotalCount                uint
+	}
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v/latest?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	if err != nil {
+		return SASTResultsPredicates{}, err
+	}
+
+	err = json.Unmarshal(response, &Predicates)
+	if err != nil {
+		return SASTResultsPredicates{}, err
+	}
+
+	if Predicates.TotalCount == 0 {
+		return SASTResultsPredicates{}, nil
+	}
+
+	return Predicates.LatestPredicatePerProject[0], err
 }
 
 func (c Cx1Client) GetKICSResultsPredicatesByID(SimilarityID string, ProjectID string) ([]IACResultsPredicates, error) {
@@ -413,4 +437,8 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 	c.logger.Debugf("Retrieved %d of %d results", ResultSet.Count(), resultResponse.TotalCount)
 
 	return resultResponse.TotalCount, ResultSet, nil
+}
+
+func (b ResultsPredicatesBase) String() string {
+	return fmt.Sprintf("[%v] %v set severity %v, state %v, comment %v", b.CreatedAt, b.CreatedBy, b.Severity, b.State, b.Comment)
 }
