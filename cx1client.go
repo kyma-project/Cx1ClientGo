@@ -13,6 +13,24 @@ import (
 )
 
 var cxOrigin = "Cx1-Client-GoLang"
+var scanEngineLicenseMap = map[string]string{
+	"sast":       "SAST",
+	"sca":        "SCA",
+	"kics":       "KICS",
+	"iac":        "KICS",
+	"containers": "Containers",
+	//"?":            "Fusion",
+	"apisec": "API Security",
+	//"?":            "DAST",
+	//"?":            "Malicious Packages",
+	//"?":            "Cloud Insights",
+	//"?":            "Application Risk Management",
+	//"microengines": "Enterprise Secrets", // microengines- "Value": { "2ms" : "true" }
+	"secrets": "Enterprise Secrets",
+	"2ms":     "Enterprise Secrets",
+	//"?":            "AI Protection",
+	//"?":            "SCS",
+}
 
 //var astAppID string
 //var tenantID string
@@ -322,16 +340,27 @@ func (c *Cx1Client) SetClaims(claims Cx1Claims) {
 	}
 }
 
-func (c Cx1Client) IsEngineAllowed(engine string) bool {
-	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
-		if strings.EqualFold(engine, eng) {
-			return true
+func (c Cx1Client) IsEngineAllowed(engine string) (string, bool) {
+	var engineName string
+	var licenseName string
+	for long, license := range scanEngineLicenseMap {
+		if strings.EqualFold(license, engine) || strings.EqualFold(long, engine) {
+			engineName = long
+			licenseName = license
+			break
 		}
 	}
-	if strings.EqualFold(engine, "apisec") {
-		return c.IsEngineAllowed("API Security")
+	if engineName == "" {
+		return "", false
 	}
-	return false
+	c.logger.Tracef("Checking license for %v/%v", engineName, licenseName)
+
+	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
+		if strings.EqualFold(licenseName, eng) {
+			return licenseName, true
+		}
+	}
+	return "", false
 }
 
 func (c Cx1Client) CheckFlag(flag string) (bool, error) {

@@ -322,9 +322,10 @@ type AuditPermissions struct {
 type AuditSession struct {
 	ID   string `json:"id"`
 	Data struct {
-		Status      string `json:"status"`
-		RequestID   string `json:"requestId"`
-		Permissions struct {
+		Status       string   `json:"status"`
+		RequestID    string   `json:"requestId"`
+		QueryFilters []string `json:"queryFilters"`
+		Permissions  struct {
 			Tenant      AuditPermissions `json:"tenant"`
 			Project     AuditPermissions `json:"project"`
 			Application AuditPermissions `json:"application"`
@@ -335,12 +336,12 @@ type AuditSession struct {
 	ApplicationAssociation bool      `json:"applicationAssociation"`
 	Status                 string    `json:"status"`
 	Value                  []string  `json:"value"`
-	QueryFilters           []string  `json:"queryFilters"`
 	Engine                 string    `json:"-"`
 	ProjectID              string    `json:"-"`
 	ApplicationID          string    `json:"-"`
 	ScanID                 string    `json:"-"`
 	Languages              []string  `json:"-"`
+	Platforms              []string  `json:"-"`
 	CreatedAt              time.Time `json:"-"`
 	LastHeartbeat          time.Time `json:"-"`
 }
@@ -643,14 +644,15 @@ type RunningScan struct {
 }
 
 type ResultsPredicatesBase struct {
-	PredicateID  string `json:"ID"`
+	PredicateID  string `json:"ID,omitempty"`
 	SimilarityID string `json:"similarityId"`
 	ProjectID    string `json:"projectId"`
-	State        string `json:"state"`
+	ScanID       string `json:"scanId"`
+	State        string `json:"state,omitempty"`
 	Comment      string `json:"comment"`
-	Severity     string `json:"severity"`
-	CreatedBy    string `json:"createdBy"`
-	CreatedAt    string `json:"createdAt"`
+	Severity     string `json:"severity,omitempty"`
+	CreatedBy    string `json:"createdBy,omitempty"`
+	CreatedAt    string `json:"createdAt,omitempty"`
 }
 
 /*
@@ -699,7 +701,7 @@ type SASTQueryCollection struct {
 type SASTResultsPredicates struct {
 	ResultsPredicatesBase // actually the same structure but different endpoint
 }
-type KICSResultsPredicates struct {
+type IACResultsPredicates struct {
 	ResultsPredicatesBase // actually the same structure but different endpoint
 }
 
@@ -830,7 +832,7 @@ type ScanResultSet struct {
 	SAST         []ScanSASTResult
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
-	KICS         []ScanKICSResult
+	IAC          []ScanIACResult
 	Containers   []ScanContainersResult
 }
 
@@ -894,12 +896,11 @@ type ScanContainersResultDetails struct {
 	}
 }
 
-type ScanKICSResult struct {
+type ScanIACResult struct {
 	ScanResultBase
-	Data ScanKICSResultData
-	//VulnerabilityDetails ScanKICSResultDetails // currently {}
+	Data ScanIACResultData
 }
-type ScanKICSResultData struct {
+type ScanIACResultData struct {
 	QueryID       string
 	QueryName     string
 	Group         string
@@ -1042,7 +1043,7 @@ type ScanSummary struct {
 		FilesScannedCounter uint64
 	}
 
-	KICSCounters struct {
+	IACCounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
 		StatusCounters         []ScanSummaryStatusCounter
 		StateCounters          []ScanSummaryStateCounter
@@ -1055,7 +1056,7 @@ type ScanSummary struct {
 
 		PlatformSummary []ScanSummaryPlatformCounter
 		CategorySummary []ScanSummaryCategoryCounter
-	}
+	} `json:"kicsCounters"`
 
 	SCACounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
@@ -1262,10 +1263,10 @@ type UserWithAttributes struct {
 
 type VersionInfo struct {
 	CxOne  string
-	KICS   string
+	IAC    string `json:"kics"`
 	SAST   string
 	vCxOne VersionTriad `json:"-"`
-	vKICS  VersionTriad `json:"-"`
+	vIAC   VersionTriad `json:"-"`
 	vSAST  VersionTriad `json:"-"`
 }
 

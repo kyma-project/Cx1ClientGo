@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/exp/slices"
 )
 
 var ScanSortCreatedDescending = "+created_at"
@@ -126,6 +127,36 @@ func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
 	return scans, err
 }
 
+// This function returns the last scans matching the filter and also having a scan by a specific engine
+func (c Cx1Client) GetLastScansByEngineFiltered(engine string, limit uint64, filter ScanFilter) ([]Scan, error) {
+	var scans []Scan
+
+	count, ss, err := c.GetScansFiltered(filter)
+	scans = filterScansByEngine(ss, engine)
+	filter.Limit = c.pagination.Scans
+
+	for err == nil && count > filter.Offset+filter.Limit && uint64(len(scans)) < limit {
+		filter.Bump()
+		_, ss, err = c.GetScansFiltered(filter)
+		scans = append(scans, filterScansByEngine(ss, engine)...)
+	}
+
+	if uint64(len(scans)) > limit {
+		return scans[:limit], nil
+	}
+	return scans, nil
+}
+
+func filterScansByEngine(scans []Scan, engine string) []Scan {
+	var filteredScans []Scan
+	for _, scan := range scans {
+		if slices.Contains(scan.Engines, engine) {
+			filteredScans = append(filteredScans, scan)
+		}
+	}
+	return filteredScans
+}
+
 // returns the number of scans matching the filter and an array of those scans
 // returns one page of data (from filter.Offset to filter.Offset+filter.Limit)
 func (c Cx1Client) GetScansFiltered(filter ScanFilter) (uint64, []Scan, error) {
@@ -187,7 +218,7 @@ func (s ScanSummary) TotalCount() uint64 {
 	count += s.SASTCounters.TotalCounter
 	count += s.SCACounters.TotalCounter
 	count += s.SCAPackagesCounters.TotalCounter
-	count += s.KICSCounters.TotalCounter
+	count += s.IACCounters.TotalCounter
 	count += s.APISecCounters.TotalCounter
 	count += s.ContainersCounters.TotalCounter
 	count += s.SCAContainersCounters.TotalPackagesCounters
@@ -196,12 +227,12 @@ func (s ScanSummary) TotalCount() uint64 {
 }
 
 func (s ScanSummary) String() string {
-	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d KICS, %d API Security, and %d Containers results",
+	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d IAC, %d API Security, and %d Containers results",
 		s.SASTCounters.TotalCounter,
 		s.SCACounters.TotalCounter,
 		s.SCAPackagesCounters.TotalCounter,
 		s.SCAContainersCounters.TotalPackagesCounters,
-		s.KICSCounters.TotalCounter,
+		s.IACCounters.TotalCounter,
 		s.APISecCounters.TotalCounter,
 		s.ContainersCounters.TotalCounter,
 	)
@@ -706,6 +737,13 @@ func (s ScanMetrics) GetLanguages() []string {
 }
 
 func (s *ScanConfigurationSet) AddConfig(engine, key, value string) {
+	if engine == "iac" {
+		engine = "kics"
+	} else if engine == "2ms" || engine == "secrets" {
+		s.AddConfig("microengines", "2ms", "true")
+		return
+	}
+
 	for i := range s.Configurations {
 		if s.Configurations[i].ScanType == engine {
 			if key != "" {
