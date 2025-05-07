@@ -328,6 +328,14 @@ func (c Cx1Client) GetTenantName() string {
 	return c.tenant
 }
 
+func (c Cx1Client) GetBaseURL() string {
+	return c.baseUrl
+}
+
+func (c Cx1Client) GetIAMURL() string {
+	return c.iamUrl
+}
+
 func (c Cx1Client) GetClientScopes() ([]OIDCClientScope, error) {
 	c.logger.Debug("Getting OIDC Client Scopes")
 	var clientscopes []OIDCClientScope

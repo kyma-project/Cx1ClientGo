@@ -81,7 +81,7 @@ func (c Cx1Client) GetAllScanResultsFiltered(filter ScanResultsFilter) (uint64, 
 		results.Append(&rs)
 	}
 
-	return rs.Count(), results, err
+	return results.Count(), results, err
 }
 
 // will return at least X results matching the filter
@@ -98,25 +98,27 @@ func (c Cx1Client) GetXScanResultsFiltered(filter ScanResultsFilter, desiredcoun
 		results.Append(&rs)
 	}
 
-	return rs.Count(), results, err
+	return results.Count(), results, err
 }
 
 // convenience function
-func (r ScanSASTResult) CreateResultsPredicate(projectId string) SASTResultsPredicates {
+func (r ScanSASTResult) CreateResultsPredicate(projectId, scanId string) SASTResultsPredicates {
 	return SASTResultsPredicates{
 		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
 			ProjectID: projectId,
+			ScanID:    scanId,
 			State:     r.State,
-			Severity:  r.Severity,
+			//Severity:  r.Severity,
 		},
 	}
 }
-func (r ScanIACResult) CreateResultsPredicate(projectId string) IACResultsPredicates {
+func (r ScanIACResult) CreateResultsPredicate(projectId, scanId string) IACResultsPredicates {
 	return IACResultsPredicates{
 		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
 			ProjectID: projectId,
+			ScanID:    scanId,
 			State:     r.State,
-			Severity:  r.Severity,
+			//Severity:  r.Severity,
 		},
 	}
 }
