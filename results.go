@@ -119,8 +119,8 @@ func (r ScanIACResult) CreateResultsPredicate(projectId, scanId string) IACResul
 			SimilarityID: r.SimilarityID,
 			ProjectID:    projectId,
 			ScanID:       scanId,
-			//State:     r.State,
-			//Severity:  r.Severity,
+			State:        r.State,
+			Severity:     r.Severity,
 		},
 	}
 }
