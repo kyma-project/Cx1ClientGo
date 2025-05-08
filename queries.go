@@ -216,6 +216,9 @@ func (q *SASTQuery) MergeQuery(nq SASTQuery) {
 	if q.Source == "" && nq.Source != "" {
 		q.Source = nq.Source
 	}
+	if nq.IsExecutable {
+		q.IsExecutable = true
+	}
 }
 
 func (q *IACQuery) MergeQuery(nq IACQuery) {
