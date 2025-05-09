@@ -170,6 +170,10 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 		}
 	}
 
+	if response == nil {
+		return nil, fmt.Errorf("nil response")
+	}
+
 	if response.StatusCode >= 400 {
 		resBody, _ := io.ReadAll(response.Body)
 		//c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
@@ -205,7 +209,7 @@ func (c Cx1Client) handleHTTPResponse(request *http.Request) (*http.Response, er
 }
 
 func (c Cx1Client) handleRetries(request *http.Request, response *http.Response, err error) (*http.Response, error) {
-	if err == nil || strings.Contains(err.Error(), "tls: user canceled") { // tls: user canceled can be due to proxies
+	if err == nil || (strings.Contains(err.Error(), "tls: user canceled") && request.Method == http.MethodGet) { // tls: user canceled can be due to proxies
 		c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
 		return response, nil
 	}

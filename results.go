@@ -104,21 +104,23 @@ func (c Cx1Client) GetXScanResultsFiltered(filter ScanResultsFilter, desiredcoun
 // convenience function
 func (r ScanSASTResult) CreateResultsPredicate(projectId, scanId string) SASTResultsPredicates {
 	return SASTResultsPredicates{
-		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
-			ProjectID: projectId,
-			ScanID:    scanId,
-			State:     r.State,
+		ResultsPredicatesBase{
+			SimilarityID: r.SimilarityID,
+			ProjectID:    projectId,
+			ScanID:       scanId,
+			//State:     r.State,
 			//Severity:  r.Severity,
 		},
 	}
 }
 func (r ScanIACResult) CreateResultsPredicate(projectId, scanId string) IACResultsPredicates {
 	return IACResultsPredicates{
-		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
-			ProjectID: projectId,
-			ScanID:    scanId,
-			State:     r.State,
-			//Severity:  r.Severity,
+		ResultsPredicatesBase{
+			SimilarityID: r.SimilarityID,
+			ProjectID:    projectId,
+			ScanID:       scanId,
+			State:        r.State,
+			Severity:     r.Severity,
 		},
 	}
 }

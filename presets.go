@@ -29,25 +29,7 @@ func (c Cx1Client) newPresetsEnabled() bool {
 
 // Presets do not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
 func (c Cx1Client) GetSASTPresets(count uint64) ([]Preset, error) {
-	if c.newPresetsEnabled() {
-		return c.GetPresets("sast", count)
-	} else {
-		queries, err := c.GetSASTPresetQueries()
-		if err != nil {
-			return []Preset{}, err
-		}
-
-		presets, err := c.GetPresets_v330(count)
-		if err != nil {
-			return []Preset{}, err
-		} else {
-			var sastPresets []Preset
-			for _, p := range presets {
-				sastPresets = append(sastPresets, p.ToPreset(&queries))
-			}
-			return sastPresets, nil
-		}
-	}
+	return c.GetPresets("sast", count)
 }
 
 // Presets do not include the contents of the preset (query families etc) - use Get*PresetContents to fill or Get*PresetByID
@@ -56,7 +38,27 @@ func (c Cx1Client) GetIACPresets(count uint64) ([]Preset, error) {
 }
 
 func (c Cx1Client) GetPresets(engine string, count uint64) ([]Preset, error) {
-	c.logger.Debug("Get Cx1 SAST Presets")
+	c.logger.Debugf("Get Cx1 %v Presets", engine)
+	if !c.newPresetsEnabled() {
+		if engine == "sast" {
+			queries, err := c.GetSASTPresetQueries()
+			if err != nil {
+				return []Preset{}, err
+			}
+
+			presets, err := c.GetPresets_v330(count)
+			if err != nil {
+				return []Preset{}, err
+			} else {
+				var sastPresets []Preset
+				for _, p := range presets {
+					sastPresets = append(sastPresets, p.ToPreset(&queries))
+				}
+				return sastPresets, nil
+			}
+		}
+		return []Preset{}, fmt.Errorf("currently unsupported in this environment, requires flag NEW_PRESET_MANAGEMENT_ENABLED")
+	}
 	var preset_response struct {
 		TotalCount uint64   `json:"totalCount"`
 		Presets    []Preset `json:"presets"`
@@ -82,18 +84,21 @@ func (c Cx1Client) GetPresets(engine string, count uint64) ([]Preset, error) {
 }
 
 func (c Cx1Client) GetSASTPresetCount() (uint64, error) {
-	if c.newPresetsEnabled() {
-		return c.GetPresetCount("sast")
-	} else {
-		return c.GetPresetCount_v330()
-	}
+	return c.GetPresetCount("sast")
 }
 func (c Cx1Client) GetIACPresetCount() (uint64, error) {
 	return c.GetPresetCount("iac")
 }
 
 func (c Cx1Client) GetPresetCount(engine string) (uint64, error) {
-	c.logger.Debug("Get Cx1 SAST Presets count")
+	c.logger.Debugf("Get Cx1 %v Presets count", engine)
+
+	if !c.newPresetsEnabled() {
+		if engine == "sast" {
+			return c.GetPresetCount_v330()
+		}
+		return 0, fmt.Errorf("currently unsupported in this environment, requires flag NEW_PRESET_MANAGEMENT_ENABLED")
+	}
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets?limit=1", engine), nil, nil)
 	if err != nil {
@@ -116,20 +121,7 @@ func (c Cx1Client) GetPresetCount(engine string) (uint64, error) {
 
 // Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
 func (c Cx1Client) GetSASTPresetByName(name string) (Preset, error) {
-	if c.newPresetsEnabled() {
-		return c.GetPresetByName("sast", name)
-	} else {
-		queries, err := c.GetSASTPresetQueries()
-		if err != nil {
-			return Preset{}, err
-		}
-
-		preset, err := c.GetPresetByName_v330(name)
-		if err != nil {
-			return Preset{}, err
-		}
-		return preset.ToPreset(&queries), nil
-	}
+	return c.GetPresetByName("sast", name)
 }
 
 // Does not include the contents of the preset (query families etc) - use GetPresetContents to fill or GetPresetByID
@@ -139,6 +131,23 @@ func (c Cx1Client) GetIACPresetByName(name string) (Preset, error) {
 
 func (c Cx1Client) GetPresetByName(engine, name string) (Preset, error) {
 	c.logger.Debugf("Get preset by name %v for %v", name, engine)
+
+	if !c.newPresetsEnabled() {
+		if engine == "sast" {
+			queries, err := c.GetSASTPresetQueries()
+			if err != nil {
+				return Preset{}, err
+			}
+
+			preset, err := c.GetPresetByName_v330(name)
+			if err != nil {
+				return Preset{}, err
+			}
+			return preset.ToPreset(&queries), nil
+		}
+		return Preset{}, fmt.Errorf("currently unsupported in this environment, requires flag NEW_PRESET_MANAGEMENT_ENABLED")
+	}
+
 	var preset_response struct {
 		TotalCount uint64   `json:"totalCount"`
 		Presets    []Preset `json:"presets"`
@@ -171,6 +180,22 @@ func (c Cx1Client) GetPresetByName(engine, name string) (Preset, error) {
 
 func (c Cx1Client) GetPresetByID(engine, id string) (Preset, error) {
 	var preset Preset
+	if !c.newPresetsEnabled() {
+		if engine == "sast" {
+			queries, err := c.GetSASTPresetQueries()
+			if err != nil {
+				return Preset{}, err
+			}
+			id, _ := strconv.ParseUint(id, 10, 64)
+			preset, err := c.GetPresetByID_v330(id)
+			if err != nil {
+				return Preset{}, err
+			}
+			return preset.ToPreset(&queries), nil
+		}
+		return Preset{}, fmt.Errorf("currently unsupported in this environment, requires flag NEW_PRESET_MANAGEMENT_ENABLED")
+	}
+
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/preset-manager/%v/presets/%v", engine, id), nil, nil)
 	if err != nil {
 		return preset, fmt.Errorf("failed to get preset %v: %s", id, err)
@@ -184,19 +209,7 @@ func (c Cx1Client) GetPresetByID(engine, id string) (Preset, error) {
 
 // Includes the contents (query families/queries) of the preset as well
 func (c Cx1Client) GetSASTPresetByID(id uint64) (Preset, error) {
-	if c.newPresetsEnabled() {
-		return c.GetPresetByID("sast", fmt.Sprintf("%d", id))
-	} else {
-		queries, err := c.GetSASTPresetQueries()
-		if err != nil {
-			return Preset{}, err
-		}
-		preset, err := c.GetPresetByID_v330(id)
-		if err != nil {
-			return Preset{}, err
-		}
-		return preset.ToPreset(&queries), nil
-	}
+	return c.GetPresetByID("sast", fmt.Sprintf("%d", id))
 }
 
 // Includes the contents (query families/queries) of the preset as well
