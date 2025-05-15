@@ -136,14 +136,13 @@ func (c Cx1Client) GetAllScanSASTResultsFiltered(filter ScanSASTResultsFilter) (
 
 	var results []ScanSASTResult
 
-	count, rs, err := c.GetScanSASTResultsFiltered(filter)
-	results = rs
-
-	for err == nil && count > (filter.Offset+1)*filter.Limit && filter.Limit > 0 {
-		filter.Bump()
-		_, rs, err = c.GetScanSASTResultsFiltered(filter)
-		results = append(results, rs...)
+	countFilter := filter
+	countFilter.Limit = 1
+	count, _, err := c.GetScanSASTResultsFiltered(countFilter)
+	if err != nil {
+		return 0, results, err
 	}
+	_, results, err = c.GetXScanSASTResultsFiltered(filter, count)
 
 	return uint64(len(results)), results, err
 }
@@ -156,7 +155,7 @@ func (c Cx1Client) GetXScanSASTResultsFiltered(filter ScanSASTResultsFilter, des
 	_, rs, err := c.GetScanSASTResultsFiltered(filter)
 	results = rs
 
-	for err == nil && desiredcount > (filter.Offset+1)*filter.Limit && filter.Limit > 0 {
+	for err == nil && desiredcount > filter.Offset+filter.Limit && filter.Limit > 0 {
 		filter.Bump()
 		_, rs, err = c.GetScanSASTResultsFiltered(filter)
 		results = append(results, rs...)
