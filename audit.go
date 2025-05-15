@@ -1045,6 +1045,9 @@ func (c Cx1Client) UpdateSASTQuerySource(auditSession *AuditSession, query SASTQ
 	}
 
 	newQuery, err := c.GetAuditSASTQueryByKey(auditSession, query.EditorKey)
+	if err != nil {
+		return query, queryFail, err
+	}
 	newQuery.MergeQuery(query)
 	return newQuery, queryFail, nil
 }
@@ -1061,6 +1064,9 @@ func (c Cx1Client) UpdateIACQuerySource(auditSession *AuditSession, query IACQue
 		return query, queryFail, err
 	}
 	newQuery, err := c.GetAuditIACQueryByID(auditSession, query.QueryID)
+	if err != nil {
+		return query, queryFail, err
+	}
 	newQuery.MergeQuery(query)
 	return newQuery, queryFail, nil
 }
