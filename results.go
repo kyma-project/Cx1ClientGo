@@ -101,7 +101,8 @@ func (c Cx1Client) GetXScanResultsFiltered(filter ScanResultsFilter, desiredcoun
 	return results.Count(), results, err
 }
 
-// convenience function
+// Note: when creating SAST overrides, you cannot change multiple fields at once unless mandatory.
+// For example, changing state to "Confirmed" and adding a comment-text requires two predicates, 1 "Confirmed" + 1 comment
 func (r ScanSASTResult) CreateResultsPredicate(projectId, scanId string) SASTResultsPredicates {
 	return SASTResultsPredicates{
 		ResultsPredicatesBase{
