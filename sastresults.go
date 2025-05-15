@@ -74,7 +74,8 @@ func (c Cx1Client) GetScanSASTResultsFiltered(filter ScanSASTResultsFilter) (uin
 
 	var results []ScanSASTResult
 	var temp_results struct {
-		Results []SASTResult
+		Results    []SASTResult
+		TotalCount uint64
 	}
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results/?%v", params.Encode()), nil, nil)
@@ -121,7 +122,7 @@ func (c Cx1Client) GetScanSASTResultsFiltered(filter ScanSASTResultsFilter) (uin
 	}
 
 	//count, results, err := c.parseScanSASTResults(data)
-	return uint64(len(results)), results, err
+	return temp_results.TotalCount, results, err
 }
 
 func (s *ScanSASTResultsFilter) Bump() { // this one does offset in items
@@ -159,6 +160,10 @@ func (c Cx1Client) GetXScanSASTResultsFiltered(filter ScanSASTResultsFilter, des
 		filter.Bump()
 		_, rs, err = c.GetScanSASTResultsFiltered(filter)
 		results = append(results, rs...)
+	}
+
+	if uint64(len(results)) > desiredcount {
+		results = results[:desiredcount]
 	}
 
 	return uint64(len(results)), results, err
