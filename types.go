@@ -946,6 +946,40 @@ type ScanSASTResultDetails struct {
 	Compliances []string
 }
 
+type ScanSASTResultsFilter struct {
+	BaseFilter
+	ScanID                 string   `url:"scan-id"`
+	Language               []string `url:"language,omitempty"`
+	Status                 []string `url:"status,omitempty"`   //NEW, RECURRENT
+	Severity               []string `url:"severity,omitempty"` //CRITICAL, HIGH, MEDIUM, LOW, INFO
+	SourceFile             string   `url:"source-file,omitempty"`
+	SourceFileOperation    string   `url:"source-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceNode             string   `url:"source-node,omitempty"`
+	SourceNodeOperation    string   `url:"source-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceLine             uint64   `url:"source-line,omitempty"`
+	SourceLineOperation    string   `url:"source-line-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	SinkFile               string   `url:"sink-file,omitempty"`
+	SinkFileOperation      string   `url:"sink-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SinkNode               string   `url:"sink-node,omitempty"`
+	SinkNodeOperation      string   `url:"sink-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SinkLine               uint64   `url:"sink-line,omitempty"`
+	SinkLineOperation      string   `url:"sink-line-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	NumberOfNodes          uint64   `url:"number-of-nodes,omitempty"`
+	NumberOfNodesOperation string   `url:"number-of-nodes-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	Notes                  string   `url:"notes,omitempty"`
+	NotesOperation         string   `url:"notes-operation,omitempty"` // CONTAINS, STARTS_WITH
+	FirstFoundAt           string   `url:"first-found-at,omitempty"`
+	FirstFoundAtOperation  string   `url:"first-found-at-operation,omitempty"` // LESS_THAN, GREATER_THAN
+	QueryIDs               []uint64 `url:"query-ids,omitempty"`
+	PresetID               uint64   `url:"preset-id,omitempty"`
+	ResultIDs              []string `url:"result-ids,omitempty"`
+	Categories             string   `url:"category,omitempty"` // comma-separated list
+	Search                 string   `url:"search,omitempty"`
+	IncludeNodes           bool     `url:"include-nodes,omitempty"`
+	ApplyPredicates        bool     `url:"apply-predicates,omitempty"`
+	Sort                   []string `url:"sort,omitempty"` // Default value : +status,+severity,-queryname
+}
+
 type ScanSCAResult struct {
 	ScanResultBase
 	Data                 ScanSCAResultData `json:"data"`
