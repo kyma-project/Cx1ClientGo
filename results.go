@@ -445,3 +445,46 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 func (b ResultsPredicatesBase) String() string {
 	return fmt.Sprintf("[%v] %v set severity %v, state %v, comment %v", b.CreatedAt, b.CreatedBy, b.Severity, b.State, b.Comment)
 }
+
+func (c Cx1Client) GetCustomResultStates() ([]ResultState, error) {
+	states := []ResultState{}
+	response, err := c.sendRequest(http.MethodGet, "/custom-states", nil, nil)
+	if err != nil {
+		return states, err
+	}
+
+	err = json.Unmarshal(response, &states)
+	return states, err
+}
+
+func (c Cx1Client) CreateCustomResultState(state string) (ResultState, error) {
+	var resultstate ResultState
+
+	var requestBody struct {
+		Name string `json:"name"`
+	}
+	requestBody.Name = state
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return resultstate, err
+	}
+
+	response, err := c.sendRequest(http.MethodPost, "/custom-states", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return resultstate, err
+	}
+
+	err = json.Unmarshal(response, &resultstate)
+	resultstate.IsAllowed = true
+	return resultstate, err
+}
+
+func (c Cx1Client) DeleteCustomResultState(stateId uint64) error {
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/custom-states/%d", stateId), nil, nil)
+	return err
+}
+
+func (c ResultState) String() string {
+	return fmt.Sprintf("[%d] %v", c.ID, c.Name)
+}
