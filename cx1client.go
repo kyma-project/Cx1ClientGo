@@ -416,3 +416,13 @@ func (c *Cx1Client) GetAccessToken() string {
 func (c *Cx1Client) GetCurrentUsername() string {
 	return c.claims.Username
 }
+
+func (c *Cx1Client) SetLogger(logger Logger) {
+	c.logger = logger
+}
+
+// returns a copy of this client which can be used separately
+// they will not share access tokens or other data after the clone.
+func (c Cx1Client) Clone() Cx1Client {
+	return c
+}
