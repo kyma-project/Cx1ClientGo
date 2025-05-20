@@ -619,6 +619,25 @@ type ReportStatus struct {
 	ReportURL string `json:"url"`
 }
 
+type ResultsPredicatesBase struct {
+	PredicateID  string `json:"ID,omitempty"`
+	SimilarityID string `json:"similarityId"`
+	ProjectID    string `json:"projectId"`
+	ScanID       string `json:"scanId"`
+	State        string `json:"state,omitempty"`
+	Comment      string `json:"comment"`
+	Severity     string `json:"severity,omitempty"`
+	CreatedBy    string `json:"createdBy,omitempty"`
+	CreatedAt    string `json:"createdAt,omitempty"`
+}
+
+type ResultState struct {
+	ID        uint64 `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	IsAllowed bool   `json:"isAllowed"`
+}
+
 type Role struct {
 	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
 	RoleID      string `json:"id"`
@@ -642,27 +661,6 @@ type RunningScan struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
-
-type ResultsPredicatesBase struct {
-	PredicateID  string `json:"ID,omitempty"`
-	SimilarityID string `json:"similarityId"`
-	ProjectID    string `json:"projectId"`
-	ScanID       string `json:"scanId"`
-	State        string `json:"state,omitempty"`
-	Comment      string `json:"comment"`
-	Severity     string `json:"severity,omitempty"`
-	CreatedBy    string `json:"createdBy,omitempty"`
-	CreatedAt    string `json:"createdAt,omitempty"`
-}
-
-/*
-type SASTPreset struct {
-	PresetBase
-	//SASTPresetID uint64      `json:"-"`
-	//SASTQueryIDs []uint64    `json:"-"`
-	//SASTQueries  []SASTQuery `json:"-"`
-}
-*/
 
 type SASTQuery struct {
 	QueryID            uint64 `json:"queryID,string"`
