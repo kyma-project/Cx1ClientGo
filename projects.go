@@ -21,7 +21,7 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 		"groups":      []string{},
 		"tags":        map[string]string{},
 		"criticality": 3,
-		"origin":      cxOrigin,
+		"origin":      "",
 	}
 
 	if len(tags) > 0 {
