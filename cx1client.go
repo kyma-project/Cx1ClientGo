@@ -8,8 +8,6 @@ import (
 
 	//"io/ioutil"
 	"net/http"
-
-	"github.com/sirupsen/logrus"
 )
 
 var cxOrigin = "Cx1-Client-GoLang"
@@ -39,7 +37,7 @@ var scanEngineLicenseMap = map[string]string{
 //var cx1UserAgent string = "Cx1ClientGo"
 
 // Main entry for users of this client when using OAuth Client ID & Client Secret:
-func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
+func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, client_secret string, logger Logger) (*Cx1Client, error) {
 	if base_url == "" || iam_url == "" || tenant == "" || client_id == "" || client_secret == "" || logger == nil {
 		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
 	}
@@ -95,15 +93,15 @@ func NewOAuthClient(client *http.Client, base_url, iam_url, tenant, client_id, c
 
 // Old entry for users of this client when using API Key
 // You can use the new "FromAPIKey" initializer with fewer parameters
-func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
+func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger Logger) (*Cx1Client, error) {
 	return ResumeAPIKeyClient(client, api_key, "", logger)
 }
 
-func FromAPIKey(client *http.Client, api_key, last_token string, logger *logrus.Logger) (*Cx1Client, error) {
+func FromAPIKey(client *http.Client, api_key, last_token string, logger Logger) (*Cx1Client, error) {
 	return ResumeAPIKeyClient(client, api_key, last_token, logger)
 }
 
-func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger *logrus.Logger) (*Cx1Client, error) {
+func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger Logger) (*Cx1Client, error) {
 	if (api_key == "" && last_token == "") || logger == nil || client == nil {
 		return nil, fmt.Errorf("unable to create client: invalid parameters provided, requires (API Key or last_token) and logger and client")
 	}
@@ -158,7 +156,7 @@ func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger 
 		token, err := conf.TokenSource(ctx, refreshToken).Token()
 		if err != nil {
 			err = fmt.Errorf("failed getting a token: %s", err)
-			logger.Error(err.Error())
+			logger.Errorf(err.Error())
 			return nil, err
 		}
 
@@ -199,12 +197,12 @@ func ResumeAPIKeyClient(client *http.Client, api_key, last_token string, logger 
 	return &cli, err
 }
 
-func FromToken(client *http.Client, last_token string, logger *logrus.Logger) (*Cx1Client, error) {
+func FromToken(client *http.Client, last_token string, logger Logger) (*Cx1Client, error) {
 	return ResumeAPIKeyClient(client, "", last_token, logger)
 }
 
 // Convenience function that reads command-line flags to create the Cx1Client
-func NewClient(client *http.Client, logger *logrus.Logger) (*Cx1Client, error) {
+func NewClient(client *http.Client, logger Logger) (*Cx1Client, error) {
 	APIKey := flag.String("apikey", "", "CheckmarxOne API Key (if not using client id/secret)")
 	ClientID := flag.String("client", "", "CheckmarxOne Client ID (if not using API Key)")
 	ClientSecret := flag.String("secret", "", "CheckmarxOne Client Secret (if not using API Key)")
@@ -251,7 +249,7 @@ func (c *Cx1Client) InitializeClient(quick bool) error {
 		if !c.IsUser {
 			oidcclient, err := c.GetClientByName(c.claims.ClientID)
 			if err != nil {
-				c.logger.Warningf("Failed to retrieve information for OIDC Client %v", c.claims.ClientID)
+				c.logger.Warnf("Failed to retrieve information for OIDC Client %v", c.claims.ClientID)
 			} else {
 				user, _ := c.GetServiceAccountByID(oidcclient.ID)
 				c.user = &user
@@ -286,7 +284,7 @@ func (c *Cx1Client) InitializeClient(quick bool) error {
 func (c *Cx1Client) RefreshFlags() error {
 	var flags map[string]bool = make(map[string]bool, 0)
 
-	c.logger.Debug("Get Cx1 tenant flags")
+	c.logger.Debugf("Get Cx1 tenant flags")
 	var FlagResponse []struct {
 		Name   string `json:"name"`
 		Status bool   `json:"status"`

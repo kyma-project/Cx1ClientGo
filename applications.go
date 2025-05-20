@@ -14,7 +14,7 @@ import (
 // Get the first count Applications
 // uses the pagination behind the scenes
 func (c Cx1Client) GetApplications(count uint64) ([]Application, error) {
-	c.logger.Debug("Get Cx1 Applications")
+	c.logger.Debugf("Get Cx1 Applications")
 
 	_, applications, err := c.GetXApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
@@ -24,7 +24,7 @@ func (c Cx1Client) GetApplications(count uint64) ([]Application, error) {
 }
 
 func (c Cx1Client) GetAllApplications() ([]Application, error) {
-	c.logger.Debug("Get Cx1 Applications")
+	c.logger.Debugf("Get Cx1 Applications")
 
 	_, applications, err := c.GetAllApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
@@ -175,7 +175,7 @@ func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 
 // convenience
 func (c Cx1Client) GetApplicationCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Project count")
+	c.logger.Debugf("Get Cx1 Project count")
 
 	count, _, err := c.GetApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: 1},

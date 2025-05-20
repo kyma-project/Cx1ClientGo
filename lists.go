@@ -8,7 +8,7 @@ import (
 // lists of constants from cx1
 
 func (c Cx1Client) GetResultStates() ([]string, error) {
-	c.logger.Debug("Getting result states")
+	c.logger.Debugf("Getting result states")
 	var states []string
 
 	data, err := c.sendRequest(http.MethodGet, "/lists/states", nil, http.Header{})
@@ -22,7 +22,7 @@ func (c Cx1Client) GetResultStates() ([]string, error) {
 }
 
 func (c Cx1Client) GetResultStatuses() ([]string, error) {
-	c.logger.Debug("Getting result statuses")
+	c.logger.Debugf("Getting result statuses")
 	var statuses []string
 
 	data, err := c.sendRequest(http.MethodGet, "/lists/statuses", nil, http.Header{})
@@ -36,7 +36,7 @@ func (c Cx1Client) GetResultStatuses() ([]string, error) {
 }
 
 func (c Cx1Client) GetResultSeverities() ([]string, error) {
-	c.logger.Debug("Getting severities")
+	c.logger.Debugf("Getting severities")
 	var severities []string
 
 	data, err := c.sendRequest(http.MethodGet, "/lists/severities", nil, http.Header{})

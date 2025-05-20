@@ -38,7 +38,7 @@ func (c *Cx1Client) InitializeClientVars() {
 }
 
 func (c Cx1Client) GetPaginationSettings() PaginationSettings {
-	c.logger.Debug("Retrieving client vars - polling limits set in seconds")
+	c.logger.Debugf("Retrieving client vars - polling limits set in seconds")
 	return c.pagination
 }
 

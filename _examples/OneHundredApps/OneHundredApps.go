@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// no err means that the client is initialized
-	logger.Info("Client initialized: " + cx1client.String())
+	logger.Infof("Client initialized: " + cx1client.String())
 
 	var scanConfig Cx1ClientGo.ScanConfiguration
 	scanConfig.ScanType = "sast"
