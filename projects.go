@@ -148,7 +148,7 @@ func (c Cx1Client) GetProjects(count uint64) ([]Project, error) {
 // behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
 // behaves the same as GetProjects(# of projects in the environment)
 func (c Cx1Client) GetAllProjects() ([]Project, error) {
-	c.logger.Debug("Get All Cx1 Projects")
+	c.logger.Debugf("Get All Cx1 Projects")
 	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
 	})
@@ -410,7 +410,7 @@ func (c Cx1Client) GetXProjectBranchesFiltered(filter ProjectBranchFilter, count
 }
 
 func (c Cx1Client) GetProjectCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects Count")
+	c.logger.Debugf("Get Cx1 Projects Count")
 	count, _, err := c.GetProjectsFiltered(ProjectFilter{BaseFilter: BaseFilter{Limit: 1}})
 	return count, err
 }

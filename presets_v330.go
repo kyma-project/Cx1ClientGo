@@ -16,7 +16,7 @@ func (p *Preset_v330) String() string {
 }
 
 func (c Cx1Client) GetPresets_v330(count uint64) ([]Preset_v330, error) {
-	c.logger.Debug("Get Cx1 Presets")
+	c.logger.Debugf("Get Cx1 Presets")
 	var preset_response struct {
 		TotalCount uint64        `json:"totalCount"`
 		Presets    []Preset_v330 `json:"presets"`
@@ -33,7 +33,7 @@ func (c Cx1Client) GetPresets_v330(count uint64) ([]Preset_v330, error) {
 }
 
 func (c Cx1Client) GetPresetCount_v330() (uint64, error) {
-	c.logger.Debug("Get Cx1 Presets count")
+	c.logger.Debugf("Get Cx1 Presets count")
 
 	response, err := c.sendRequest(http.MethodGet, "/presets?limit=1", nil, nil)
 	if err != nil {
@@ -160,7 +160,7 @@ func (c Cx1Client) CreatePreset_v330(name, description string, queryIDs []uint64
 	var preset Preset_v330
 
 	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		c.logger.Warnf("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 
@@ -210,7 +210,7 @@ func (c Cx1Client) UpdatePreset_v330(preset *Preset_v330) error {
 
 	description := preset.Description
 	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		c.logger.Warnf("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 

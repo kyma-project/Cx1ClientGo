@@ -26,7 +26,7 @@ func main() {
 		logger.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key> [filters]")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	baseURL := os.Args[1]
 	iamURL := os.Args[2]

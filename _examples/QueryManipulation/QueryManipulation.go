@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -53,7 +53,7 @@ func main() {
 		logger.Fatalf("Error creating client: %s", err)
 	}
 
-	logger.Info("Retrieving or creating test-project inside application test-application")
+	logger.Infof("Retrieving or creating test-project inside application test-application")
 
 	project, _, err := cx1client.GetOrCreateProjectInApplicationByName("test-project", "test-application")
 	if err != nil {
@@ -130,7 +130,7 @@ func makeSASTQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pr
 	for lid := range cqc.QueryLanguages {
 		for gid := range cqc.QueryLanguages[lid].QueryGroups {
 			for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
-				logger.Info(q.StringDetailed())
+				logger.Infof(q.StringDetailed())
 			}
 		}
 	}
@@ -159,7 +159,7 @@ func makeSASTQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pr
 	}
 	defer DeleteSASTQuery(cx1client, logger, &session, corpQuery)
 
-	logger.Info("Retrieving an updated list of queries")
+	logger.Infof("Retrieving an updated list of queries")
 	qc, err = cx1client.GetSASTQueryCollection()
 	if err != nil {
 		logger.Errorf("Error getting the query collection: %s", err)
@@ -182,7 +182,7 @@ func makeSASTQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pr
 	for lid := range cqc.QueryLanguages {
 		for gid := range cqc.QueryLanguages[lid].QueryGroups {
 			for _, q := range cqc.QueryLanguages[lid].QueryGroups[gid].Queries {
-				logger.Info(q.StringDetailed())
+				logger.Infof(q.StringDetailed())
 			}
 		}
 	}
@@ -351,7 +351,7 @@ func newSASTCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, q
 	qc.UpdateNewQuery(&newCorpQuery)
 
 	logger.Infof("Created new corp query: %v", newCorpQuery.StringDetailed())
-	logger.Info(" - Query IDs for brand-new queries are unknown until the full query collection is refreshed via client.GetQueries()")
+	logger.Infof(" - Query IDs for brand-new queries are unknown until the full query collection is refreshed via client.GetQueries()")
 	return &newCorpQuery
 }
 
@@ -381,9 +381,9 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 
 	defer func() {
 		// Wait for user input, like hitting enter, before continuing.
-		//logger.Info("Press 'Enter' to continue...")
+		//logger.Infof("Press 'Enter' to continue...")
 		//_, _ = os.Stdin.Read(make([]byte, 1))
-		//logger.Info("Continuing...")
+		//logger.Infof("Continuing...")
 
 		logger.Infof("Terminating audit session %v", session.ID)
 		err = cx1client.AuditDeleteSession(&session)
@@ -426,7 +426,7 @@ func makeIACQueries(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, pro
 	}
 	defer DeleteIACQuery(cx1client, logger, &session, corpQuery)
 
-	logger.Info("Retrieving an updated list of queries")
+	logger.Infof("Retrieving an updated list of queries")
 	qc, err = cx1client.GetIACQueryCollection()
 	if err != nil {
 		logger.Errorf("Error getting the query collection: %s", err)
@@ -631,7 +631,7 @@ func newIACCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, qc
 	qc.UpdateNewQuery(&newCorpQuery)
 
 	logger.Infof("Created new corp query: %v", newCorpQuery.StringDetailed())
-	logger.Info(" - Query IDs for brand-new queries are unknown until the full query collection is refreshed via client.GetQueries()")
+	logger.Infof(" - Query IDs for brand-new queries are unknown until the full query collection is refreshed via client.GetQueries()")
 	return &newCorpQuery
 }
 

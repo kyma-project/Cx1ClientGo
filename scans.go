@@ -239,7 +239,7 @@ func (s ScanSummary) String() string {
 }
 
 func (c Cx1Client) GetScanCount() (uint64, error) {
-	c.logger.Debug("Get scan count")
+	c.logger.Debugf("Get scan count")
 	count, _, err := c.GetScansFiltered(ScanFilter{BaseFilter: BaseFilter{Limit: 1}})
 	return count, err
 }
@@ -621,7 +621,7 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, 
 }
 
 func (c Cx1Client) GetUploadURL() (string, error) {
-	c.logger.Debug("Get Cx1 Upload URL")
+	c.logger.Debugf("Get Cx1 Upload URL")
 	response, err := c.sendRequest(http.MethodPost, "/uploads", nil, nil)
 
 	if err != nil {

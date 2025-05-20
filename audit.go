@@ -184,7 +184,7 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 
 func (c Cx1Client) AuditDeleteSession(auditSession *AuditSession) error {
 	if auditSession == nil {
-		c.logger.Error("Attempt to run AuditDeleteSession with a nil session")
+		c.logger.Errorf("Attempt to run AuditDeleteSession with a nil session")
 		return nil
 	}
 
