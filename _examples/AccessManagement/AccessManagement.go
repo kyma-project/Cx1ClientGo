@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	version, _ := cx1client.GetVersion()
-	if version.CheckCxOne("3.25.0") >= 0 {
+	if check, _ := version.CheckCxOne("3.25.0"); check >= 0 {
 		err = addAccessAssignments(cx1client, testuser, "client", tenant, logger)
 	} else {
 		err = addAccessAssignments(cx1client, testuser, "user", tenant, logger)
@@ -69,7 +69,7 @@ func main() {
 	if err != nil {
 		logger.Errorf("Failed to add user assignment for cx1clientgo_test service user: %s", err)
 	} else {
-		logger.Info("Testing new OIDC Client by logging in as cx1clientgo_test")
+		logger.Infof("Testing new OIDC Client by logging in as cx1clientgo_test")
 		testcx1client, err := Cx1ClientGo.NewOAuthClient(httpClient, base_url, iam_url, tenant, testclient.ClientID, testclient.ClientSecret, logger)
 		if err != nil {
 			logger.Errorf("Failed to log in as 'cx1clientgo_test' OIDC Client: %s", err)
@@ -174,7 +174,7 @@ func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.Use
 		return fmt.Errorf("failed to get entities with access to tenant: %s", err)
 	}
 
-	logger.Info("The following access assignments exist for the cx1clientgo_test OIDC Client on tenant:")
+	logger.Infof("The following access assignments exist for the cx1clientgo_test OIDC Client on tenant:")
 	for _, a := range accessAssignment {
 		entityRoleStr := []string{}
 		for _, r := range a.EntityRoles {

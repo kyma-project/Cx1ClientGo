@@ -47,7 +47,7 @@ func (c Cx1Client) GetUsers(count uint64) ([]User, error) {
 }
 
 func (c Cx1Client) GetAllUsers() ([]User, error) {
-	c.logger.Debug("Get all Cx1 Users")
+	c.logger.Debugf("Get all Cx1 Users")
 
 	_, users, err := c.GetAllUsersFiltered(UserFilter{
 		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},

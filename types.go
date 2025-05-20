@@ -5,8 +5,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/sirupsen/logrus"
 )
+
+type Logger interface {
+	Tracef(format string, args ...interface{})
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warnf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
 
 type Cx1Client struct {
 	httpClient *http.Client
@@ -14,7 +22,7 @@ type Cx1Client struct {
 	baseUrl    string
 	iamUrl     string
 	tenant     string
-	logger     *logrus.Logger
+	logger     Logger
 	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
 	consts     ClientVars
 	pagination PaginationSettings

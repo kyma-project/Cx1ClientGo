@@ -72,7 +72,7 @@ func (c Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (
 }
 
 func (c Cx1Client) GetGroupsPIP() ([]Group, error) {
-	c.logger.Debug("Get cx1 groups pip")
+	c.logger.Debugf("Get cx1 groups pip")
 	var groups []Group
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/pip/groups", nil, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 
 // this returns all groups including all subgroups
 func (c Cx1Client) GetGroups() ([]Group, error) {
-	c.logger.Debug("Get Cx1 Groups")
+	c.logger.Debugf("Get Cx1 Groups")
 	_, groups, err := c.GetAllGroupsFiltered(GroupFilter{
 		BriefRepresentation: false,
 		PopulateHierarchy:   false,

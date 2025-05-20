@@ -250,7 +250,7 @@ func (c Cx1Client) DeleteRoleByID(roleId string) error {
 }
 
 func (c Cx1Client) GetAppRoles() ([]Role, error) {
-	c.logger.Debug("Getting roles set for ast-app client")
+	c.logger.Debugf("Getting roles set for ast-app client")
 	return c.GetRolesByClientID(c.GetASTAppID())
 }
 
@@ -267,7 +267,7 @@ func (c Cx1Client) GetAppRolesByName(name string) ([]Role, error) {
 // convenience function to get both KeyCloak (system) roles plus the AST-APP-specific roles
 // roles are returned without sub-roles, use GetRoleComposites(&role) to fill
 func (c Cx1Client) GetRoles() ([]Role, error) {
-	c.logger.Debug("Getting all available roles")
+	c.logger.Debugf("Getting all available roles")
 	ast_roles, err := c.GetAppRoles()
 	if err != nil {
 		return ast_roles, err

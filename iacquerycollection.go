@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
 
@@ -429,19 +428,19 @@ func (qc IACQueryCollection) GetQueryFamilies(_ bool) []QueryFamily {
 }
 
 // convenience functions for debugging
-func (qg IACQueryGroup) Print(logger *logrus.Logger) {
+func (qg IACQueryGroup) Print(logger Logger) {
 	logger.Infof(" - %v group: %v", qg.Platform, qg.Name)
 	for _, q := range qg.Queries {
 		logger.Infof("   - %v", q.StringDetailed())
 	}
 }
-func (ql IACQueryPlatform) Print(logger *logrus.Logger) {
+func (ql IACQueryPlatform) Print(logger Logger) {
 	logger.Infof("Platform: %v", ql.Name)
 	for _, g := range ql.QueryGroups {
 		g.Print(logger)
 	}
 }
-func (qc IACQueryCollection) Print(logger *logrus.Logger) {
+func (qc IACQueryCollection) Print(logger Logger) {
 	logger.Infof("Printing query collection")
 	for _, l := range qc.Platforms {
 		l.Print(logger)

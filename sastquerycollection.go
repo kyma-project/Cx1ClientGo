@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
 
@@ -465,20 +464,20 @@ func (q SASTQueryLanguage) String() string {
 }
 
 // convenience functions for debugging
-func (qg SASTQueryGroup) Print(logger *logrus.Logger) {
+func (qg SASTQueryGroup) Print(logger Logger) {
 	logger.Infof(" - %v group: %v", qg.Language, qg.Name)
 	for _, q := range qg.Queries {
 		logger.Infof("   - %v", q.StringDetailed())
 	}
 }
-func (ql SASTQueryLanguage) Print(logger *logrus.Logger) {
+func (ql SASTQueryLanguage) Print(logger Logger) {
 	logger.Infof("Language: %v", ql.Name)
 	for _, g := range ql.QueryGroups {
 		g.Print(logger)
 	}
 }
 
-func (qc SASTQueryCollection) Print(logger *logrus.Logger) {
+func (qc SASTQueryCollection) Print(logger Logger) {
 	logger.Infof("Printing query collection")
 	for _, l := range qc.QueryLanguages {
 		l.Print(logger)

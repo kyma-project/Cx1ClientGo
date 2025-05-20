@@ -16,7 +16,7 @@ import (
 
 func main() {
 	logger := log.New()
-	logger.Info( "Starting" )
+	logger.Infof( "Starting" )
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// no err means that the client is initialized
-	logger.Info( "Client initialized: " + cx1client.ToString() )
+	logger.Infof( "Client initialized: " + cx1client.ToString() )
 }
 ```
 
@@ -53,7 +53,7 @@ import (
 
 func main() {
 	logger := log.New()
-	logger.Info( "Starting" )
+	logger.Infof( "Starting" )
 	//logger.SetLevel( log.TraceLevel ) 
 
 	base_url := os.Args[1]
@@ -81,7 +81,7 @@ func main() {
 	}
 
 	// no err means that the client is initialized
-	logger.Info( "Client initialized: " + cx1client.ToString() )
+	logger.Infof( "Client initialized: " + cx1client.ToString() )
 	
 	group, err := cx1client.GetGroupByName( group_name )
 	if err != nil {
@@ -176,7 +176,7 @@ func main() {
 		logger.Errorf( "Failed to Update report: %s", err )
 		return
 	}
-	logger.Info( "Report Updated to report.pdf" )
+	logger.Infof( "Report Updated to report.pdf" )
 	
 	scanresults, err := cx1client.GetScanResultsByID( scan.ScanID )
 	if err != nil && len(scanresults) == 0 {

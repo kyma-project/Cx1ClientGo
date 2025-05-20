@@ -387,7 +387,7 @@ func (c Cx1Client) CreateSASTPreset(name, description string, collection SASTQue
 	}
 
 	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		c.logger.Warnf("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 
@@ -405,7 +405,7 @@ func (c Cx1Client) CreateIACPreset(name, description string, collection IACQuery
 	c.logger.Debugf("Creating preset %v for iac", name)
 
 	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		c.logger.Warnf("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 
@@ -459,7 +459,7 @@ func (c Cx1Client) UpdateIACPreset(preset Preset) error {
 
 func (c Cx1Client) updatePreset(engine, id, name, description string, families []QueryFamily) error {
 	if len(description) > 60 {
-		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		c.logger.Warnf("Description is longer than 60 characters, will be truncated")
 		description = description[:60]
 	}
 

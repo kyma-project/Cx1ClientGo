@@ -12,7 +12,7 @@ import (
 
 // Clients
 func (c Cx1Client) GetClients() ([]OIDCClient, error) {
-	c.logger.Debug("Getting OIDC Clients")
+	c.logger.Debugf("Getting OIDC Clients")
 	var json_clients []map[string]interface{}
 	var clients []OIDCClient
 
@@ -337,7 +337,7 @@ func (c Cx1Client) GetIAMURL() string {
 }
 
 func (c Cx1Client) GetClientScopes() ([]OIDCClientScope, error) {
-	c.logger.Debug("Getting OIDC Client Scopes")
+	c.logger.Debugf("Getting OIDC Client Scopes")
 	var clientscopes []OIDCClientScope
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/client-scopes", nil, nil)

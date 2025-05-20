@@ -20,7 +20,7 @@ func main() {
 	logger.SetFormatter(myformatter)
 	logger.SetOutput(os.Stdout)
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
