@@ -44,7 +44,7 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 	}
 
 	err = json.Unmarshal(response, &project)
-
+	project.originalApplications = project.Applications
 	return project, err
 }
 
@@ -102,6 +102,7 @@ func (c Cx1Client) CreateProjectInApplicationWOPolling(projectname string, cx1_g
 		return Project{}, err
 	}
 
+	project.originalApplications = project.Applications
 	return project, err
 }
 
@@ -164,10 +165,11 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 		return project, fmt.Errorf("failed to fetch project %v: %s", projectID, err)
 	}
 
-	err = json.Unmarshal([]byte(data), &project)
+	err = json.Unmarshal(data, &project)
 	if err != nil {
 		return project, err
 	}
+	project.originalApplications = project.Applications
 
 	err = c.GetProjectConfiguration(&project)
 	return project, err
@@ -267,6 +269,10 @@ func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uin
 		projects = append(projects, projs...)
 	}
 
+	for i := range projects {
+		projects[i].originalApplications = projects[i].Applications
+	}
+
 	if uint64(len(projects)) > count {
 		return count, projects[:count], err
 	}
@@ -286,6 +292,19 @@ func (p *Project) IsInGroupID(groupId string) bool {
 
 func (p *Project) IsInGroup(group *Group) bool {
 	return p.IsInGroupID(group.GroupID)
+}
+
+func (p *Project) IsInApplicationID(appId string) bool {
+	for _, g := range p.Applications {
+		if g == appId {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Project) IsInApplication(app *Application) bool {
+	return p.IsInApplicationID(app.ApplicationID)
 }
 
 func (c Cx1Client) GetProjectConfiguration(project *Project) error {
@@ -478,7 +497,35 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 func (c Cx1Client) UpdateProject(project *Project) error {
 	c.logger.Debugf("Updating project %v", project.String())
 
-	jsonBody, err := json.Marshal(project)
+	// This may be temporary depending on how the API changes
+	// sending an applicationIds array will cause the project's membership in applications to change
+	// this can result in unintentional changes, eg:
+	//   project is in app1&app2, user has access only to app1
+	//   retrieving the project will list only app1 in the applicationIds array
+	//   saving the project may unassign the project from app2
+	project_copy := *project
+	if len(project_copy.Applications) == len(project_copy.originalApplications) {
+		diff := false
+		counts := make(map[string]int)
+		for _, app := range project_copy.Applications {
+			counts[app]++
+		}
+		for _, app := range project_copy.originalApplications {
+			counts[app]++
+		}
+		for _, count := range counts {
+			if count != 2 {
+				diff = true
+				break
+			}
+		}
+
+		if !diff { // no changes were made to the applications list, so omit this field when doing the PUT
+			project_copy.Applications = []string{}
+		}
+	}
+
+	jsonBody, err := json.Marshal(project_copy)
 	if err != nil {
 		return err
 	}
@@ -615,6 +662,13 @@ func (p *Project) AssignGroup(group *Group) {
 		return
 	}
 	p.Groups = append(p.Groups, group.GroupID)
+}
+
+func (p *Project) AssignApplication(app *Application) {
+	if p.IsInApplication(app) {
+		return
+	}
+	p.Applications = append(p.Applications, app.ApplicationID)
 }
 
 func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
