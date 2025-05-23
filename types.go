@@ -539,18 +539,19 @@ type Preset_v330 struct {
 }
 
 type Project struct {
-	ProjectID     string                 `json:"id"`
-	Name          string                 `json:"name"`
-	CreatedAt     string                 `json:"createdAt"`
-	UpdatedAt     string                 `json:"updatedAt"`
-	Groups        []string               `json:"groups"`
-	Applications  []string               `json:"applicationIds,omitempty"`
-	Tags          map[string]string      `json:"tags"`
-	RepoUrl       string                 `json:"repoUrl"`
-	MainBranch    string                 `json:"mainBranch"`
-	Origin        string                 `json:"origin"`
-	Criticality   uint                   `json:"criticality"`
-	Configuration []ConfigurationSetting `json:"-"`
+	ProjectID            string                 `json:"id"`
+	Name                 string                 `json:"name"`
+	CreatedAt            string                 `json:"createdAt"`
+	UpdatedAt            string                 `json:"updatedAt"`
+	Groups               []string               `json:"groups,omitempty"`
+	Applications         []string               `json:"applicationIds,omitempty"`
+	originalApplications []string               `json:"-"` // Cx1clientgo internal/restricted, do not change
+	Tags                 map[string]string      `json:"tags"`
+	RepoUrl              string                 `json:"repoUrl"`
+	MainBranch           string                 `json:"mainBranch"`
+	Origin               string                 `json:"origin"`
+	Criticality          uint                   `json:"criticality"`
+	Configuration        []ConfigurationSetting `json:"-"`
 }
 
 type ProjectFilter struct {
