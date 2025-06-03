@@ -1326,11 +1326,11 @@ func (s AuditSession) String() string {
 	age := time.Since(s.CreatedAt)
 	since_refresh := time.Since(s.LastHeartbeat)
 	if s.ProjectID == "" && s.ApplicationID == "" {
-		return fmt.Sprintf("%v Audit Session %v (Tenant - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), strings.Join(languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("%v Audit Session %v (Tenant - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), strings.Join(languages, ","), age.Round(time.Second).String(), since_refresh.Round(time.Second).String())
 	} else if s.ApplicationID == "" {
-		return fmt.Sprintf("%v Audit Session %v (Project %v - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("%v Audit Session %v (Project %v - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), ShortenGUID(s.ProjectID), strings.Join(languages, ","), age.Round(time.Second).String(), since_refresh.Round(time.Second).String())
 	} else {
-		return fmt.Sprintf("%v Audit Session %v (Project %v/Application %v - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(languages, ","), age.String(), since_refresh.String())
+		return fmt.Sprintf("%v Audit Session %v (Project %v/Application %v - %v) [%v/%v]", strings.ToUpper(s.Engine), ShortenGUID(s.ID), ShortenGUID(s.ProjectID), ShortenGUID(s.ApplicationID), strings.Join(languages, ","), age.Round(time.Second).String(), since_refresh.Round(time.Second).String())
 	}
 }
 
