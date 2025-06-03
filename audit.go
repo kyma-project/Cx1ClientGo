@@ -68,6 +68,9 @@ func (c Cx1Client) AuditCreateSession(engine, filter string) (AuditSession, erro
 	if err != nil {
 		return session, err
 	}
+	session.CreatedAt = time.Now()
+	session.LastHeartbeat = time.Now()
+	session.Engine = engine
 
 	if session.Data.Status != "ALLOCATED" {
 		return session, fmt.Errorf("failed to allocate audit session: %v", session.Data.Status)
