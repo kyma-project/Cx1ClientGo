@@ -239,15 +239,16 @@ type AnalyticsVulnerabilitiesStats struct {
 }
 
 type Application struct {
-	ApplicationID string            `json:"id"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description"`
-	Criticality   uint              `json:"criticality"`
-	Rules         []ApplicationRule `json:"rules"`
-	Tags          map[string]string `json:"tags"`
-	ProjectIds    []string          `json:"projectIds,omitempty"`
-	CreatedAt     string            `json:"createdAt"`
-	UpdatedAt     string            `json:"updatedAt"`
+	ApplicationID      string            `json:"id"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Criticality        uint              `json:"criticality"`
+	Rules              []ApplicationRule `json:"rules"`
+	Tags               map[string]string `json:"tags"`
+	ProjectIds         []string          `json:"projectIds,omitempty"`
+	originalProjectIds []string          `json:"-"` // Cx1clientgo internal/restricted, do not change
+	CreatedAt          string            `json:"createdAt"`
+	UpdatedAt          string            `json:"updatedAt"`
 }
 
 type ApplicationFilter struct {

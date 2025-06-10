@@ -494,6 +494,39 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+// Directly assign a project to one or more applications
+// This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
+func (c Cx1Client) AssignProjectToApplicationsByIDs(projectId string, applicationIds []string) error {
+	var body struct {
+		Applications []string `json:"applications"`
+	}
+	body.Applications = applicationIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/%v/applications", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+// Directly assign a project to one or more applications
+// This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
+func (c Cx1Client) RemoveProjectFromApplicationsByIDs(projectId string, applicationIds []string) error {
+	var body struct {
+		Applications []string `json:"applications"`
+	}
+	body.Applications = applicationIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodDelete, fmt.Sprintf("/projects/%v/applications", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+// This updates a project, including any changes in Application membership
 func (c Cx1Client) UpdateProject(project *Project) error {
 	c.logger.Debugf("Updating project %v", project.String())
 
@@ -505,23 +538,34 @@ func (c Cx1Client) UpdateProject(project *Project) error {
 	//   saving the project may unassign the project from app2
 	project_copy := *project
 	if len(project_copy.Applications) == len(project_copy.originalApplications) {
-		diff := false
-		counts := make(map[string]int)
+		added := []string{}
+		removed := []string{}
 		for _, app := range project_copy.Applications {
-			counts[app]++
-		}
-		for _, app := range project_copy.originalApplications {
-			counts[app]++
-		}
-		for _, count := range counts {
-			if count != 2 {
-				diff = true
-				break
+			if !slices.Contains(project_copy.originalApplications, app) {
+				added = append(added, app)
 			}
 		}
-
-		if !diff { // no changes were made to the applications list, so omit this field when doing the PUT
+		for _, app := range project_copy.originalApplications {
+			if !slices.Contains(project_copy.Applications, app) {
+				removed = append(removed, app)
+			}
+		}
+		if len(added) == 0 && len(removed) == 0 { // no changes were made to the applications list, so omit this field when doing the PUT
 			project_copy.Applications = []string{}
+		} else {
+			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
+			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+				if len(added) > 0 {
+					if err := c.AssignProjectToApplicationsByIDs(project.ProjectID, added); err != nil {
+						return err
+					}
+				}
+				if len(removed) > 0 {
+					if err := c.RemoveProjectFromApplicationsByIDs(project.ProjectID, removed); err != nil {
+						return err
+					}
+				}
+			}
 		}
 	}
 
@@ -657,6 +701,7 @@ func (s ProjectScanSchedule) String() string {
 	}
 }
 
+// Assign a project to a group. You must call UpdateProject() on this project to save the changes.
 func (p *Project) AssignGroup(group *Group) {
 	if p.IsInGroup(group) {
 		return
@@ -664,11 +709,24 @@ func (p *Project) AssignGroup(group *Group) {
 	p.Groups = append(p.Groups, group.GroupID)
 }
 
+// Assign a project to an application. You must call UpdateProject() on this project to save the changes.
 func (p *Project) AssignApplication(app *Application) {
 	if p.IsInApplication(app) {
 		return
 	}
 	p.Applications = append(p.Applications, app.ApplicationID)
+	if !slices.Contains(app.ProjectIds, p.ProjectID) {
+		app.ProjectIds = append(app.ProjectIds, p.ProjectID)
+	}
+}
+func (p *Project) RemoveApplication(app *Application) {
+	if !p.IsInApplication(app) {
+		return
+	}
+	p.Applications = slices.Delete(p.Applications, slices.Index(p.Applications, app.ApplicationID), slices.Index(p.Applications, app.ApplicationID)+1)
+	if slices.Contains(app.ProjectIds, p.ProjectID) {
+		app.ProjectIds = slices.Delete(app.ProjectIds, slices.Index(app.ProjectIds, p.ProjectID), slices.Index(app.ProjectIds, p.ProjectID)+1)
+	}
 }
 
 func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
