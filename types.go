@@ -245,7 +245,7 @@ type Application struct {
 	Criticality        uint              `json:"criticality"`
 	Rules              []ApplicationRule `json:"rules"`
 	Tags               map[string]string `json:"tags"`
-	ProjectIds         []string          `json:"projectIds,omitempty"`
+	ProjectIds         *[]string         `json:"projectIds,omitempty"`
 	originalProjectIds []string          `json:"-"` // Cx1clientgo internal/restricted, do not change
 	CreatedAt          string            `json:"createdAt"`
 	UpdatedAt          string            `json:"updatedAt"`
@@ -545,7 +545,7 @@ type Project struct {
 	CreatedAt            string                 `json:"createdAt"`
 	UpdatedAt            string                 `json:"updatedAt"`
 	Groups               []string               `json:"groups,omitempty"`
-	Applications         []string               `json:"applicationIds,omitempty"`
+	Applications         *[]string              `json:"applicationIds,omitempty"`
 	originalApplications []string               `json:"-"` // Cx1clientgo internal/restricted, do not change
 	Tags                 map[string]string      `json:"tags"`
 	RepoUrl              string                 `json:"repoUrl"`

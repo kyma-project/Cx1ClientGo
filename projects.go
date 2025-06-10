@@ -44,7 +44,7 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 	}
 
 	err = json.Unmarshal(response, &project)
-	project.originalApplications = project.Applications
+	project.originalApplications = *project.Applications
 	return project, err
 }
 
@@ -102,7 +102,7 @@ func (c Cx1Client) CreateProjectInApplicationWOPolling(projectname string, cx1_g
 		return Project{}, err
 	}
 
-	project.originalApplications = project.Applications
+	project.originalApplications = *project.Applications
 	return project, err
 }
 
@@ -122,7 +122,7 @@ func (c Cx1Client) ProjectInApplicationPollingByID(projectId, applicationId stri
 func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applicationId string, delaySeconds, maxSeconds int) (Project, error) {
 	project, err := c.GetProjectByID(projectId)
 	pollingCounter := 0
-	for err != nil || !slices.Contains(project.Applications, applicationId) {
+	for err != nil || !slices.Contains(*project.Applications, applicationId) {
 		if pollingCounter > maxSeconds {
 			return project, fmt.Errorf("project %v is not assigned to application ID %v after %d seconds, aborting", projectId, applicationId, maxSeconds)
 		}
@@ -169,7 +169,7 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	if err != nil {
 		return project, err
 	}
-	project.originalApplications = project.Applications
+	project.originalApplications = *project.Applications
 
 	err = c.GetProjectConfiguration(&project)
 	return project, err
@@ -270,7 +270,7 @@ func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uin
 	}
 
 	for i := range projects {
-		projects[i].originalApplications = projects[i].Applications
+		projects[i].originalApplications = *projects[i].Applications
 	}
 
 	if uint64(len(projects)) > count {
@@ -295,7 +295,7 @@ func (p *Project) IsInGroup(group *Group) bool {
 }
 
 func (p *Project) IsInApplicationID(appId string) bool {
-	for _, g := range p.Applications {
+	for _, g := range *p.Applications {
 		if g == appId {
 			return true
 		}
@@ -537,21 +537,22 @@ func (c Cx1Client) UpdateProject(project *Project) error {
 	//   retrieving the project will list only app1 in the applicationIds array
 	//   saving the project may unassign the project from app2
 	project_copy := *project
-	if len(project_copy.Applications) == len(project_copy.originalApplications) {
-		added := []string{}
-		removed := []string{}
-		for _, app := range project_copy.Applications {
+
+	added := []string{}
+	removed := []string{}
+	if project_copy.Applications != nil {
+		for _, app := range *project_copy.Applications {
 			if !slices.Contains(project_copy.originalApplications, app) {
 				added = append(added, app)
 			}
 		}
 		for _, app := range project_copy.originalApplications {
-			if !slices.Contains(project_copy.Applications, app) {
+			if !slices.Contains(*project_copy.Applications, app) {
 				removed = append(removed, app)
 			}
 		}
 		if len(added) == 0 && len(removed) == 0 { // no changes were made to the applications list, so omit this field when doing the PUT
-			project_copy.Applications = []string{}
+			project_copy.Applications = nil
 		} else {
 			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
 			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
@@ -714,19 +715,38 @@ func (p *Project) AssignApplication(app *Application) {
 	if p.IsInApplication(app) {
 		return
 	}
-	p.Applications = append(p.Applications, app.ApplicationID)
-	if !slices.Contains(app.ProjectIds, p.ProjectID) {
-		app.ProjectIds = append(app.ProjectIds, p.ProjectID)
+	newApps := append(*p.Applications, app.ApplicationID)
+	p.Applications = &newApps
+	if !slices.Contains(*app.ProjectIds, p.ProjectID) {
+		newProjs := append(*app.ProjectIds, p.ProjectID)
+		app.ProjectIds = &newProjs
 	}
 }
+func (p *Project) AssignApplicationByID(appId string) {
+	if p.IsInApplicationID(appId) {
+		return
+	}
+	newApps := append(*p.Applications, appId)
+	p.Applications = &newApps
+}
+
 func (p *Project) RemoveApplication(app *Application) {
 	if !p.IsInApplication(app) {
 		return
 	}
-	p.Applications = slices.Delete(p.Applications, slices.Index(p.Applications, app.ApplicationID), slices.Index(p.Applications, app.ApplicationID)+1)
-	if slices.Contains(app.ProjectIds, p.ProjectID) {
-		app.ProjectIds = slices.Delete(app.ProjectIds, slices.Index(app.ProjectIds, p.ProjectID), slices.Index(app.ProjectIds, p.ProjectID)+1)
+	newApps := slices.Delete(*p.Applications, slices.Index(*p.Applications, app.ApplicationID), slices.Index(*p.Applications, app.ApplicationID)+1)
+	p.Applications = &newApps
+	if slices.Contains(*app.ProjectIds, p.ProjectID) {
+		newProjs := slices.Delete(*app.ProjectIds, slices.Index(*app.ProjectIds, p.ProjectID), slices.Index(*app.ProjectIds, p.ProjectID)+1)
+		app.ProjectIds = &newProjs
 	}
+}
+func (p *Project) RemoveApplicationByID(appID string) {
+	if !p.IsInApplicationID(appID) {
+		return
+	}
+	newApps := slices.Delete(*p.Applications, slices.Index(*p.Applications, appID), slices.Index(*p.Applications, appID)+1)
+	p.Applications = &newApps
 }
 
 func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {

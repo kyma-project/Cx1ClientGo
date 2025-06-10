@@ -42,6 +42,7 @@ func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
 	}
 
 	err = json.Unmarshal(response, &application)
+	application.originalProjectIds = *application.ProjectIds
 	return application, err
 }
 
@@ -95,7 +96,7 @@ func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []
 	err = json.Unmarshal(response, &ApplicationResponse)
 
 	for i := range ApplicationResponse.Applications {
-		ApplicationResponse.Applications[i].originalProjectIds = ApplicationResponse.Applications[i].ProjectIds
+		ApplicationResponse.Applications[i].originalProjectIds = *ApplicationResponse.Applications[i].ProjectIds
 	}
 
 	return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
@@ -271,21 +272,21 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 	//   retrieving the application will list only proj1 in the projectIds array
 	//   saving the application may unassign the application from proj2
 	app_copy := *app
-	if len(app_copy.ProjectIds) == len(app_copy.originalProjectIds) {
+	if app.ProjectIds != nil {
 		added := []string{}
 		removed := []string{}
-		for _, proj := range app_copy.ProjectIds {
+		for _, proj := range *app_copy.ProjectIds {
 			if !slices.Contains(app_copy.originalProjectIds, proj) {
 				added = append(added, proj)
 			}
 		}
 		for _, proj := range app_copy.originalProjectIds {
-			if !slices.Contains(app_copy.ProjectIds, proj) {
+			if !slices.Contains(*app_copy.ProjectIds, proj) {
 				removed = append(removed, proj)
 			}
 		}
 		if len(added) == 0 && len(removed) == 0 { // no changes were made to the projects list, so omit this field when doing the PUT
-			app_copy.ProjectIds = []string{}
+			app_copy.ProjectIds = nil
 		} else {
 			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
 			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
@@ -370,11 +371,13 @@ func (a *Application) RemoveRule(ruleID string) {
 func (a *Application) AssignProject(project *Project) {
 	a.AddRule("project.name.in", project.Name)
 
-	if !slices.Contains(a.ProjectIds, project.ProjectID) {
-		a.ProjectIds = append(a.ProjectIds, project.ProjectID)
+	if !slices.Contains(*a.ProjectIds, project.ProjectID) {
+		newProjs := append(*a.ProjectIds, project.ProjectID)
+		a.ProjectIds = &newProjs
 	}
-	if !slices.Contains(project.Applications, a.ApplicationID) {
-		project.Applications = append(project.Applications, a.ApplicationID)
+	if !slices.Contains(*project.Applications, a.ApplicationID) {
+		newApps := append(*project.Applications, a.ApplicationID)
+		project.Applications = &newApps
 	}
 }
 
@@ -394,11 +397,13 @@ func (a *Application) UnassignProject(project *Project) {
 		}
 	}
 
-	if slices.Contains(a.ProjectIds, project.ProjectID) {
-		a.ProjectIds = slices.Delete(a.ProjectIds, slices.Index(a.ProjectIds, project.ProjectID), slices.Index(a.ProjectIds, project.ProjectID)+1)
+	if slices.Contains(*a.ProjectIds, project.ProjectID) {
+		newProjs := slices.Delete(*a.ProjectIds, slices.Index(*a.ProjectIds, project.ProjectID), slices.Index(*a.ProjectIds, project.ProjectID)+1)
+		a.ProjectIds = &newProjs
 	}
-	if slices.Contains(project.Applications, a.ApplicationID) {
-		project.Applications = slices.Delete(project.Applications, slices.Index(project.Applications, a.ApplicationID), slices.Index(project.Applications, a.ApplicationID)+1)
+	if slices.Contains(*project.Applications, a.ApplicationID) {
+		newApps := slices.Delete(*project.Applications, slices.Index(*project.Applications, a.ApplicationID), slices.Index(*project.Applications, a.ApplicationID)+1)
+		project.Applications = &newApps
 	}
 }
 

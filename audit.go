@@ -123,9 +123,9 @@ func (c Cx1Client) AuditCreateSessionByID(engine, projectId, scanId string) (Aud
 	if err != nil {
 		c.logger.Errorf("Unknown project %v", projectId)
 	} else {
-		if len(proj.Applications) == 1 {
-			appId = proj.Applications[0]
-		} else if len(proj.Applications) > 1 {
+		if len(*proj.Applications) == 1 {
+			appId = (*proj.Applications)[0]
+		} else if len(*proj.Applications) > 1 {
 			appId = "Error: multiple owning applications"
 		}
 	}
