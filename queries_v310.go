@@ -73,10 +73,10 @@ func (c Cx1Client) GetQueriesByLevelID_v310(level, levelId string) ([]AuditQuery
 				if err != nil {
 					return queries_v310, fmt.Errorf("failed to retrieve project with ID %v", levelId)
 				}
-				if len(project.Applications) == 0 {
+				if len(*project.Applications) == 0 {
 					return queries_v310, fmt.Errorf("project %v has an application-level query defined, but has no application associated", project.String())
 				}
-				applicationId = project.Applications[0]
+				applicationId = (*project.Applications)[0]
 			}
 			queries_v310[id].LevelID = applicationId
 		case AUDIT_QUERY_PRODUCT:
