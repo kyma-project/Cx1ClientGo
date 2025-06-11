@@ -44,7 +44,11 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 	}
 
 	err = json.Unmarshal(response, &project)
-	project.originalApplications = *project.Applications
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
+	}
 	return project, err
 }
 
@@ -102,7 +106,11 @@ func (c Cx1Client) CreateProjectInApplicationWOPolling(projectname string, cx1_g
 		return Project{}, err
 	}
 
-	project.originalApplications = *project.Applications
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
+	}
 	return project, err
 }
 
@@ -169,7 +177,11 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	if err != nil {
 		return project, err
 	}
-	project.originalApplications = *project.Applications
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
+	}
 
 	err = c.GetProjectConfiguration(&project)
 	return project, err
@@ -270,7 +282,11 @@ func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uin
 	}
 
 	for i := range projects {
-		projects[i].originalApplications = *projects[i].Applications
+		if projects[i].Applications != nil {
+			projects[i].originalApplications = *projects[i].Applications
+		} else {
+			projects[i].originalApplications = []string{}
+		}
 	}
 
 	if uint64(len(projects)) > count {
@@ -497,6 +513,9 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 // Directly assign a project to one or more applications
 // This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
 func (c Cx1Client) AssignProjectToApplicationsByIDs(projectId string, applicationIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
 	var body struct {
 		Applications []string `json:"applications"`
 	}
@@ -513,6 +532,9 @@ func (c Cx1Client) AssignProjectToApplicationsByIDs(projectId string, applicatio
 // Directly assign a project to one or more applications
 // This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
 func (c Cx1Client) RemoveProjectFromApplicationsByIDs(projectId string, applicationIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
 	var body struct {
 		Applications []string `json:"applications"`
 	}
@@ -556,16 +578,7 @@ func (c Cx1Client) UpdateProject(project *Project) error {
 		} else {
 			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
 			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
-				if len(added) > 0 {
-					if err := c.AssignProjectToApplicationsByIDs(project.ProjectID, added); err != nil {
-						return err
-					}
-				}
-				if len(removed) > 0 {
-					if err := c.RemoveProjectFromApplicationsByIDs(project.ProjectID, removed); err != nil {
-						return err
-					}
-				}
+				c.logger.Warnf("Project %v's list of ApplicationIDs has changed - this will not be saved unless done via application.Update")
 			}
 		}
 	}
@@ -722,6 +735,8 @@ func (p *Project) AssignApplication(app *Application) {
 		app.ProjectIds = &newProjs
 	}
 }
+
+// this should only be used if you are separately tracking changes to the Application or have direct_app_association enabled
 func (p *Project) AssignApplicationByID(appId string) {
 	if p.IsInApplicationID(appId) {
 		return
@@ -741,6 +756,8 @@ func (p *Project) RemoveApplication(app *Application) {
 		app.ProjectIds = &newProjs
 	}
 }
+
+// this should only be used if you are separately tracking changes to the Application or have direct_app_association enabled
 func (p *Project) RemoveApplicationByID(appID string) {
 	if !p.IsInApplicationID(appID) {
 		return

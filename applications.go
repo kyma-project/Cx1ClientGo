@@ -42,7 +42,11 @@ func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
 	}
 
 	err = json.Unmarshal(response, &application)
-	application.originalProjectIds = *application.ProjectIds
+	if application.ProjectIds != nil {
+		application.originalProjectIds = *application.ProjectIds
+	} else {
+		application.originalProjectIds = []string{}
+	}
 	return application, err
 }
 
@@ -96,7 +100,11 @@ func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []
 	err = json.Unmarshal(response, &ApplicationResponse)
 
 	for i := range ApplicationResponse.Applications {
-		ApplicationResponse.Applications[i].originalProjectIds = *ApplicationResponse.Applications[i].ProjectIds
+		if ApplicationResponse.Applications[i].ProjectIds != nil {
+			ApplicationResponse.Applications[i].originalProjectIds = *ApplicationResponse.Applications[i].ProjectIds
+		} else {
+			ApplicationResponse.Applications[i].originalProjectIds = []string{}
+		}
 	}
 
 	return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
@@ -226,6 +234,9 @@ func (c Cx1Client) GetOrCreateApplicationByName(name string) (Application, error
 
 // Directly assign an application to one or more projects
 func (c Cx1Client) AssignApplicationToProjectsByIDs(applicationId string, projectIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
 	var body struct {
 		Projects []string `json:"projects"`
 	}
@@ -245,6 +256,9 @@ func (c Cx1Client) AssignApplicationToProjectsByIDs(applicationId string, projec
 
 // Directly remove an application from one or more projects
 func (c Cx1Client) RemoveApplicationFromProjectsByIDs(applicationId string, projectIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
 	var body struct {
 		Projects []string `json:"projects"`
 	}
@@ -287,20 +301,6 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 		}
 		if len(added) == 0 && len(removed) == 0 { // no changes were made to the projects list, so omit this field when doing the PUT
 			app_copy.ProjectIds = nil
-		} else {
-			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
-			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
-				if len(added) > 0 {
-					if err := c.AssignApplicationToProjectsByIDs(app.ApplicationID, added); err != nil {
-						return err
-					}
-				}
-				if len(removed) > 0 {
-					if err := c.RemoveApplicationFromProjectsByIDs(app.ApplicationID, removed); err != nil {
-						return err
-					}
-				}
-			}
 		}
 	}
 
