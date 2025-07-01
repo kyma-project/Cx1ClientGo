@@ -803,6 +803,26 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 	return project, application, nil
 }
 
+func (c Cx1Client) MoveProjectBetweenApplications(project *Project, sourceApplicationIDs, destinationApplicationIDs []string) error {
+	var requestBody struct {
+		Source []string `json:"applicationIdsToDisassociate"`
+		Dest   []string `json:"applicationIdsToAssociate"`
+	}
+	requestBody.Source = sourceApplicationIDs
+	requestBody.Dest = destinationApplicationIDs
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/projects/reassign/%v", project.ProjectID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p Project) GetConfigurationByName(configKey string) *ConfigurationSetting {
 	return getConfigurationByName(&p.Configuration, configKey)
 }
