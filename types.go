@@ -868,10 +868,6 @@ type ScanResultBase struct {
 	FoundAt         string
 	FirstScanId     string
 	Description     string
-	CVSSScore       float64
-	ProjectID       string
-	ScanID          string
-	SourceFileName  string
 	// Comments			// currently doesn't do anything?
 }
 
@@ -990,8 +986,6 @@ type ScanSASTResultsFilter struct {
 	IncludeNodes           bool     `url:"include-nodes,omitempty"`
 	ApplyPredicates        bool     `url:"apply-predicates,omitempty"`
 	Sort                   []string `url:"sort,omitempty"` // Default value : +status,+severity,-queryname
-	VisibleColumns         []string `url:"visible-columns,omitempty"`
-	State                  []string `url:"state,omitempty"`
 }
 
 type ScanSCAResult struct {
