@@ -868,6 +868,10 @@ type ScanResultBase struct {
 	FoundAt         string
 	FirstScanId     string
 	Description     string
+	CVSSScore       float64
+	ProjectID       string
+	ScanID          string
+	SourceFileName  string
 	// Comments			// currently doesn't do anything?
 }
 
