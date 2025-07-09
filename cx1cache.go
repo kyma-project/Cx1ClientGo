@@ -13,9 +13,9 @@ type Cx1Cache struct {
 	UserRefresh        bool
 	Users              []User
 	QueryRefresh       bool
-	Queries            QueryCollection
+	Queries            SASTQueryCollection
 	PresetRefresh      bool
-	Presets            []Preset
+	Presets            map[string][]Preset
 	RoleRefresh        bool
 	Roles              []Role
 	Applications       []Application
@@ -48,7 +48,7 @@ func (c *Cx1Cache) ClientSummary() string {
 }
 
 func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
-	client.logger.Info("Refreshing projects in Cx1 cache")
+	client.logger.Infof("Refreshing projects in Cx1 cache")
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
@@ -59,7 +59,7 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
-	client.logger.Info("Refreshing applications in Cx1 cache")
+	client.logger.Infof("Refreshing applications in Cx1 cache")
 	var err error
 	if !c.ApplicationRefresh {
 		c.ApplicationRefresh = true
@@ -70,7 +70,7 @@ func (c *Cx1Cache) RefreshApplications(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshClients(client *Cx1Client) error {
-	client.logger.Info("Refreshing OIDC Clients in Cx1 cache")
+	client.logger.Infof("Refreshing OIDC Clients in Cx1 cache")
 	var err error
 	if !c.ClientRefresh {
 		c.ClientRefresh = true
@@ -81,7 +81,7 @@ func (c *Cx1Cache) RefreshClients(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
-	client.logger.Info("Refreshing groups in Cx1 cache")
+	client.logger.Infof("Refreshing groups in Cx1 cache")
 	var err error
 	if !c.GroupRefresh {
 		c.GroupRefresh = true
@@ -92,7 +92,7 @@ func (c *Cx1Cache) RefreshGroups(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
-	client.logger.Info("Refreshing users in Cx1 cache")
+	client.logger.Infof("Refreshing users in Cx1 cache")
 	var err error
 	if !c.UserRefresh {
 		c.UserRefresh = true
@@ -103,7 +103,7 @@ func (c *Cx1Cache) RefreshUsers(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
-	client.logger.Info("Refreshing queries in Cx1 cache")
+	client.logger.Infof("Refreshing queries in Cx1 cache")
 	var err error
 	if !c.QueryRefresh {
 		c.QueryRefresh = true
@@ -114,19 +114,21 @@ func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
-	client.logger.Info("Refreshing presets in Cx1 cache")
+	client.logger.Infof("Refreshing presets in Cx1 cache")
 	var err error
 	if !c.PresetRefresh {
 		c.PresetRefresh = true
-		c.Presets, err = client.GetAllPresets()
+		c.Presets["sast"], err = client.GetAllSASTPresets()
 
 		if err != nil {
 			client.logger.Tracef("Failed while retrieving presets: %s", err)
 		} else {
-			for id := range c.Presets {
-				err := client.GetPresetContents(&c.Presets[id], nil)
-				if err != nil {
-					client.logger.Tracef("Failed to retrieve preset contents for preset %v: %s", c.Presets[id].String(), err)
+			for engine := range c.Presets {
+				for id := range c.Presets[engine] {
+					err := client.GetPresetContents(&c.Presets[engine][id])
+					if err != nil {
+						client.logger.Tracef("Failed to retrieve preset contents for preset %v: %s", c.Presets[engine][id].String(), err)
+					}
 				}
 			}
 		}
@@ -136,7 +138,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 }
 
 func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
-	client.logger.Info("Refreshing roles in Cx1 cache")
+	client.logger.Infof("Refreshing roles in Cx1 cache")
 	var err error
 	if !c.RoleRefresh {
 		c.RoleRefresh = true
@@ -202,8 +204,12 @@ func (c *Cx1Cache) Refresh(client *Cx1Client) []error {
 }
 
 func (c *Cx1Cache) MatchPresetQueries() {
-	for id := range c.Presets {
-		c.Presets[id].LinkQueries(&c.Queries)
+	if _, ok := c.Presets["sast"]; ok {
+		for id := range c.Presets["sast"] {
+			p := c.Presets["sast"][id]
+			//p.LinkQueries(&c.Queries)
+			c.Presets["sast"][id] = p
+		}
 	}
 }
 
@@ -300,18 +306,18 @@ func (c *Cx1Cache) GetClientByID(clientId string) (*OIDCClient, error) {
 	return nil, fmt.Errorf("no such Client %v", clientId)
 }
 
-func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {
-	for id, g := range c.Presets {
+func (c *Cx1Cache) GetPreset(engine string, presetID string) (*Preset, error) {
+	for id, g := range c.Presets[engine] {
 		if g.PresetID == presetID {
-			return &c.Presets[id], nil
+			return &c.Presets[engine][id], nil
 		}
 	}
-	return nil, fmt.Errorf("no such preset %d", presetID)
+	return nil, fmt.Errorf("no such preset %v", presetID)
 }
-func (c *Cx1Cache) GetPresetByName(name string) (*Preset, error) {
-	for id, g := range c.Presets {
+func (c *Cx1Cache) GetPresetByName(engine, name string) (*Preset, error) {
+	for id, g := range c.Presets[engine] {
 		if strings.EqualFold(g.Name, name) {
-			return &c.Presets[id], nil
+			return &c.Presets[engine][id], nil
 		}
 	}
 	return nil, fmt.Errorf("no such preset %v", name)
@@ -334,14 +340,14 @@ func (c *Cx1Cache) GetRoleByName(name string) (*Role, error) {
 	return nil, fmt.Errorf("no such role %v", name)
 }
 
-func (c *Cx1Cache) GetQuery(queryID uint64) (*Query, error) {
+func (c *Cx1Cache) GetQuery(queryID uint64) (*SASTQuery, error) {
 	q := c.Queries.GetQueryByID(queryID)
 	if q != nil {
 		return q, nil
 	}
 	return nil, fmt.Errorf("no such query %d", queryID)
 }
-func (c *Cx1Cache) GetQueryByNames(language, group, query string) (*Query, error) {
+func (c *Cx1Cache) GetQueryByNames(language, group, query string) (*SASTQuery, error) {
 	ql := c.Queries.GetQueryLanguageByName(language)
 	if ql == nil {
 		return nil, fmt.Errorf("no such language %v", language)

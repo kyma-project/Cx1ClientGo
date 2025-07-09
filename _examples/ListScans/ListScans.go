@@ -26,7 +26,7 @@ func main() {
 		logger.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key> [filters]")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	baseURL := os.Args[1]
 	iamURL := os.Args[2]
@@ -85,7 +85,7 @@ func makeScanFilter(logger *logrus.Logger, filters []string) Cx1ClientGo.ScanFil
 				scanFilter.Offset = offset
 			}
 		case "sort":
-			scanFilter.Sort = parts[1]
+			scanFilter.Sort = []string{parts[1]}
 		case "tagkeys":
 			scanFilter.TagKeys = strings.Split(parts[1], ",")
 		case "tagvalues":

@@ -47,7 +47,7 @@ func (c Cx1Client) GetUsers(count uint64) ([]User, error) {
 }
 
 func (c Cx1Client) GetAllUsers() ([]User, error) {
-	c.logger.Debug("Get all Cx1 Users")
+	c.logger.Debugf("Get all Cx1 Users")
 
 	_, users, err := c.GetAllUsersFiltered(UserFilter{
 		BaseIAMFilter:       BaseIAMFilter{Max: c.pagination.Users},
@@ -109,7 +109,16 @@ func (c Cx1Client) GetUserByEmail(email string) (User, error) {
 		Email:               email,
 		Exact:               true,
 	})
-	return users[0], err
+
+	if err != nil {
+		return User{}, err
+	}
+
+	if len(users) == 0 {
+		return User{}, fmt.Errorf("no user with email %v found", email)
+	}
+
+	return users[0], nil
 }
 
 func (c Cx1Client) GetUserCount() (uint64, error) {

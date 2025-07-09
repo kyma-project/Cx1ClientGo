@@ -7,10 +7,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	//	"time"
-	"crypto/tls"
+
 	"fmt"
 	"net/http"
-	"net/url"
 
 	easy "github.com/t-tomalak/logrus-easy-formatter"
 )
@@ -28,7 +27,7 @@ func main() {
 		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -39,10 +38,10 @@ func main() {
 	//	project_repo := os.Args[7]
 	//	branch_name := os.Args[8]
 
-	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
-	transport := &http.Transport{}
-	transport.Proxy = http.ProxyURL(proxyURL)
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	//proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+	//transport := &http.Transport{}
+	//transport.Proxy = http.ProxyURL(proxyURL)
+	//transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
 	//httpClient.Transport = transport
@@ -54,7 +53,7 @@ func main() {
 	}
 
 	// no err means that the client is initialized
-	logger.Info("Client initialized: " + cx1client.String())
+	logger.Infof("Client initialized: " + cx1client.String())
 
 	var scanConfig Cx1ClientGo.ScanConfiguration
 	scanConfig.ScanType = "sast"
@@ -62,17 +61,17 @@ func main() {
 
 	var i uint64
 	for i = 1; i <= 100; i++ {
-		group, gerr := cx1client.GetOrCreateGroup(fmt.Sprintf("Testgroup%d", i))
+		group, gerr := cx1client.GetOrCreateGroupByName(fmt.Sprintf("Testgroup%d", i))
 		if gerr != nil {
 			logger.Errorf("Failed to get Testgroup%d", i)
 			continue
 		}
-		app, aerr := cx1client.GetOrCreateApplication(fmt.Sprintf("Testapp%d", i))
+		app, aerr := cx1client.GetOrCreateApplicationByName(fmt.Sprintf("Testapp%d", i))
 		if aerr != nil {
 			logger.Errorf("Failed to get Testapp%d", i)
 			continue
 		}
-		project, perr := cx1client.GetOrCreateProject(fmt.Sprintf("Testproject%d", i))
+		project, perr := cx1client.GetOrCreateProjectByName(fmt.Sprintf("Testproject%d", i))
 		if perr != nil {
 			logger.Errorf("Failed to get Testproject%d: %v", i, perr)
 			continue
@@ -90,7 +89,7 @@ func main() {
 			logger.Errorf("Failed to Update project: %s", err)
 		}
 
-		scan, serr := cx1client.ScanProjectGit(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba/", "master", []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{})
+		scan, serr := cx1client.ScanProjectGitByID(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba/", "master", []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{})
 		if serr != nil {
 			logger.Errorf("Error starting scan: %s", err)
 		} else {

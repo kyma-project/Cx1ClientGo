@@ -5,8 +5,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/sirupsen/logrus"
 )
+
+type Logger interface {
+	Tracef(format string, args ...interface{})
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warnf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
 
 type Cx1Client struct {
 	httpClient *http.Client
@@ -14,20 +22,52 @@ type Cx1Client struct {
 	baseUrl    string
 	iamUrl     string
 	tenant     string
-	logger     *logrus.Logger
+	logger     Logger
 	flags      map[string]bool // initial implementation ignoring "payload" part of the flag
 	consts     ClientVars
 	pagination PaginationSettings
-	claims     Cx1Claims
-	user       *User
-	version    *VersionInfo
+
+	auth   Cx1ClientAuth
+	claims Cx1Claims
+	user   *User
+	client *OIDCClient
+	IsUser bool
+
+	version      *VersionInfo
+	astAppID     string
+	tenantID     string
+	cx1UserAgent string
+	tenantOwner  *TenantOwner
+	maxRetries   int
+	retryDelay   int
+}
+
+type Cx1ClientAuth struct {
+	APIKey       string
+	ClientID     string
+	ClientSecret string
+	AccessToken  string
+	Expiry       time.Time
 }
 
 type Cx1Claims struct {
 	jwt.RegisteredClaims
 	Cx1License    ASTLicense `json:"ast-license"`
 	IsServiceUser string     `json:"is-service-user"`
+	ISS           string     `json:"iss"`
 	UserID        string     `json:"sub"`
+	Username      string     `json:"name"`
+	ClientID      string     `json:"clientId"`
+	ASTBaseURL    string     `json:"ast-base-url"`
+	TenantID      string     `json:"tenant_id"`
+	TenantName    string     `json:"tenant_name"`
+	Email         string     `json:"email"`
+	Expiry        int64      `json:"exp"`
+	AZP           string     `json:"azp"`
+
+	// the following are generated during parsing
+	IAMURL     string    `json:"-"`
+	ExpiryTime time.Time `json:"-"`
 }
 type ASTLicense struct {
 	ID          int
@@ -65,6 +105,8 @@ type ClientVars struct {
 	AuditCompilePollingDelaySeconds           int
 	AuditLanguagePollingMaxSeconds            int
 	AuditLanguagePollingDelaySeconds          int
+	ReportPollingMaxSeconds                   int
+	ReportPollingDelaySeconds                 int
 	ScanPollingMaxSeconds                     int
 	ScanPollingDelaySeconds                   int
 	ProjectApplicationLinkPollingMaxSeconds   int
@@ -76,6 +118,7 @@ type PaginationSettings struct {
 	Applications  uint64
 	Branches      uint64
 	Groups        uint64
+	GroupMembers  uint64
 	Projects      uint64
 	Results       uint64
 	Scans         uint64
@@ -121,16 +164,91 @@ type AccessibleResource struct {
 	Roles        []string `json:"roles"`
 }
 
+type AnalyticsTime struct {
+	time.Time
+}
+
+type AnalyticsFilter struct {
+	Projects        []string       `json:"projects,omitempty"`
+	Applications    []string       `json:"applications,omitempty"`
+	Scanners        []string       `json:"scanners,omitempty"`
+	ApplicationTags []string       `json:"applicationTags,omitempty"`
+	ProjectTags     []string       `json:"projectTags,omitempty"`
+	ScanTags        []string       `json:"scanTags,omitempty"`
+	States          []string       `json:"states,omitempty"`
+	Status          []string       `json:"status,omitempty"`
+	Severities      []string       `json:"severities,omitempty"`
+	BranchNames     []string       `json:"branchNames,omitempty"`
+	Timezone        string         `json:"timezone,omitempty"`
+	Groups          []string       `json:"groupIds,omitempty"`
+	StartDate       *AnalyticsTime `json:"startDate,omitempty"`
+	EndDate         *AnalyticsTime `json:"endDate,omitempty"`
+}
+
+type AnalyticsDistributionEntry struct {
+	Label      string  `json:"label"`
+	Density    float32 `json:"density"`
+	Percentage float32 `json:"percentage"`
+	Results    uint64  `json:"results"`
+}
+type AnalyticsDistributionBlock struct {
+	Label  string                       `json:"label"`
+	Values []AnalyticsDistributionEntry `json:"values"`
+}
+type AnalyticsDistributionStats struct {
+	Distribution []AnalyticsDistributionBlock `json:"distribution"`
+	LOC          uint64                       `json:"loc"`
+	Total        uint64                       `json:"total"`
+}
+
+type AnalyticsOverTimeEntry struct {
+	Time  uint64        `json:"time"`
+	Value float32       `json:"value"`
+	Date  AnalyticsTime `json:"date"`
+}
+type AnalyticsOverTimeStats struct {
+	Label  string                   `json:"label"`
+	Values []AnalyticsOverTimeEntry `json:"values"`
+}
+
+type AnalyticsSeverityAndStateEntry struct {
+	Label   string `json:"label"`
+	Results int64  `json:"results"`
+}
+type AnalyticsSeverityAndstateStats struct {
+	Label      string                           `json:"label"`
+	Results    int64                            `json:"results"`
+	Severities []AnalyticsSeverityAndStateEntry `json:"severities"`
+}
+
+type AnalyticsMeanTimeEntry struct {
+	Label    string `json:"label"`
+	Results  int64  `json:"results"`
+	MeanTime int64  `json:"meanTime"`
+}
+type AnalyticsMeanTimeStats struct {
+	MeanTimeData      []AnalyticsMeanTimeEntry `json:"meanTimeData"`
+	MeanTimeStateData []AnalyticsMeanTimeEntry `json:"meanTimeStateData"`
+	TotalResults      int64                    `json:"totalResults"`
+}
+
+type AnalyticsVulnerabilitiesStats struct {
+	VulnerabilityName string                           `json:"vulnerabilityName"`
+	Total             int64                            `json:"total"`
+	Severities        []AnalyticsSeverityAndStateEntry `json:"severities"`
+}
+
 type Application struct {
-	ApplicationID string            `json:"id"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description"`
-	Criticality   uint              `json:"criticality"`
-	Rules         []ApplicationRule `json:"rules"`
-	Tags          map[string]string `json:"tags"`
-	ProjectIds    []string          `json:"projectIds"`
-	CreatedAt     string            `json:"createdAt"`
-	UpdatedAt     string            `json:"updatedAt"`
+	ApplicationID      string            `json:"id"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Criticality        uint              `json:"criticality"`
+	Rules              []ApplicationRule `json:"rules"`
+	Tags               map[string]string `json:"tags"`
+	ProjectIds         *[]string         `json:"projectIds,omitempty"`
+	originalProjectIds []string          `json:"-"` // Cx1clientgo internal/restricted, do not change
+	CreatedAt          string            `json:"createdAt"`
+	UpdatedAt          string            `json:"updatedAt"`
 }
 
 type ApplicationFilter struct {
@@ -141,18 +259,53 @@ type ApplicationFilter struct {
 }
 
 type ApplicationRule struct {
+	ID    string `json:"id"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
 }
 
-type AuditQuery struct {
+type AuditIACQuery struct {
+	QueryID  string `json:"id"`
+	Key      string `json:"-"`
+	Name     string
+	Level    string
+	LevelID  string
+	Path     string
+	Source   string
+	Metadata AuditIACQueryMetadata
+}
+type AuditIACQueryMetadata struct {
+	Aggregation    string `json:"aggregation,omitempty"`
+	Category       string `json:"category,omitempty"`
+	Cwe            string `json:"cwe,omitempty"`
+	Description    string `json:"description,omitempty"`
+	DescriptionID  string `json:"descriptionId,omitempty"`
+	DescriptionURL string `json:"descriptionurl,omitempty"`
+	OldSeverity    string `json:"oldseverity,omitempty"`
+	Platform       string `json:"platform"`
+	QueryID        string `json:"queryId"`
+	Name           string `json:"queryname"`
+	Severity       string `json:"severity"`
+}
+
+type AuditSASTQuery struct {
 	Key      string `json:"id"`
 	Name     string
 	Level    string
 	LevelID  string
 	Path     string
 	Source   string
-	Metadata AuditQueryMetadata
+	Metadata AuditSASTQueryMetadata
+}
+type AuditSASTQueryMetadata struct {
+	Cwe             int64  `json:"cwe,omitempty"`
+	IsExecutable    bool   `json:"executable"`
+	CxDescriptionID int64  `json:"description,omitempty"`
+	Language        string `json:"language"`
+	Group           string `json:"group"`
+	Severity        string `json:"severity"`
+	SastID          uint64 `json:"sastId,omitempty"`
+	Name            string `json:"name"`
 }
 
 type AuditQueryTree struct {
@@ -162,19 +315,10 @@ type AuditQueryTree struct {
 	Data   struct {
 		Level    string
 		Severity string
+		CWE      int64
+		Custom   bool
 	}
 	Children []AuditQueryTree
-}
-
-type AuditQueryMetadata struct {
-	Cwe             int64  `json:"cwe,omitempty"`
-	IsExecutable    bool   `json:"executable"`
-	CxDescriptionID int64  `json:"description,omitempty"`
-	Language        string `json:"language"`
-	Group           string `json:"group"`
-	Severity        string `json:"severity"`
-	SastID          uint64 `json:"sastId,omitempty"`
-	Name            string `json:"name"`
 }
 
 type AuditPermissions struct {
@@ -187,23 +331,28 @@ type AuditPermissions struct {
 type AuditSession struct {
 	ID   string `json:"id"`
 	Data struct {
-		Status      string `json:"status"`
-		RequestID   string `json:"requestId"`
-		Permissions struct {
+		Status       string   `json:"status"`
+		RequestID    string   `json:"requestId"`
+		QueryFilters []string `json:"queryFilters"`
+		Permissions  struct {
 			Tenant      AuditPermissions `json:"tenant"`
 			Project     AuditPermissions `json:"project"`
 			Application AuditPermissions `json:"application"`
 		} `json:"permissions"`
 	} `json:"data"`
-	ProjectName            string   `json:"projectName"`
-	QueryBuilder           bool     `json:"queryBuilder"`
-	ApplicationAssociation bool     `json:"applicationAssociation"`
-	Status                 string   `json:"status"`
-	Value                  []string `json:"value"`
-	ProjectID              string   `json:"-"`
-	ApplicationID          string   `json:"-"`
-	ScanID                 string   `json:"-"`
-	Languages              []string `json:"-"`
+	ProjectName            string    `json:"projectName"`
+	QueryBuilder           bool      `json:"queryBuilder"`
+	ApplicationAssociation bool      `json:"applicationAssociation"`
+	Status                 string    `json:"status"`
+	Value                  []string  `json:"value"`
+	Engine                 string    `json:"-"`
+	ProjectID              string    `json:"-"`
+	ApplicationID          string    `json:"-"`
+	ScanID                 string    `json:"-"`
+	Languages              []string  `json:"-"`
+	Platforms              []string  `json:"-"`
+	CreatedAt              time.Time `json:"-"`
+	LastHeartbeat          time.Time `json:"-"`
 }
 
 type AuditSessionFilters map[string]AuditSessionLanguageFilters
@@ -252,6 +401,17 @@ type AuthenticationProviderMapperConfig struct {
 	Template      string `json:"template,omitempty"`
 }
 
+type ConfigurationSetting struct {
+	Key             string `json:"key"`
+	Name            string `json:"name"`
+	Category        string `json:"category"`
+	OriginLevel     string `json:"originLevel"`
+	Value           string `json:"value"`
+	ValueType       string `json:"valuetype"`
+	ValueTypeParams string `json:"valuetypeparams"`
+	AllowOverride   bool   `json:"allowOverride"`
+}
+
 type DataImport struct {
 	MigrationId string             `json:"migrationId"`
 	Status      string             `json:"status"`
@@ -269,6 +429,7 @@ type DataImportStatus struct {
 
 type Group struct {
 	GroupID         string              `json:"id"`
+	ParentID        string              `json:"parentId"`
 	Name            string              `json:"name"`
 	Path            string              `json:"path"`
 	SubGroups       []Group             `json:"subGroups"`
@@ -288,14 +449,64 @@ type GroupFilter struct {
 	Top                 bool   `url:"-"`                // used only in GetGroupCount
 }
 
+type GroupMembersFilter struct {
+	BaseIAMFilter
+	BriefRepresentation bool `url:"briefRepresentation,omitempty"`
+}
+
+/*
+type IACPreset struct {
+	PresetBase
+	IACQueryIDs []string
+	//Queries  []SASTQuery `json:"-"`
+}
+*/
+
+type IACQuery struct {
+	QueryID        string `json:"queryId"` // this is a unique ID per query per level (eg: query1 tenant-level override will have a different ID from the query1 project-level override)
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	DescriptionID  string `json:"descriptionId"`
+	DescriptionURL string `json:"descriptionUrl"`
+	Platform       string `json:"platform"`
+	Group          string `json:"group"`
+	Category       string `json:"category"`
+	Severity       string `json:"severity"`
+	CWE            string `json:"cwe"`
+	Level          string `json:"level"`
+	LevelID        string `json:"-"`
+	Custom         bool   `json:"-"`
+	Key            string `json:"-"` // this is the ID of the query consistent across overrides (eg: query1 tenant-level override will have the same ID as the query1 project-level override)
+	Path           string `json:"path"`
+	Source         string `json:"-"`
+}
+type IACQueryGroup struct {
+	Name     string
+	Platform string
+	Queries  []IACQuery
+}
+type IACQueryPlatform struct {
+	Name        string
+	QueryGroups []IACQueryGroup
+}
+
+type IACQueryCollection struct {
+	Platforms []IACQueryPlatform
+}
+
+type QueryCollection interface {
+	GetQueryFamilies(executableOnly bool) []QueryFamily
+}
+
 type OIDCClient struct {
-	ID                 string                 `json:"id"`
-	ClientID           string                 `json:"clientId"`
-	Enabled            bool                   `json:"enabled"`
-	ClientSecret       string                 `json:"secret"`
-	ClientSecretExpiry uint64                 `json:"-"`
-	Creator            string                 `json:"-"`
-	OIDCClientRaw      map[string]interface{} `json:"-"`
+	ID                   string                 `json:"id"`
+	ClientID             string                 `json:"clientId"`
+	Enabled              bool                   `json:"enabled"`
+	ClientSecret         string                 `json:"secret"`
+	ClientSecretExpiry   uint64                 `json:"-"` // this is the actual time/date it will expire
+	SecretExpirationDays uint64                 `json:"-"` // this is the number of days after which a secret will expire
+	Creator              string                 `json:"-"`
+	OIDCClientRaw        map[string]interface{} `json:"-"`
 }
 
 type OIDCClientScope struct {
@@ -306,28 +517,42 @@ type OIDCClientScope struct {
 }
 
 type Preset struct {
+	PresetID           string        `json:"id"`
+	Name               string        `json:"name"`
+	Description        string        `json:"description"`
+	AssociatedProjects uint64        `json:"associatedProjects"`
+	Custom             bool          `json:"custom"`
+	IsTenantDefault    bool          `json:"isTenantDefault"`
+	IsMigrated         bool          `json:"isMigrated"`
+	Filled             bool          `json:"-"`
+	Engine             string        `json:"-"`
+	QueryFamilies      []QueryFamily `json:"queries"` // this member variable should not be modified, any content changes come from the QueryCollection objects
+}
+
+type Preset_v330 struct {
 	PresetID    uint64 `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Custom      bool   `json:"custom"`
 	QueryIDs    []uint64
 	Filled      bool
-	Queries     []Query `json:"-"`
+	Queries     []SASTQuery `json:"-"`
 }
 
 type Project struct {
-	ProjectID     string                 `json:"id"`
-	Name          string                 `json:"name"`
-	CreatedAt     string                 `json:"createdAt"`
-	UpdatedAt     string                 `json:"updatedAt"`
-	Groups        []string               `json:"groups"`
-	Applications  []string               `json:"applicationIds"`
-	Tags          map[string]string      `json:"tags"`
-	RepoUrl       string                 `json:"repoUrl"`
-	MainBranch    string                 `json:"mainBranch"`
-	Origin        string                 `json:"origin"`
-	Criticality   uint                   `json:"criticality"`
-	Configuration []ConfigurationSetting `json:"-"`
+	ProjectID            string                 `json:"id"`
+	Name                 string                 `json:"name"`
+	CreatedAt            string                 `json:"createdAt"`
+	UpdatedAt            string                 `json:"updatedAt"`
+	Groups               []string               `json:"groups,omitempty"`
+	Applications         *[]string              `json:"applicationIds,omitempty"`
+	originalApplications []string               `json:"-"` // Cx1clientgo internal/restricted, do not change
+	Tags                 map[string]string      `json:"tags"`
+	RepoUrl              string                 `json:"repoUrl"`
+	MainBranch           string                 `json:"mainBranch"`
+	Origin               string                 `json:"origin"`
+	Criticality          uint                   `json:"criticality"`
+	Configuration        []ConfigurationSetting `json:"-"`
 }
 
 type ProjectFilter struct {
@@ -350,52 +575,42 @@ type ProjectBranchFilter struct {
 	Name      string `url:"branch-name,omitempty"`
 }
 
-type ConfigurationSetting struct {
-	Key             string `json:"key"`
-	Name            string `json:"name"`
-	Category        string `json:"category"`
-	OriginLevel     string `json:"originLevel"`
-	Value           string `json:"value"`
-	ValueType       string `json:"valuetype"`
-	ValueTypeParams string `json:"valuetypeparams"`
-	AllowOverride   bool   `json:"allowOverride"`
+type ProjectScanSchedule struct {
+	ID            string            `json:"id"`
+	ProjectID     string            `json:"projectID"`
+	NextStartTime time.Time         `json:"start_time"`
+	StartTime     string            `json:"-"`
+	CreatedAt     time.Time         `json:"create_at"`
+	UpdatedAt     time.Time         `json:"update_at"`
+	Frequency     string            `json:"frequency"`      // weekly or daily
+	Days          []string          `json:"days,omitempty"` // monday, tuesday ... iff weekly
+	Active        bool              `json:"active"`
+	Engines       []string          `json:"engines"`
+	Branch        string            `json:"branch"`
+	Tags          map[string]string `json:"tags"`
 }
 
-type Query struct {
-	QueryID            uint64 `json:"queryID,string"`
-	Level              string `json:"level"`
-	LevelID            string `json:"levelId"`
-	Path               string `json:"path"`
-	Modified           string `json:"-"`
-	Source             string `json:"-"`
-	Name               string `json:"queryName"`
-	Group              string `json:"group"`
-	Language           string `json:"language"`
-	Severity           string `json:"severity"`
-	CweID              int64  `json:"cweID"`
-	IsExecutable       bool   `json:"isExecutable"`
-	QueryDescriptionId int64  `json:"queryDescriptionId"`
-	Custom             bool   `json:"custom"`
-	EditorKey          string `json:"key"`
-	SastID             uint64 `json:"sastId"`
+type QueryError struct {
+	Line        uint64
+	StartColumn uint64
+	EndColumn   uint64
+	Code        string
+	Message     string
 }
 
-type QueryGroup struct {
-	Name     string
-	Language string
-	Queries  []Query
+type QueryFailure struct {
+	QueryID string       `json:"query_id"`
+	Errors  []QueryError `json:"error"`
 }
 
-type QueryLanguage struct {
-	Name        string
-	QueryGroups []QueryGroup
+type QueryFamily struct {
+	Name       string   `json:"familyName"`
+	TotalCount uint64   `json:"totalCount"`
+	QueryIDs   []string `json:"queryIds"`
 }
 
-type QueryCollection struct {
-	QueryLanguages []QueryLanguage
-}
-
-type QueryUpdate_v310 struct { // used when saving queries in Cx1
+type QueryUpdate_v310 struct {
+	// used when saving queries in Cx1
 	Name     string `json:"name"`
 	Path     string `json:"path"`
 	Source   string `json:"source"`
@@ -414,38 +629,24 @@ type ReportStatus struct {
 	ReportURL string `json:"url"`
 }
 
-type RunningScan struct {
-	ScanID    string
-	Status    string
-	ProjectID string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
 type ResultsPredicatesBase struct {
-	PredicateID  string `json:"ID"`
+	PredicateID  string `json:"ID,omitempty"`
 	SimilarityID string `json:"similarityId"`
 	ProjectID    string `json:"projectId"`
-	State        string `json:"state"`
+	ScanID       string `json:"scanId"`
+	State        string `json:"state,omitempty"`
 	Comment      string `json:"comment"`
-	Severity     string `json:"severity"`
-	CreatedBy    string `json:"createdBy"`
-	CreatedAt    string `json:"createdAt"`
+	Severity     string `json:"severity,omitempty"`
+	CreatedBy    string `json:"createdBy,omitempty"`
+	CreatedAt    string `json:"createdAt,omitempty"`
 }
 
-type SASTResultsPredicates struct {
-	ResultsPredicatesBase // actually the same structure but different endpoint
+type ResultState struct {
+	ID        uint64 `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	IsAllowed bool   `json:"isAllowed"`
 }
-type KICSResultsPredicates struct {
-	ResultsPredicatesBase // actually the same structure but different endpoint
-}
-
-/*
-type KeyCloakClient struct {
-	ClientID string `json:"id"`
-	Name     string `json:"clientId"`
-	Enabled  bool
-}*/
 
 type Role struct {
 	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
@@ -462,6 +663,62 @@ type Role struct {
 	ClientRole bool   `json:"clientRole"`
 	SubRoles   []Role `json:"-"`
 }
+
+type RunningScan struct {
+	ScanID    string
+	Status    string
+	ProjectID string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type SASTQuery struct {
+	QueryID            uint64 `json:"queryID,string"`
+	Level              string `json:"level"`
+	LevelID            string `json:"levelId"`
+	Path               string `json:"path"`
+	Modified           string `json:"-"`
+	Source             string `json:"-"`
+	Name               string `json:"queryName"`
+	Group              string `json:"group"`
+	Language           string `json:"language"`
+	Severity           string `json:"severity"`
+	CweID              int64  `json:"cweID"`
+	IsExecutable       bool   `json:"isExecutable"`
+	QueryDescriptionId int64  `json:"queryDescriptionId"`
+	Custom             bool   `json:"custom"`
+	EditorKey          string `json:"key"`
+	SastID             uint64 `json:"sastId"`
+}
+
+type SASTQueryGroup struct {
+	Name     string
+	Language string
+	Queries  []SASTQuery
+}
+
+type SASTQueryLanguage struct {
+	Name        string
+	QueryGroups []SASTQueryGroup
+}
+
+type SASTQueryCollection struct {
+	QueryLanguages []SASTQueryLanguage
+}
+
+type SASTResultsPredicates struct {
+	ResultsPredicatesBase // actually the same structure but different endpoint
+}
+type IACResultsPredicates struct {
+	ResultsPredicatesBase // actually the same structure but different endpoint
+}
+
+/*
+type KeyCloakClient struct {
+	ClientID string `json:"id"`
+	Name     string `json:"clientId"`
+	Enabled  bool
+}*/
 
 type SASTAggregateSummary struct {
 	Status    string
@@ -541,6 +798,10 @@ type ScanConfiguration struct {
 	Values   map[string]string `json:"value"`
 }
 
+type ScanConfigurationSet struct {
+	Configurations []ScanConfiguration
+}
+
 type ScanHandler struct {
 	RepoURL     string                 `json:"repoUrl"`
 	Branch      string                 `json:"branch"`
@@ -558,11 +819,28 @@ type ScanMetadata struct {
 	PresetName            string `json:"queryPreset"`
 }
 
+type ScanMetrics struct {
+	ScanID                                    string
+	MemoryPeak                                uint64
+	VirtualMemoryPeak                         uint64
+	TotalScannedFilesCount                    uint64
+	TotalScannedLOC                           uint64
+	DOMObjectsPerLanguage                     map[string]uint64
+	SuccessfullLocPerLanguage                 map[string]uint64
+	FailedLocPerLanguage                      map[string]uint64
+	FileCountOfDetectedButNotScannedLanguages map[string]uint64
+	ScannedFilesPerLanguage                   map[string]struct {
+		GoodFiles          uint64
+		PartiallyGoodFiles uint64
+		BadFiles           uint64
+	}
+}
+
 type ScanResultSet struct {
 	SAST         []ScanSASTResult
 	SCA          []ScanSCAResult
 	SCAContainer []ScanSCAContainerResult
-	KICS         []ScanKICSResult
+	IAC          []ScanIACResult
 	Containers   []ScanContainersResult
 }
 
@@ -626,12 +904,11 @@ type ScanContainersResultDetails struct {
 	}
 }
 
-type ScanKICSResult struct {
+type ScanIACResult struct {
 	ScanResultBase
-	Data ScanKICSResultData
-	//VulnerabilityDetails ScanKICSResultDetails // currently {}
+	Data ScanIACResultData
 }
-type ScanKICSResultData struct {
+type ScanIACResultData struct {
 	QueryID       string
 	QueryName     string
 	Group         string
@@ -675,6 +952,40 @@ type ScanSASTResultNodes struct {
 type ScanSASTResultDetails struct {
 	CweId       int
 	Compliances []string
+}
+
+type ScanSASTResultsFilter struct {
+	BaseFilter
+	ScanID                 string   `url:"scan-id"`
+	Language               []string `url:"language,omitempty"`
+	Status                 []string `url:"status,omitempty"`   //NEW, RECURRENT
+	Severity               []string `url:"severity,omitempty"` //CRITICAL, HIGH, MEDIUM, LOW, INFO
+	SourceFile             string   `url:"source-file,omitempty"`
+	SourceFileOperation    string   `url:"source-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceNode             string   `url:"source-node,omitempty"`
+	SourceNodeOperation    string   `url:"source-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SourceLine             uint64   `url:"source-line,omitempty"`
+	SourceLineOperation    string   `url:"source-line-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	SinkFile               string   `url:"sink-file,omitempty"`
+	SinkFileOperation      string   `url:"sink-file-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SinkNode               string   `url:"sink-node,omitempty"`
+	SinkNodeOperation      string   `url:"sink-node-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL, CONTAINS, NOT_CONTAINS, START_WITH
+	SinkLine               uint64   `url:"sink-line,omitempty"`
+	SinkLineOperation      string   `url:"sink-line-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	NumberOfNodes          uint64   `url:"number-of-nodes,omitempty"`
+	NumberOfNodesOperation string   `url:"number-of-nodes-operation,omitempty"` // LESS_THAN, GREATER_THAN, EQUAL, NOT_EQUAL
+	Notes                  string   `url:"notes,omitempty"`
+	NotesOperation         string   `url:"notes-operation,omitempty"` // CONTAINS, STARTS_WITH
+	FirstFoundAt           string   `url:"first-found-at,omitempty"`
+	FirstFoundAtOperation  string   `url:"first-found-at-operation,omitempty"` // LESS_THAN, GREATER_THAN
+	QueryIDs               []uint64 `url:"query-ids,omitempty"`
+	PresetID               uint64   `url:"preset-id,omitempty"`
+	ResultIDs              []string `url:"result-ids,omitempty"`
+	Categories             string   `url:"category,omitempty"` // comma-separated list
+	Search                 string   `url:"search,omitempty"`
+	IncludeNodes           bool     `url:"include-nodes,omitempty"`
+	ApplyPredicates        bool     `url:"apply-predicates,omitempty"`
+	Sort                   []string `url:"sort,omitempty"` // Default value : +status,+severity,-queryname
 }
 
 type ScanSCAResult struct {
@@ -774,7 +1085,7 @@ type ScanSummary struct {
 		FilesScannedCounter uint64
 	}
 
-	KICSCounters struct {
+	IACCounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
 		StatusCounters         []ScanSummaryStatusCounter
 		StateCounters          []ScanSummaryStateCounter
@@ -787,7 +1098,7 @@ type ScanSummary struct {
 
 		PlatformSummary []ScanSummaryPlatformCounter
 		CategorySummary []ScanSummaryCategoryCounter
-	}
+	} `json:"kicsCounters"`
 
 	SCACounters struct {
 		SeverityCounters       []ScanSummarySeverityCounter
@@ -993,9 +1304,18 @@ type UserWithAttributes struct {
 }
 
 type VersionInfo struct {
-	CxOne string
-	KICS  string
-	SAST  string
+	CxOne  string
+	IAC    string `json:"kics"`
+	SAST   string
+	vCxOne VersionTriad `json:"-"`
+	vIAC   VersionTriad `json:"-"`
+	vSAST  VersionTriad `json:"-"`
+}
+
+type VersionTriad struct {
+	Major uint
+	Minor uint
+	Patch uint
 }
 
 type WhoAmI struct {

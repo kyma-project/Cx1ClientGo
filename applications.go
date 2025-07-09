@@ -8,12 +8,13 @@ import (
 	"strings"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/exp/slices"
 )
 
 // Get the first count Applications
 // uses the pagination behind the scenes
 func (c Cx1Client) GetApplications(count uint64) ([]Application, error) {
-	c.logger.Debug("Get Cx1 Applications")
+	c.logger.Debugf("Get Cx1 Applications")
 
 	_, applications, err := c.GetXApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
@@ -23,7 +24,7 @@ func (c Cx1Client) GetApplications(count uint64) ([]Application, error) {
 }
 
 func (c Cx1Client) GetAllApplications() ([]Application, error) {
-	c.logger.Debug("Get Cx1 Applications")
+	c.logger.Debugf("Get Cx1 Applications")
 
 	_, applications, err := c.GetAllApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Applications},
@@ -41,6 +42,11 @@ func (c Cx1Client) GetApplicationByID(id string) (Application, error) {
 	}
 
 	err = json.Unmarshal(response, &application)
+	if application.ProjectIds != nil {
+		application.originalProjectIds = *application.ProjectIds
+	} else {
+		application.originalProjectIds = []string{}
+	}
 	return application, err
 }
 
@@ -92,6 +98,15 @@ func (c Cx1Client) GetApplicationsFiltered(filter ApplicationFilter) (uint64, []
 	}
 
 	err = json.Unmarshal(response, &ApplicationResponse)
+
+	for i := range ApplicationResponse.Applications {
+		if ApplicationResponse.Applications[i].ProjectIds != nil {
+			ApplicationResponse.Applications[i].originalProjectIds = *ApplicationResponse.Applications[i].ProjectIds
+		} else {
+			ApplicationResponse.Applications[i].originalProjectIds = []string{}
+		}
+	}
+
 	return ApplicationResponse.FilteredTotalCount, ApplicationResponse.Applications, err
 }
 
@@ -131,7 +146,7 @@ func (c Cx1Client) GetXApplicationsFiltered(filter ApplicationFilter, count uint
 
 func (c Cx1Client) CreateApplication(appname string) (Application, error) {
 	c.logger.Debugf("Create Application: %v", appname)
-	data := map[string]interface{}{
+	data := map[string]interface{}{ // TODO: direct_app ?
 		"name":        appname,
 		"description": "",
 		"criticality": 3,
@@ -174,7 +189,7 @@ func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 
 // convenience
 func (c Cx1Client) GetApplicationCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Project count")
+	c.logger.Debugf("Get Cx1 Project count")
 
 	count, _, err := c.GetApplicationsFiltered(ApplicationFilter{
 		BaseFilter: BaseFilter{Limit: 1},
@@ -217,9 +232,79 @@ func (c Cx1Client) GetOrCreateApplicationByName(name string) (Application, error
 	return c.CreateApplication(name)
 }
 
+// Directly assign an application to one or more projects
+func (c Cx1Client) AssignApplicationToProjectsByIDs(applicationId string, projectIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
+	var body struct {
+		Projects []string `json:"projects"`
+	}
+	body.Projects = projectIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPost, fmt.Sprintf("/applications/%v/projects", applicationId), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Tracef("Error while assigning application %v to projects: %s", applicationId, err)
+		return err
+	}
+	return nil
+}
+
+// Directly remove an application from one or more projects
+func (c Cx1Client) RemoveApplicationFromProjectsByIDs(applicationId string, projectIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
+	var body struct {
+		Projects []string `json:"projects"`
+	}
+	body.Projects = projectIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodDelete, fmt.Sprintf("/applications/%v/projects", applicationId), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Tracef("Error while removing application %v from projects: %s", applicationId, err)
+		return err
+	}
+	return nil
+}
+
 func (c Cx1Client) UpdateApplication(app *Application) error {
 	c.logger.Debugf("Update application: %v", app.String())
-	jsonBody, err := json.Marshal(*app)
+
+	// This may be temporary depending on how the API changes
+	// sending an projectIds array will cause the application's membership in projects to change
+	// this can result in unintentional changes, eg:
+	//   application is in proj1&proj2, user has access only to proj1
+	//   retrieving the application will list only proj1 in the projectIds array
+	//   saving the application may unassign the application from proj2
+	app_copy := *app
+	if app.ProjectIds != nil {
+		added := []string{}
+		removed := []string{}
+		for _, proj := range *app_copy.ProjectIds {
+			if !slices.Contains(app_copy.originalProjectIds, proj) {
+				added = append(added, proj)
+			}
+		}
+		for _, proj := range app_copy.originalProjectIds {
+			if !slices.Contains(*app_copy.ProjectIds, proj) {
+				removed = append(removed, proj)
+			}
+		}
+		if len(added) == 0 && len(removed) == 0 { // no changes were made to the projects list, so omit this field when doing the PUT
+			app_copy.ProjectIds = nil
+		}
+	}
+
+	jsonBody, err := json.Marshal(app_copy)
 	if err != nil {
 		return err
 	}
@@ -233,33 +318,49 @@ func (c Cx1Client) UpdateApplication(app *Application) error {
 	return nil
 }
 
-func (a *Application) GetRuleByType(ruletype string) *ApplicationRule {
+// returns the first rule of this type. There should only be one rule of each type.
+
+func (a *Application) GetRuleByID(ruleID string) *ApplicationRule {
 	for id := range a.Rules {
-		if a.Rules[id].Type == ruletype {
-			return &(a.Rules[id])
+		if a.Rules[id].ID == ruleID {
+			return &a.Rules[id]
 		}
 	}
 	return nil
 }
 
+// returns all rules of this type. There should only be one rule of each type but sometimes there are more.
+func (a *Application) GetRulesByType(ruletype string) []ApplicationRule {
+	rules := []ApplicationRule{}
+	for i := range a.Rules {
+		if a.Rules[i].Type == ruletype {
+			rules = append(rules, a.Rules[i])
+		}
+	}
+	return rules
+}
+
 func (a *Application) AddRule(ruletype, value string) {
-	rule := a.GetRuleByType(ruletype)
-	if rule == nil {
+	rules := a.GetRulesByType(ruletype)
+	if len(rules) == 0 {
 		var newrule ApplicationRule
 		newrule.Type = ruletype
 		newrule.Value = value
 		a.Rules = append(a.Rules, newrule)
 	} else {
-		if rule.Value == value || strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", value)) {
-			return // rule value already contains this value
+		for _, rule := range rules {
+			if rule.Value == value || strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", value)) {
+				return // rule value already contains this value
+			}
 		}
+		rule := a.GetRuleByID(rules[0].ID)
 		rule.Value = fmt.Sprintf("%v;%v", rule.Value, value)
 	}
 }
 
-func (a *Application) RemoveRule(rule *ApplicationRule) {
+func (a *Application) RemoveRule(ruleID string) {
 	for i := 0; i < len(a.Rules); i++ {
-		if rule == &a.Rules[i] {
+		if ruleID == a.Rules[i].ID {
 			a.Rules = append(a.Rules[:i], a.Rules[i+1:]...)
 			return
 		}
@@ -269,18 +370,40 @@ func (a *Application) RemoveRule(rule *ApplicationRule) {
 // AssignProject will create or update a "project.name.in" type rule to assign the project to the app
 func (a *Application) AssignProject(project *Project) {
 	a.AddRule("project.name.in", project.Name)
+
+	if !slices.Contains(*a.ProjectIds, project.ProjectID) {
+		newProjs := append(*a.ProjectIds, project.ProjectID)
+		a.ProjectIds = &newProjs
+	}
+	if !slices.Contains(*project.Applications, a.ApplicationID) {
+		newApps := append(*project.Applications, a.ApplicationID)
+		project.Applications = &newApps
+	}
 }
 
 // UnassignProject will remove the project from the "project.name.in" rule if it's there, and if the rule ends up empty it will remove the rule
 func (a *Application) UnassignProject(project *Project) {
-	rule := a.GetRuleByType("project.name.in")
-	if rule == nil {
-		return
+	rules := a.GetRulesByType("project.name.in")
+	if len(rules) > 0 {
+		for _, rule := range rules {
+			if strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", project.Name)) {
+				rule_ref := a.GetRuleByID(rule.ID)
+				rule_ref.RemoveItem(project.Name)
+				if rule_ref.Value == "" {
+					a.RemoveRule(rule.ID)
+				}
+				return
+			}
+		}
 	}
 
-	rule.RemoveItem(project.Name)
-	if rule.Value == "" {
-		a.RemoveRule(rule)
+	if slices.Contains(*a.ProjectIds, project.ProjectID) {
+		newProjs := slices.Delete(*a.ProjectIds, slices.Index(*a.ProjectIds, project.ProjectID), slices.Index(*a.ProjectIds, project.ProjectID)+1)
+		a.ProjectIds = &newProjs
+	}
+	if slices.Contains(*project.Applications, a.ApplicationID) {
+		newApps := slices.Delete(*project.Applications, slices.Index(*project.Applications, a.ApplicationID), slices.Index(*project.Applications, a.ApplicationID)+1)
+		project.Applications = &newApps
 	}
 }
 
@@ -291,8 +414,12 @@ func (ar *ApplicationRule) RemoveItem(item string) {
 		rulestr = strings.Replace(rulestr, itemstr, ";", 1)
 		rulestr = rulestr[1:] // chop out starting ;
 		if len(rulestr) > 0 {
-			rulestr = rulestr[:len(rulestr)-1]
+			rulestr = rulestr[:len(rulestr)-1] // chop out ending ;
 		}
 	}
 	ar.Value = rulestr
+}
+
+func (ar *ApplicationRule) String() string {
+	return fmt.Sprintf("[%v] %v: %v", ShortenGUID(ar.ID), ar.Type, ar.Value)
 }

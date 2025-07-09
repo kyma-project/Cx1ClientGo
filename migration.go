@@ -79,11 +79,29 @@ func (c Cx1Client) GetImportByID(importID string) (DataImport, error) {
 	return di, err
 }
 
-func (c Cx1Client) GetImportLogsByID(importID, engine string) ([]byte, error) {
+func (c Cx1Client) GetImportLogsByID(importID string) ([]byte, error) {
 	c.logger.Debugf("Fetching import logs for import %v", importID)
 
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/imports/%v/logs/download", importID), nil, nil)
-	return response, err
+	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/imports/%v/logs/download", importID), nil, nil)
+
+	if err != nil {
+		c.logger.Tracef("Error retrieving import log url: %s", err)
+		return []byte{}, err
+	}
+
+	importlogURL := response.Header.Get("Location")
+	if importlogURL == "" {
+		return []byte{}, fmt.Errorf("expected location header response not found")
+	}
+
+	c.logger.Tracef("Retrieved url: %v", importlogURL)
+	data, err := c.sendRequestInternal(http.MethodGet, importlogURL, nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to download logs from %v: %s", importlogURL, err)
+		return []byte{}, nil
+	}
+
+	return data, err
 }
 
 func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
@@ -91,29 +109,40 @@ func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
 }
 
 func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, maxSeconds int) (string, error) {
+	fail_counter := 5 // allow up to 5 failures while waiting for the import ID to be valid
 	pollingCounter := 0
 	for {
 		status, err := c.GetImportByID(importID)
-		if err != nil {
-			return "", err
-		}
+		if err == nil {
+			switch status.Status {
+			case "failed":
+				return status.Status, fmt.Errorf("import failed: %s", status.Logs)
+			case "blank":
+				return status.Status, fmt.Errorf("import finished but nothing was imported: %s", status.Logs)
+			case "completed":
+				return status.Status, nil
+			case "partial":
+				return status.Status, nil
+			}
+			if maxSeconds != 0 && pollingCounter >= maxSeconds {
+				return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
+			}
 
-		switch status.Status {
-		case "failed":
-			return status.Status, fmt.Errorf("import failed: %s", status.Logs)
-		case "blank":
-			return status.Status, fmt.Errorf("import finished but nothing was imported: %s", status.Logs)
-		case "completed":
-			return status.Status, nil
-		case "partial":
-			return status.Status, nil
+			c.logger.Infof("Polling every %d seconds, up to %d", delaySeconds, maxSeconds)
+			time.Sleep(time.Duration(delaySeconds) * time.Second)
+			pollingCounter += delaySeconds
+		} else {
+			if err.Error()[:8] == "HTTP 404" {
+				fail_counter--
+				if fail_counter == 0 {
+					return "", fmt.Errorf("import ID %v does not exist", importID)
+				}
+				c.logger.Warnf("Import ID %v doesn't exist (yet) - waiting to retry %d more times", importID, fail_counter)
+				time.Sleep(time.Duration(delaySeconds) * time.Second)
+			} else {
+				return "", err
+			}
 		}
-		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
-		}
-		c.logger.Infof("Polling every %d seconds, up to %d", delaySeconds, maxSeconds)
-		time.Sleep(time.Duration(delaySeconds) * time.Second)
-		pollingCounter += delaySeconds
 	}
 }
 

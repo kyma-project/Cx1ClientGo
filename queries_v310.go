@@ -21,7 +21,7 @@ func (c Cx1Client) GetQueryByName_v310(level, levelid, language, group, query st
 		return AuditQuery_v310{}, err
 	}
 
-	aq, err := FindQueryByName_v310(queries, levelid, language, group, query)
+	aq, err := FindQueryByName_v310(queries, level, language, group, query)
 	if err != nil {
 		return AuditQuery_v310{}, err
 	}
@@ -73,10 +73,10 @@ func (c Cx1Client) GetQueriesByLevelID_v310(level, levelId string) ([]AuditQuery
 				if err != nil {
 					return queries_v310, fmt.Errorf("failed to retrieve project with ID %v", levelId)
 				}
-				if len(project.Applications) == 0 {
+				if len(*project.Applications) == 0 {
 					return queries_v310, fmt.Errorf("project %v has an application-level query defined, but has no application associated", project.String())
 				}
-				applicationId = project.Applications[0]
+				applicationId = (*project.Applications)[0]
 			}
 			queries_v310[id].LevelID = applicationId
 		case AUDIT_QUERY_PRODUCT:
@@ -230,14 +230,13 @@ func (c Cx1Client) UpdateQueries_v310(level, levelid string, queries []QueryUpda
 	}
 }
 
-func (c Cx1Client) GetQueries_v310() (QueryCollection, error) {
+func (c Cx1Client) GetQueries_v310() (SASTQueryCollection, error) {
 	c.depwarn("GetQueries_v310", "GetQueries/GetAuditQueries*")
-	var qc QueryCollection
-	q, err := c.GetPresetQueries()
+	//var qc SASTQueryCollection
+	qc, err := c.GetSASTPresetQueries()
 	if err != nil {
 		return qc, err
 	}
-	qc.AddQueries(&q)
 
 	aq, err := c.GetQueriesByLevelID_v310(AUDIT_QUERY_TENANT, "")
 	if err != nil {
@@ -249,18 +248,18 @@ func (c Cx1Client) GetQueries_v310() (QueryCollection, error) {
 	return qc, nil
 }
 
-func (qc *QueryCollection) AddAuditQueries_v310(queries *[]AuditQuery_v310) {
+func (qc *SASTQueryCollection) AddAuditQueries_v310(queries *[]AuditQuery_v310) {
 	for _, q := range *queries {
 		ql := qc.GetQueryLanguageByName(q.Language)
 
 		if ql == nil {
-			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
+			qc.QueryLanguages = append(qc.QueryLanguages, SASTQueryLanguage{q.Language, []SASTQueryGroup{}})
 			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
 		}
 
 		qg := ql.GetQueryGroupByName(q.Group)
 		if qg == nil {
-			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q.ToQuery()}})
+			ql.QueryGroups = append(ql.QueryGroups, SASTQueryGroup{q.Group, q.Language, []SASTQuery{q.ToQuery()}})
 		} else {
 			if qgq := qg.GetQueryByLevelAndName(q.Level, q.LevelID, q.Name); qgq == nil {
 				qg.Queries = append(qg.Queries, q.ToQuery())

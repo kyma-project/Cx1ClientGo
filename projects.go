@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/go-querystring/query"
@@ -20,7 +21,7 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 		"groups":      []string{},
 		"tags":        map[string]string{},
 		"criticality": 3,
-		"origin":      cxOrigin,
+		"origin":      "",
 	}
 
 	if len(tags) > 0 {
@@ -43,11 +44,15 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 	}
 
 	err = json.Unmarshal(response, &project)
-
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
+	}
 	return project, err
 }
 
-func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids []string, tags map[string]string, applicationId string) (Project, error) {
+func (c Cx1Client) CreateProjectInApplicationWOPolling(projectname string, cx1_group_ids []string, tags map[string]string, applicationId string) (Project, error) {
 	c.logger.Debugf("Create Project %v in applicationId %v", projectname, applicationId)
 	data := map[string]interface{}{
 		"name":        projectname,
@@ -71,7 +76,7 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 
 	var project Project
 	var response []byte
-	if c.version.CheckCxOne("3.16.0") >= 0 {
+	if check, _ := c.version.CheckCxOne("3.16.0"); check >= 0 {
 		data["applicationIds"] = []string{applicationId}
 		jsonBody, err = json.Marshal(data)
 		if err != nil {
@@ -101,6 +106,20 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 		return Project{}, err
 	}
 
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
+	}
+	return project, err
+}
+
+func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids []string, tags map[string]string, applicationId string) (Project, error) {
+	project, err := c.CreateProjectInApplicationWOPolling(projectname, cx1_group_ids, tags, applicationId)
+	if err != nil {
+		return project, err
+	}
+	time.Sleep(time.Second)
 	return c.ProjectInApplicationPollingByID(project.ProjectID, applicationId)
 }
 
@@ -111,7 +130,7 @@ func (c Cx1Client) ProjectInApplicationPollingByID(projectId, applicationId stri
 func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applicationId string, delaySeconds, maxSeconds int) (Project, error) {
 	project, err := c.GetProjectByID(projectId)
 	pollingCounter := 0
-	for err != nil || !slices.Contains(project.Applications, applicationId) {
+	for err != nil || !slices.Contains(*project.Applications, applicationId) {
 		if pollingCounter > maxSeconds {
 			return project, fmt.Errorf("project %v is not assigned to application ID %v after %d seconds, aborting", projectId, applicationId, maxSeconds)
 		}
@@ -138,7 +157,7 @@ func (c Cx1Client) GetProjects(count uint64) ([]Project, error) {
 // behind the scenes this will use the configured pagination (Get/SetPaginationSettings)
 // behaves the same as GetProjects(# of projects in the environment)
 func (c Cx1Client) GetAllProjects() ([]Project, error) {
-	c.logger.Debug("Get All Cx1 Projects")
+	c.logger.Debugf("Get All Cx1 Projects")
 	_, projects, err := c.GetAllProjectsFiltered(ProjectFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Projects},
 	})
@@ -154,9 +173,14 @@ func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 		return project, fmt.Errorf("failed to fetch project %v: %s", projectID, err)
 	}
 
-	err = json.Unmarshal([]byte(data), &project)
+	err = json.Unmarshal(data, &project)
 	if err != nil {
 		return project, err
+	}
+	if project.Applications != nil {
+		project.originalApplications = *project.Applications
+	} else {
+		project.originalApplications = []string{}
 	}
 
 	err = c.GetProjectConfiguration(&project)
@@ -257,6 +281,14 @@ func (c Cx1Client) GetXProjectsFiltered(filter ProjectFilter, count uint64) (uin
 		projects = append(projects, projs...)
 	}
 
+	for i := range projects {
+		if projects[i].Applications != nil {
+			projects[i].originalApplications = *projects[i].Applications
+		} else {
+			projects[i].originalApplications = []string{}
+		}
+	}
+
 	if uint64(len(projects)) > count {
 		return count, projects[:count], err
 	}
@@ -276,6 +308,19 @@ func (p *Project) IsInGroupID(groupId string) bool {
 
 func (p *Project) IsInGroup(group *Group) bool {
 	return p.IsInGroupID(group.GroupID)
+}
+
+func (p *Project) IsInApplicationID(appId string) bool {
+	for _, g := range *p.Applications {
+		if g == appId {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Project) IsInApplication(app *Application) bool {
+	return p.IsInApplicationID(app.ApplicationID)
 }
 
 func (c Cx1Client) GetProjectConfiguration(project *Project) error {
@@ -400,7 +445,7 @@ func (c Cx1Client) GetXProjectBranchesFiltered(filter ProjectBranchFilter, count
 }
 
 func (c Cx1Client) GetProjectCount() (uint64, error) {
-	c.logger.Debug("Get Cx1 Projects Count")
+	c.logger.Debugf("Get Cx1 Projects Count")
 	count, _, err := c.GetProjectsFiltered(ProjectFilter{BaseFilter: BaseFilter{Limit: 1}})
 	return count, err
 }
@@ -465,10 +510,80 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
+// Directly assign a project to one or more applications
+// This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
+func (c Cx1Client) AssignProjectToApplicationsByIDs(projectId string, applicationIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
+	var body struct {
+		Applications []string `json:"applications"`
+	}
+	body.Applications = applicationIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/%v/applications", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+// Directly assign a project to one or more applications
+// This should be used separately from the Project.AssignApplication + UpdateProject(Project) flow
+func (c Cx1Client) RemoveProjectFromApplicationsByIDs(projectId string, applicationIds []string) error {
+	if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+		return fmt.Errorf("direct app association is not enabled")
+	}
+	var body struct {
+		Applications []string `json:"applications"`
+	}
+	body.Applications = applicationIds
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodDelete, fmt.Sprintf("/projects/%v/applications", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+// This updates a project, including any changes in Application membership
 func (c Cx1Client) UpdateProject(project *Project) error {
 	c.logger.Debugf("Updating project %v", project.String())
 
-	jsonBody, err := json.Marshal(project)
+	// This may be temporary depending on how the API changes
+	// sending an applicationIds array will cause the project's membership in applications to change
+	// this can result in unintentional changes, eg:
+	//   project is in app1&app2, user has access only to app1
+	//   retrieving the project will list only app1 in the applicationIds array
+	//   saving the project may unassign the project from app2
+	project_copy := *project
+
+	added := []string{}
+	removed := []string{}
+	if project_copy.Applications != nil {
+		for _, app := range *project_copy.Applications {
+			if !slices.Contains(project_copy.originalApplications, app) {
+				added = append(added, app)
+			}
+		}
+		for _, app := range project_copy.originalApplications {
+			if !slices.Contains(*project_copy.Applications, app) {
+				removed = append(removed, app)
+			}
+		}
+		if len(added) == 0 && len(removed) == 0 { // no changes were made to the applications list, so omit this field when doing the PUT
+			project_copy.Applications = nil
+		} else {
+			// if direct_app is on, the normal post will do the project-app association, otherwise we do it here.
+			if flag, _ := c.CheckFlag("DIRECT_APP_ASSOCIATION_ENABLED"); !flag {
+				c.logger.Warnf("Project %v's list of ApplicationIDs has changed - this will not be saved unless done via application.Update")
+			}
+		}
+	}
+
+	jsonBody, err := json.Marshal(project_copy)
 	if err != nil {
 		return err
 	}
@@ -488,11 +603,167 @@ func (c Cx1Client) DeleteProject(p *Project) error {
 	return nil
 }
 
+// Get scan schedules for project p, or get all scan schedules if p == nil
+func (c Cx1Client) GetScanSchedules(project *Project) ([]ProjectScanSchedule, error) {
+	schedules := []ProjectScanSchedule{}
+
+	if project == nil {
+		response, err := c.sendRequest(http.MethodGet, "/projects/schedules", nil, nil)
+		if err != nil {
+			return schedules, err
+		}
+		err = json.Unmarshal(response, &schedules)
+		if err != nil {
+			return schedules, err
+		}
+
+		for id := range schedules {
+			schedules[id].StartTime = schedules[id].NextStartTime.Format("HH:MM")
+		}
+
+		return schedules, nil
+	}
+
+	return c.GetScanSchedulesByID(project.ProjectID)
+}
+func (c Cx1Client) GetScanSchedulesByID(projectId string) ([]ProjectScanSchedule, error) {
+	schedules := []ProjectScanSchedule{}
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/schedules/%v", projectId), nil, nil)
+	if err != nil {
+		return schedules, err
+	}
+
+	err = json.Unmarshal(response, &schedules)
+	if err != nil {
+		return schedules, err
+	}
+
+	for id := range schedules { // should only be one
+		schedules[id].StartTime = schedules[id].NextStartTime.Format("HH:MM")
+	}
+
+	return schedules, nil
+}
+
+// helper
+func prepareScanScheduleBody(s ProjectScanSchedule) ([]byte, error) {
+	type ProjectScanScheduleBody struct {
+		StartTime string            `json:"start_time"`
+		Frequency string            `json:"frequency"`
+		Days      []string          `json:"days,omitempty"`
+		Active    bool              `json:"active"`
+		Engines   []string          `json:"engines"`
+		Branch    string            `json:"branch"`
+		Tags      map[string]string `json:"tags"`
+	}
+
+	schedule := ProjectScanScheduleBody{
+		StartTime: s.StartTime,
+		Frequency: s.Frequency,
+		Days:      s.Days,
+		Active:    s.Active,
+		Engines:   s.Engines,
+		Branch:    s.Branch,
+		Tags:      s.Tags,
+	}
+	return json.Marshal(schedule)
+}
+
+func (c Cx1Client) CreateScanSchedule(project *Project, s ProjectScanSchedule) error {
+	if project == nil {
+		return fmt.Errorf("project cannot be nil")
+	}
+	return c.CreateScanScheduleByID(project.ProjectID, s)
+}
+func (c Cx1Client) CreateScanScheduleByID(projectId string, s ProjectScanSchedule) error {
+	jsonBody, err := prepareScanScheduleBody(s)
+	if err != nil {
+		return err
+	}
+	_, err = c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/schedules/%v", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+func (c Cx1Client) UpdateScanSchedule(project *Project, schedule ProjectScanSchedule) error {
+	if project == nil {
+		return fmt.Errorf("project cannot be nil")
+	}
+	return c.UpdateScanScheduleByID(project.ProjectID, schedule)
+}
+func (c Cx1Client) UpdateScanScheduleByID(projectId string, schedule ProjectScanSchedule) error {
+	jsonBody, err := prepareScanScheduleBody(schedule)
+	if err != nil {
+		return err
+	}
+	_, err = c.sendRequest(http.MethodPatch, fmt.Sprintf("/projects/schedules/%v", projectId), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+func (c Cx1Client) DeleteScanSchedules(project *Project) error {
+	return c.DeleteScanSchedulesByID(project.ProjectID)
+}
+func (c Cx1Client) DeleteScanSchedulesByID(projectId string) error {
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/projects/schedules/%v", projectId), nil, nil)
+	return err
+}
+
+func (s ProjectScanSchedule) String() string {
+	if s.Frequency == "weekly" {
+		return fmt.Sprintf("Project %v scan: weekly on %v at %v", s.ProjectID, strings.Join(s.Days, ","), s.StartTime)
+	} else {
+		return fmt.Sprintf("Project %v scan: daily at %v", s.ProjectID, s.StartTime)
+	}
+}
+
+// Assign a project to a group. You must call UpdateProject() on this project to save the changes.
 func (p *Project) AssignGroup(group *Group) {
 	if p.IsInGroup(group) {
 		return
 	}
 	p.Groups = append(p.Groups, group.GroupID)
+}
+
+// Assign a project to an application. You must call UpdateProject() on this project to save the changes.
+func (p *Project) AssignApplication(app *Application) {
+	if p.IsInApplication(app) {
+		return
+	}
+	newApps := append(*p.Applications, app.ApplicationID)
+	p.Applications = &newApps
+	if !slices.Contains(*app.ProjectIds, p.ProjectID) {
+		newProjs := append(*app.ProjectIds, p.ProjectID)
+		app.ProjectIds = &newProjs
+	}
+}
+
+// this should only be used if you are separately tracking changes to the Application or have direct_app_association enabled
+func (p *Project) AssignApplicationByID(appId string) {
+	if p.IsInApplicationID(appId) {
+		return
+	}
+	newApps := append(*p.Applications, appId)
+	p.Applications = &newApps
+}
+
+func (p *Project) RemoveApplication(app *Application) {
+	if !p.IsInApplication(app) {
+		return
+	}
+	newApps := slices.Delete(*p.Applications, slices.Index(*p.Applications, app.ApplicationID), slices.Index(*p.Applications, app.ApplicationID)+1)
+	p.Applications = &newApps
+	if slices.Contains(*app.ProjectIds, p.ProjectID) {
+		newProjs := slices.Delete(*app.ProjectIds, slices.Index(*app.ProjectIds, p.ProjectID), slices.Index(*app.ProjectIds, p.ProjectID)+1)
+		app.ProjectIds = &newProjs
+	}
+}
+
+// this should only be used if you are separately tracking changes to the Application or have direct_app_association enabled
+func (p *Project) RemoveApplicationByID(appID string) {
+	if !p.IsInApplicationID(appID) {
+		return
+	}
+	newApps := slices.Delete(*p.Applications, slices.Index(*p.Applications, appID), slices.Index(*p.Applications, appID)+1)
+	p.Applications = &newApps
 }
 
 func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
@@ -530,6 +801,26 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 	}
 
 	return project, application, nil
+}
+
+func (c Cx1Client) MoveProjectBetweenApplications(project *Project, sourceApplicationIDs, destinationApplicationIDs []string) error {
+	var requestBody struct {
+		Source []string `json:"applicationIdsToDisassociate"`
+		Dest   []string `json:"applicationIdsToAssociate"`
+	}
+	requestBody.Source = sourceApplicationIDs
+	requestBody.Dest = destinationApplicationIDs
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/projects/reassign/%v", project.ProjectID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p Project) GetConfigurationByName(configKey string) *ConfigurationSetting {

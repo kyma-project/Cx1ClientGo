@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
 	}
 
-	logger.Info("Starting")
+	logger.Infof("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
@@ -40,7 +40,7 @@ func main() {
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	//httpClient.Transport = transport
+	httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
@@ -52,13 +52,24 @@ func main() {
 	testclient, testuser, err := createOIDCClient(cx1client, logger)
 	if err != nil {
 		logger.Fatalf("Failed to get or create OIDC Client: %s", err)
+	} else {
+		_, err = cx1client.GetClientSecret(&testclient)
+		if err != nil {
+			logger.Errorf("Failed to retrieve secret for new client: %s", err)
+		}
 	}
 
-	err = addAccessAssignments(cx1client, testuser, tenant, logger)
+	version, _ := cx1client.GetVersion()
+	if check, _ := version.CheckCxOne("3.25.0"); check >= 0 {
+		err = addAccessAssignments(cx1client, testuser, "client", tenant, logger)
+	} else {
+		err = addAccessAssignments(cx1client, testuser, "user", tenant, logger)
+	}
+
 	if err != nil {
 		logger.Errorf("Failed to add user assignment for cx1clientgo_test service user: %s", err)
 	} else {
-		logger.Info("Testing new OIDC Client by logging in as cx1clientgo_test")
+		logger.Infof("Testing new OIDC Client by logging in as cx1clientgo_test")
 		testcx1client, err := Cx1ClientGo.NewOAuthClient(httpClient, base_url, iam_url, tenant, testclient.ClientID, testclient.ClientSecret, logger)
 		if err != nil {
 			logger.Errorf("Failed to log in as 'cx1clientgo_test' OIDC Client: %s", err)
@@ -91,7 +102,7 @@ func checkCurrentUserAccess(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 	logger.Infof("Current user has access to all: %t", allAccess)
 	logger.Infof("Current user has the following resources accessible: ")
 	for _, a := range accessibleResources {
-		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceID)
+		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceID, strings.Join(a.Roles, ","))
 	}
 
 	tenantId := cx1client.GetTenantID()
@@ -109,7 +120,7 @@ func createOIDCClient(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) (
 	var user Cx1ClientGo.User
 	if err != nil {
 		logger.Warnf("Failed to find existing OIDC Client 'cx1clientgo_test' - trying to create this OIDC client. Error: %s", err)
-		testclient, err = cx1client.CreateClient("cx1clientgo_test")
+		testclient, err = cx1client.CreateClient("cx1clientgo_test", []string{ /*no email for notification*/ }, 30)
 		if err != nil {
 			return testclient, user, fmt.Errorf("failed to create oidc client 'cx1clientgo_test': %s", err)
 		}
@@ -134,20 +145,26 @@ func createOIDCClient(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) (
 	return testclient, user, nil
 }
 
-func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.User, tenant string, logger *logrus.Logger) error {
+func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.User, entityType, tenant string, logger *logrus.Logger) error {
 	tenantId := cx1client.GetTenantID()
+
+	role, err := cx1client.GetRoleByName("ast-scanner")
+	if err != nil {
+		return err
+	}
+
 	access := Cx1ClientGo.AccessAssignment{
 		TenantID:     tenantId,
 		ResourceID:   tenantId,
 		ResourceType: "tenant",
 		ResourceName: tenant,
-		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{Cx1ClientGo.AccessAssignedRole{Name: "ast-scanner"}},
+		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{{Name: role.Name, Id: role.RoleID}},
 		EntityID:     user.UserID,
-		EntityType:   "user",
+		EntityType:   entityType,
 		EntityName:   "cx1clientgo_test",
 	}
 
-	err := cx1client.AddAccessAssignment(access)
+	err = cx1client.AddAccessAssignment(access)
 	if err != nil {
 		return fmt.Errorf("failed to assign access: %s", err)
 	}
@@ -157,9 +174,13 @@ func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.Use
 		return fmt.Errorf("failed to get entities with access to tenant: %s", err)
 	}
 
-	logger.Info("The following access assignments exist for the cx1clientgo_test OIDC Client on tenant:")
+	logger.Infof("The following access assignments exist for the cx1clientgo_test OIDC Client on tenant:")
 	for _, a := range accessAssignment {
-		logger.Infof(" - Entity %v has roles %v", a.EntityID, strings.Join(a.EntityRoles, ", "))
+		entityRoleStr := []string{}
+		for _, r := range a.EntityRoles {
+			entityRoleStr = append(entityRoleStr, r.Name)
+		}
+		logger.Infof(" - Entity %v has roles %v", a.EntityID, strings.Join(entityRoleStr, ", "))
 	}
 	return nil
 }

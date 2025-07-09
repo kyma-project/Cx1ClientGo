@@ -72,7 +72,7 @@ func (c Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (
 }
 
 func (c Cx1Client) GetGroupsPIP() ([]Group, error) {
-	c.logger.Debug("Get cx1 groups pip")
+	c.logger.Debugf("Get cx1 groups pip")
 	var groups []Group
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/pip/groups", nil, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 
 // this returns all groups including all subgroups
 func (c Cx1Client) GetGroups() ([]Group, error) {
-	c.logger.Debug("Get Cx1 Groups")
+	c.logger.Debugf("Get Cx1 Groups")
 	_, groups, err := c.GetAllGroupsFiltered(GroupFilter{
 		BriefRepresentation: false,
 		PopulateHierarchy:   false,
@@ -134,7 +134,7 @@ func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Tracef("Got %d groups", len(groups))
 
 	for i := range groups {
-		if c.version.CheckCxOne("3.20.0") >= 0 {
+		if check, _ := c.version.CheckCxOne("3.20.0"); check >= 0 {
 			setGroupFilled(&groups[i])
 		}
 
@@ -262,7 +262,7 @@ func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 		return group, err
 	}
 
-	if c.version.CheckCxOne("3.20.0") == -1 { // old version API included the subgroups&roles in this call
+	if check, _ := c.version.CheckCxOne("3.20.0"); check == -1 { // old version API included the subgroups&roles in this call
 		group.Filled = true
 	} else { // new version includes the roles but not subgroups
 		_, err = c.GetGroupChildren(&group)
@@ -353,16 +353,26 @@ func (c Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
 }
 
+// Sets group g as child of group parent
+// If parent == nil, sets the group as top-level
 func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 	body := map[string]string{
 		"id":   g.GroupID,
 		"name": g.Name,
 	}
 	jsonBody, _ := json.Marshal(body)
-	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/children", parent.GroupID), bytes.NewReader(jsonBody), http.Header{})
-	if err != nil {
-		c.logger.Tracef("Failed to add child to parent: %s", err)
-		return err
+	if parent != nil {
+		_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/children", parent.GroupID), bytes.NewReader(jsonBody), http.Header{})
+		if err != nil {
+			c.logger.Tracef("Failed to add child to parent: %s", err)
+			return err
+		}
+	} else {
+		_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups", bytes.NewReader(jsonBody), http.Header{})
+		if err != nil {
+			c.logger.Tracef("Failed to move group to top-level: %s", err)
+			return err
+		}
 	}
 
 	return nil
@@ -370,7 +380,7 @@ func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 
 func (c Cx1Client) UpdateGroup(g *Group) error {
 	if !g.Filled {
-		if c.version.CheckCxOne("3.20.0") >= 0 {
+		if check, _ := c.version.CheckCxOne("3.20.0"); check >= 0 {
 			return fmt.Errorf("group %v data is not filled (use GetGroupChildren) - may be missing expected roles & subgroups, update aborted", g.String())
 		} else {
 			return fmt.Errorf("group %v data is not filled (use GetGroupByID) - may be missing expected roles & subgroups, update aborted", g.String())
@@ -484,14 +494,18 @@ func (c Cx1Client) groupRoleChange(g *Group) error {
 		}
 	}
 
-	err = c.DeleteRolesFromGroup(g, del_roles)
-	if err != nil {
-		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
+	if len(del_roles) > 0 {
+		err = c.DeleteRolesFromGroup(g, del_roles)
+		if err != nil {
+			return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
+		}
 	}
 
-	err = c.AddRolesToGroup(g, add_roles)
-	if err != nil {
-		return fmt.Errorf("failed to add roles to group %v: %s", g.String(), err)
+	if len(add_roles) > 0 {
+		err = c.AddRolesToGroup(g, add_roles)
+		if err != nil {
+			return fmt.Errorf("failed to add roles to group %v: %s", g.String(), err)
+		}
 	}
 
 	return nil
@@ -587,17 +601,47 @@ func (c Cx1Client) GetGroupMembers(group *Group) ([]User, error) {
 	return c.GetGroupMembersByID(group.GroupID)
 }
 
-func (c Cx1Client) GetGroupMembersByID(groupID string) ([]User, error) {
-	var users []User
+func (c Cx1Client) GetGroupMembersByID(groupId string) ([]User, error) {
+	_, users, err := c.GetAllGroupMembersFiltered(groupId, GroupMembersFilter{
+		BaseIAMFilter: BaseIAMFilter{Max: c.pagination.GroupMembers},
+	})
+	return users, err
+}
 
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/members", groupID), nil, http.Header{})
+func (c Cx1Client) GetGroupMembersFiltered(groupId string, filter GroupMembersFilter) ([]User, error) {
+	var members []User
+	params, _ := query.Values(filter)
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v/members?%v", groupId, params.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Tracef("Fetching group %v member failed: %s", groupID, err)
-		return users, err
+		return members, err
 	}
 
-	err = json.Unmarshal(response, &users)
-	return users, err
+	err = json.Unmarshal(response, &members)
+	if err != nil {
+		return members, err
+	}
+	return members, err
+}
+
+func (c Cx1Client) GetAllGroupMembersFiltered(groupId string, filter GroupMembersFilter) (uint64, []User, error) {
+	var all_members []User
+
+	members, err := c.GetGroupMembersFiltered(groupId, filter)
+	all_members = members
+	count := len(members)
+
+	for err == nil && count > 0 {
+		filter.Bump()
+		members, err = c.GetGroupMembersFiltered(groupId, filter)
+		if len(members) == 0 {
+			break
+		}
+		all_members = append(all_members, members...)
+		count = len(all_members)
+	}
+
+	return uint64(count), all_members, err
 }
 
 // convenience

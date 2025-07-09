@@ -81,7 +81,7 @@ func (c Cx1Client) GetAllScanResultsFiltered(filter ScanResultsFilter) (uint64, 
 		results.Append(&rs)
 	}
 
-	return rs.Count(), results, err
+	return results.Count(), results, err
 }
 
 // will return at least X results matching the filter
@@ -98,25 +98,30 @@ func (c Cx1Client) GetXScanResultsFiltered(filter ScanResultsFilter, desiredcoun
 		results.Append(&rs)
 	}
 
-	return rs.Count(), results, err
+	return results.Count(), results, err
 }
 
-// convenience function
-func (r ScanSASTResult) CreateResultsPredicate(projectId string) SASTResultsPredicates {
+// Note: when creating SAST overrides, you cannot change multiple fields at once unless mandatory.
+// For example, changing state to "Confirmed" and adding a comment-text requires two predicates, 1 "Confirmed" + 1 comment
+func (r ScanSASTResult) CreateResultsPredicate(projectId, scanId string) SASTResultsPredicates {
 	return SASTResultsPredicates{
-		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
-			ProjectID: projectId,
-			State:     r.State,
-			Severity:  r.Severity,
+		ResultsPredicatesBase{
+			SimilarityID: r.SimilarityID,
+			ProjectID:    projectId,
+			ScanID:       scanId,
+			//State:     r.State,
+			//Severity:  r.Severity,
 		},
 	}
 }
-func (r ScanKICSResult) CreateResultsPredicate(projectId string) KICSResultsPredicates {
-	return KICSResultsPredicates{
-		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
-			ProjectID: projectId,
-			State:     r.State,
-			Severity:  r.Severity,
+func (r ScanIACResult) CreateResultsPredicate(projectId, scanId string) IACResultsPredicates {
+	return IACResultsPredicates{
+		ResultsPredicatesBase{
+			SimilarityID: r.SimilarityID,
+			ProjectID:    projectId,
+			ScanID:       scanId,
+			State:        r.State,
+			Severity:     r.Severity,
 		},
 	}
 }
@@ -134,12 +139,16 @@ func (c Cx1Client) AddSASTResultsPredicates(predicates []SASTResultsPredicates) 
 	_, err = c.sendRequest(http.MethodPost, "/sast-results-predicates", bytes.NewReader(jsonBody), nil)
 	return err
 }
-func (c Cx1Client) AddKICSResultsPredicates(predicates []KICSResultsPredicates) error {
-	c.logger.Debugf("Adding %d KICS results predicates", len(predicates))
+func (c Cx1Client) AddKICSResultsPredicates(predicates []IACResultsPredicates) error {
+	c.depwarn("AddKICSResultsPredicates", "AddIACResultsPredicates")
+	return c.AddIACResultsPredicates(predicates)
+}
+func (c Cx1Client) AddIACResultsPredicates(predicates []IACResultsPredicates) error {
+	c.logger.Debugf("Adding %d IAC results predicates", len(predicates))
 
 	jsonBody, err := json.Marshal(predicates)
 	if err != nil {
-		c.logger.Tracef("Failed to add KICS results predicates: %s", err)
+		c.logger.Tracef("Failed to add IAC results predicates: %s", err)
 		return err
 	}
 
@@ -147,8 +156,8 @@ func (c Cx1Client) AddKICSResultsPredicates(predicates []KICSResultsPredicates) 
 	return err
 }
 
-func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {
-	c.logger.Debugf("Fetching SAST results predicates for project %v similarityId %v", ProjectID, SimilarityID)
+func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID, ScanID string) ([]SASTResultsPredicates, error) {
+	c.logger.Debugf("Fetching SAST results predicates for project %v scan %v similarityId %v", ProjectID, ScanID, SimilarityID)
 
 	var Predicates struct {
 		PredicateHistoryPerProject []struct {
@@ -160,7 +169,7 @@ func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID s
 
 		TotalCount uint
 	}
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v&scan-id=%v", SimilarityID, ProjectID, ScanID), nil, nil)
 	if err != nil {
 		return []SASTResultsPredicates{}, err
 	}
@@ -177,14 +186,43 @@ func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID s
 	return Predicates.PredicateHistoryPerProject[0].Predicates, err
 }
 
-func (c Cx1Client) GetKICSResultsPredicatesByID(SimilarityID string, ProjectID string) ([]KICSResultsPredicates, error) {
-	c.logger.Debugf("Fetching KICS results predicates for project %v similarityId %v", ProjectID, SimilarityID)
+func (c Cx1Client) GetLastSASTResultsPredicateByID(SimilarityID string, ProjectID, ScanID string) (SASTResultsPredicates, error) {
+	c.logger.Debugf("Fetching SAST results predicates for project %v scan %v similarityId %v", ProjectID, ScanID, SimilarityID)
+
+	var Predicates struct {
+		LatestPredicatePerProject []SASTResultsPredicates `json:"latestPredicatePerProject"`
+		TotalCount                uint
+	}
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v/latest?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	if err != nil {
+		return SASTResultsPredicates{}, err
+	}
+
+	err = json.Unmarshal(response, &Predicates)
+	if err != nil {
+		return SASTResultsPredicates{}, err
+	}
+
+	if Predicates.TotalCount == 0 {
+		return SASTResultsPredicates{}, nil
+	}
+
+	return Predicates.LatestPredicatePerProject[0], err
+}
+
+func (c Cx1Client) GetKICSResultsPredicatesByID(SimilarityID string, ProjectID string) ([]IACResultsPredicates, error) {
+	c.depwarn("GetKICSResultsPredicatesByID", "GetIACResultsPredicatesByID")
+	return c.GetIACResultsPredicatesByID(SimilarityID, ProjectID)
+}
+
+func (c Cx1Client) GetIACResultsPredicatesByID(SimilarityID string, ProjectID string) ([]IACResultsPredicates, error) {
+	c.logger.Debugf("Fetching IAC results predicates for project %v similarityId %v", ProjectID, SimilarityID)
 
 	var Predicates struct {
 		PredicateHistoryPerProject []struct {
 			ProjectID    string
 			SimilarityID string `json:"similarityId"`
-			Predicates   []KICSResultsPredicates
+			Predicates   []IACResultsPredicates
 			TotalCount   uint
 		}
 
@@ -192,16 +230,16 @@ func (c Cx1Client) GetKICSResultsPredicatesByID(SimilarityID string, ProjectID s
 	}
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/kics-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
 	if err != nil {
-		return []KICSResultsPredicates{}, err
+		return []IACResultsPredicates{}, err
 	}
 
 	err = json.Unmarshal(response, &Predicates)
 	if err != nil {
-		return []KICSResultsPredicates{}, err
+		return []IACResultsPredicates{}, err
 	}
 
 	if Predicates.TotalCount == 0 {
-		return []KICSResultsPredicates{}, nil
+		return []IACResultsPredicates{}, nil
 	}
 
 	return Predicates.PredicateHistoryPerProject[0].Predicates, err
@@ -223,7 +261,7 @@ func (p *ResultsPredicatesBase) Update(state, severity, comment string) {
 func (r ScanSASTResult) String() string {
 	return fmt.Sprintf("%v (%v) - %v to %v - in file %v:%d", r.Data.QueryName, r.SimilarityID, r.Data.Nodes[0].Name, r.Data.Nodes[len(r.Data.Nodes)-1].Name, r.Data.Nodes[0].FileName, r.Data.Nodes[0].Line)
 }
-func (r ScanKICSResult) String() string {
+func (r ScanIACResult) String() string {
 	return fmt.Sprintf("%v - %v (%v) - %v to %v - in file %v:%d", r.Data.Group, r.Data.QueryName, r.SimilarityID, r.Data.IssueType, r.Data.Value, r.Data.FileName, r.Data.Line)
 }
 func (r ScanSCAResult) String() string {
@@ -282,16 +320,16 @@ func (c Cx1Client) GetScanSASTResultSummary(results *ScanResultSet) ScanResultSu
 }
 
 func (s ScanResultSet) String() string {
-	return fmt.Sprintf("Result set with %d SAST, %d SCA, %d SCAContainer, %d KICS, and %d Containers results", len(s.SAST), len(s.SCA), len(s.SCAContainer), len(s.KICS), len(s.Containers))
+	return fmt.Sprintf("Result set with %d SAST, %d SCA, %d SCAContainer, %d IAC, and %d Containers results", len(s.SAST), len(s.SCA), len(s.SCAContainer), len(s.IAC), len(s.Containers))
 }
 
 func (s ScanResultSet) Count() uint64 {
-	return uint64(len(s.SAST) + len(s.SCA) + len(s.SCAContainer) + len(s.KICS) + len(s.Containers))
+	return uint64(len(s.SAST) + len(s.SCA) + len(s.SCAContainer) + len(s.IAC) + len(s.Containers))
 }
 
 func (s *ScanResultSet) Append(results *ScanResultSet) {
-	if len(results.KICS) > 0 {
-		s.KICS = append(s.KICS, results.KICS...)
+	if len(results.IAC) > 0 {
+		s.IAC = append(s.IAC, results.IAC...)
 	}
 	if len(results.SCA) > 0 {
 		s.SCA = append(s.SCA, results.SCA...)
@@ -338,7 +376,7 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 	err := dec.Decode(&resultResponse)
 	if err != nil {
 		c.logger.Tracef("Failed while parsing response: %s", err)
-		c.logger.Tracef("Response contents: %s", string(response))
+		//c.logger.Tracef("Response contents: %s", string(response))
 		return resultResponse.TotalCount, ResultSet, err
 	}
 	//c.logger.Debugf("Retrieved %d results", resultResponse.TotalCount)
@@ -371,12 +409,12 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 				ResultSet.SCA = append(ResultSet.SCA, SCAResult)
 			}
 		case "kics":
-			var KICSResult ScanKICSResult
-			err := json.Unmarshal(jsonResult, &KICSResult)
+			var IACResult ScanIACResult
+			err := json.Unmarshal(jsonResult, &IACResult)
 			if err != nil {
-				c.logger.Warnf("Failed to unmarshal result %v to KICS type: %s", r["similarityId"].(string), err)
+				c.logger.Warnf("Failed to unmarshal result %v to IAC type: %s", r["similarityId"].(string), err)
 			} else {
-				ResultSet.KICS = append(ResultSet.KICS, KICSResult)
+				ResultSet.IAC = append(ResultSet.IAC, IACResult)
 			}
 		case "sca-container":
 			var SCACResult ScanSCAContainerResult
@@ -402,4 +440,51 @@ func (c Cx1Client) parseScanResults(response []byte) (uint64, ScanResultSet, err
 	c.logger.Debugf("Retrieved %d of %d results", ResultSet.Count(), resultResponse.TotalCount)
 
 	return resultResponse.TotalCount, ResultSet, nil
+}
+
+func (b ResultsPredicatesBase) String() string {
+	return fmt.Sprintf("[%v] %v set severity %v, state %v, comment %v", b.CreatedAt, b.CreatedBy, b.Severity, b.State, b.Comment)
+}
+
+func (c Cx1Client) GetCustomResultStates() ([]ResultState, error) {
+	states := []ResultState{}
+	response, err := c.sendRequest(http.MethodGet, "/custom-states", nil, nil)
+	if err != nil {
+		return states, err
+	}
+
+	err = json.Unmarshal(response, &states)
+	return states, err
+}
+
+func (c Cx1Client) CreateCustomResultState(state string) (ResultState, error) {
+	var resultstate ResultState
+
+	var requestBody struct {
+		Name string `json:"name"`
+	}
+	requestBody.Name = state
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return resultstate, err
+	}
+
+	response, err := c.sendRequest(http.MethodPost, "/custom-states", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return resultstate, err
+	}
+
+	err = json.Unmarshal(response, &resultstate)
+	resultstate.IsAllowed = true
+	return resultstate, err
+}
+
+func (c Cx1Client) DeleteCustomResultState(stateId uint64) error {
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/custom-states/%d", stateId), nil, nil)
+	return err
+}
+
+func (c ResultState) String() string {
+	return fmt.Sprintf("[%d] %v", c.ID, c.Name)
 }

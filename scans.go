@@ -12,7 +12,10 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/exp/slices"
 )
+
+var ScanSortCreatedDescending = "+created_at"
 
 func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	var scan Scan
@@ -72,7 +75,7 @@ func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
 	filter := ScanFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		Statuses:   status,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{ScanSortCreatedDescending},
 	}
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
@@ -91,18 +94,17 @@ func (c Cx1Client) GetLastScansByID(projectID string, limit uint64) ([]Scan, err
 	_, scans, err := c.GetXScansFiltered(ScanFilter{
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		ProjectID:  projectID,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{ScanSortCreatedDescending},
 	}, limit)
 	return scans, err
 }
 
 // function will be deprecated, use Get*ScansFiltered
 func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
-	c.depwarn("GetLastScansByIDFiltered", "GetScansFiltered")
 	if filter.Limit == 0 {
 		filter.Limit = c.pagination.Scans
 	}
-	filter.Sort = append(filter.Sort, "+created_at")
+	filter.Sort = append(filter.Sort, ScanSortCreatedDescending)
 	filter.ProjectID = projectID
 
 	_, scans, err := c.GetScansFiltered(filter)
@@ -114,16 +116,45 @@ func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit uint64, sta
 		BaseFilter: BaseFilter{Limit: c.pagination.Scans},
 		ProjectID:  projectID,
 		Statuses:   status,
-		Sort:       []string{"+created_at"},
+		Sort:       []string{ScanSortCreatedDescending},
 	}, limit)
 	return scans, err
 }
 
 func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
-	c.depwarn("GetLastScansFiltered", "GetScansFiltered")
-	filter.Sort = append(filter.Sort, "+created_at")
+	filter.Sort = append(filter.Sort, ScanSortCreatedDescending)
 	_, scans, err := c.GetAllScansFiltered(filter)
 	return scans, err
+}
+
+// This function returns the last scans matching the filter and also having a scan by a specific engine
+func (c Cx1Client) GetLastScansByEngineFiltered(engine string, limit uint64, filter ScanFilter) ([]Scan, error) {
+	var scans []Scan
+
+	count, ss, err := c.GetScansFiltered(filter)
+	scans = filterScansByEngine(ss, engine)
+	filter.Limit = c.pagination.Scans
+
+	for err == nil && count > filter.Offset+filter.Limit && uint64(len(scans)) < limit {
+		filter.Bump()
+		_, ss, err = c.GetScansFiltered(filter)
+		scans = append(scans, filterScansByEngine(ss, engine)...)
+	}
+
+	if uint64(len(scans)) > limit {
+		return scans[:limit], nil
+	}
+	return scans, nil
+}
+
+func filterScansByEngine(scans []Scan, engine string) []Scan {
+	var filteredScans []Scan
+	for _, scan := range scans {
+		if slices.Contains(scan.Engines, engine) {
+			filteredScans = append(filteredScans, scan)
+		}
+	}
+	return filteredScans
 }
 
 // returns the number of scans matching the filter and an array of those scans
@@ -187,7 +218,7 @@ func (s ScanSummary) TotalCount() uint64 {
 	count += s.SASTCounters.TotalCounter
 	count += s.SCACounters.TotalCounter
 	count += s.SCAPackagesCounters.TotalCounter
-	count += s.KICSCounters.TotalCounter
+	count += s.IACCounters.TotalCounter
 	count += s.APISecCounters.TotalCounter
 	count += s.ContainersCounters.TotalCounter
 	count += s.SCAContainersCounters.TotalPackagesCounters
@@ -196,19 +227,19 @@ func (s ScanSummary) TotalCount() uint64 {
 }
 
 func (s ScanSummary) String() string {
-	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d KICS, %d API Security, and %d Containers results",
+	return fmt.Sprintf("Scan Summary with: %d SAST, %d SCA, %d SCA Packages, %d SCA Container, %d IAC, %d API Security, and %d Containers results",
 		s.SASTCounters.TotalCounter,
 		s.SCACounters.TotalCounter,
 		s.SCAPackagesCounters.TotalCounter,
 		s.SCAContainersCounters.TotalPackagesCounters,
-		s.KICSCounters.TotalCounter,
+		s.IACCounters.TotalCounter,
 		s.APISecCounters.TotalCounter,
 		s.ContainersCounters.TotalCounter,
 	)
 }
 
 func (c Cx1Client) GetScanCount() (uint64, error) {
-	c.logger.Debug("Get scan count")
+	c.logger.Debugf("Get scan count")
 	count, _, err := c.GetScansFiltered(ScanFilter{BaseFilter: BaseFilter{Limit: 1}})
 	return count, err
 }
@@ -232,6 +263,21 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 
 	json.Unmarshal(data, &scanmeta)
 	return scanmeta, nil
+}
+
+func (c Cx1Client) GetScanMetricsByID(scanID string) (ScanMetrics, error) {
+	c.logger.Debugf("Getting scan metrics for scan %v", scanID)
+
+	var metrics ScanMetrics
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v/metrics", scanID), nil, nil)
+
+	if err != nil {
+		c.logger.Tracef("Failed to get scan metrics for scan ID %v: %s", scanID, err)
+		return metrics, err
+	}
+
+	err = json.Unmarshal([]byte(data), &metrics)
+	return metrics, err
 }
 
 func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]ConfigurationSetting, error) {
@@ -404,6 +450,19 @@ func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	return data, nil
 }
 
+func (c Cx1Client) GetScanSourcesByID(scanID string) ([]byte, error) {
+	c.logger.Debugf("Fetching scan sources for scan %v", scanID)
+
+	//c.logger.Tracef("Retrieved url: %v", enginelogURL)
+	data, err := c.sendRequestInternal(http.MethodGet, fmt.Sprintf("%v/api/repostore/code/%v", c.baseUrl, scanID), nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to download sources from scan %v: %s", scanID, err)
+		return []byte{}, nil
+	}
+
+	return data, nil
+}
+
 func (c Cx1Client) GetScanWorkflowByID(scanID string) ([]WorkflowLog, error) {
 	var workflow []WorkflowLog
 
@@ -562,7 +621,7 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, 
 }
 
 func (c Cx1Client) GetUploadURL() (string, error) {
-	c.logger.Debug("Get Cx1 Upload URL")
+	c.logger.Debugf("Get Cx1 Upload URL")
 	response, err := c.sendRequest(http.MethodPost, "/uploads", nil, nil)
 
 	if err != nil {
@@ -658,6 +717,49 @@ func (s *Scan) String() string {
 
 func (s ScanStatusSummary) String() string {
 	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
+}
+
+func (s ScanMetrics) HasLanguage(lang string) bool {
+	for scanLang := range s.ScannedFilesPerLanguage {
+		if strings.EqualFold(scanLang, lang) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s ScanMetrics) GetLanguages() []string {
+	langs := []string{}
+	for scanLang := range s.ScannedFilesPerLanguage {
+		langs = append(langs, scanLang)
+	}
+	return langs
+}
+
+func (s *ScanConfigurationSet) AddConfig(engine, key, value string) {
+	if engine == "iac" {
+		engine = "kics"
+	} else if engine == "2ms" || engine == "secrets" {
+		s.AddConfig("microengines", "2ms", "true")
+		return
+	}
+
+	for i := range s.Configurations {
+		if s.Configurations[i].ScanType == engine {
+			if key != "" {
+				s.Configurations[i].Values[key] = value
+			}
+			return
+		}
+	}
+	newconf := ScanConfiguration{
+		ScanType: engine,
+		Values:   map[string]string{},
+	}
+	if key != "" {
+		newconf.Values[key] = value
+	}
+	s.Configurations = append(s.Configurations, newconf)
 }
 
 /* misc future stuff
